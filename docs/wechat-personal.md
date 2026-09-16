@@ -11,6 +11,8 @@ The personal WeChat connection reads the guardian's account through the Linux de
 - `ROME_DOCKER_USER_MODE=root` so the client and the reader can access the same files under `/home/rome`.
 - At least 1 GB of container shared memory (`shm_size: 1gb` in Compose).
 
+For local development, `pnpm vm up --wechat` builds a VM with all of these. See the [local production VM](../scripts/vm/README.md#personal-wechat).
+
 Set `WECHAT_USER_ENABLED` to `true` to offer this connection. `false` keeps it disabled. If host execution is disabled, setup stops before downloading the client.
 
 The Rome image includes the client libraries, debugger, and QR screenshot tools. Setup downloads WeChat 4.1.13.9 and verifies the archive checksum before extraction. The reader dependencies are pinned separately.

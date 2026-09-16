@@ -66,6 +66,8 @@ pnpm dev:desktop      # Electron shell, host-native (desktop can't run in Linux 
 pnpm dev:cdp          # CDP client
 ```
 
+For host-level work, such as provisioning, systemd units, the host helper, or personal WeChat, boot a production-shaped VM on a Linux host with KVM. [scripts/vm/README.md](scripts/vm/README.md) covers `pnpm vm`.
+
 To run a command inside the worktree's Rome container:
 
 ```bash

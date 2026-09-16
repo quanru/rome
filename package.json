@@ -18,6 +18,7 @@
     "desktop:image:local": "pnpm --filter rome-desktop image:local",
     "start:cdp": "pnpm --filter rome-cdp-client start",
     "dev:all": "scripts/dev-up.sh",
+    "vm": "scripts/vm/vm.sh",
     "dev:desktop": "pnpm --filter rome-desktop dev",
     "dev:cdp": "pnpm --filter rome-cdp-client dev",
     "build": "pnpm --filter @rome/discord-cli build && pnpm --filter @rome/core build && pnpm build:apps && pnpm --filter rome-web build",

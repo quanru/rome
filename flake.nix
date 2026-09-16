@@ -87,7 +87,14 @@
           # `agent-browser --executable-path "$(command -v chromium)" …`.
           # Linux-only: on Darwin the chromium build is unsupported/broken, and
           # macOS hosts fall back to a system browser.
-          ++ nixpkgs.lib.optional pkgs.stdenv.isLinux pkgs.chromium;
+          ++ nixpkgs.lib.optionals pkgs.stdenv.isLinux [
+            pkgs.chromium
+            # scripts/vm/vm.sh boots a production-shaped Ubuntu VM under
+            # QEMU/KVM and seeds it with cloud-localds (cloud-utils). Linux
+            # only: the guest needs /dev/kvm, which macOS does not have.
+            pkgs.qemu_kvm
+            pkgs.cloud-utils
+          ];
         };
       });
     };
