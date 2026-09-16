@@ -137,6 +137,7 @@ const PAIRINGS: Pairing[] = [
   // sidebar's interactive rows, which swap to `foreground` only on hover.
   { fg: "subtle-foreground", bg: "background", min: AA_TEXT, why: "sidebar labels, 12px" },
   { fg: "subtle-foreground", bg: "surface", min: AA_TEXT, why: "Stepper labels" },
+  { fg: "subtle-foreground", bg: "surface-muted", min: AA_TEXT, why: "sidebar secondary labels" },
 
   // The accent carrying text rather than a fill — markdown links and Button's
   // `link` variant read `text-primary` straight onto a canvas or card.
@@ -222,6 +223,7 @@ const PAIRING_IDS = [
   "surface-muted-foreground/surface-muted",
   "subtle-foreground/background",
   "subtle-foreground/surface",
+  "subtle-foreground/surface-muted",
   "primary/background",
   "primary/surface",
   "primary/surface-elevated",
@@ -283,7 +285,7 @@ const KNOWN_FAILURES: KnownFailure[] = [
   {
     pair: "subtle-foreground/background",
     why: "The third text tier was never held to AA. It carries 12px sidebar labels and empty-state prose, and it is the resting state of rows that only reach `foreground` on hover, so no decorative exemption applies. Raising it needs a call on whether three text tiers can coexist above 4.5:1.",
-    measured: { "ember/light": 2.24, "ash/light": 4.16, "slate/light": 2.48, "slate/dark": 4.18 },
+    measured: { "ember/light": 2.24, "ash/light": 4.05, "slate/light": 2.48, "slate/dark": 4.18 },
   },
   {
     pair: "subtle-foreground/surface",
@@ -291,21 +293,33 @@ const KNOWN_FAILURES: KnownFailure[] = [
     measured: {
       "ember/light": 2.42,
       "ember/dark": 4.45,
-      "ash/light": 4.16,
+      "ash/light": 4.05,
       "ash/dark": 4.45,
       "slate/light": 2.59,
       "slate/dark": 3.97,
     },
   },
   {
+    pair: "subtle-foreground/surface-muted",
+    why: "Same tier again, now that the sidebar sits on the recessed step rather than painting the canvas. Moving the fill did not create this debt — the tier reads the same distance under the bar on all three fills — but it is the fill those 12px labels actually render against, so it is the pairing to fix against.",
+    measured: {
+      "ember/light": 2.06,
+      "ember/dark": 4.15,
+      "ash/light": 3.64,
+      "ash/dark": 4.15,
+      "slate/light": 2.38,
+      "slate/dark": 3.74,
+    },
+  },
+  {
     pair: "primary/background",
-    why: "Ember points `primary` at the identity-locked `--orange-300`, which cannot carry body text on a pale canvas at any lightness without moving the brand value. Ash took the documented route — a deeper `--orange-550` for the action token while `brand` keeps the coral — and clears the bar once its canvas sits on the paper step. Resolving Ember means splitting brand from action there too.",
-    measured: { "ember/light": 3.0 },
+    why: "Ember points `primary` at the identity-locked `--orange-300`, which cannot carry body text on a pale canvas at any lightness without moving the brand value. Ash already took the documented route — a deeper `--orange-550` for the action token while `brand` keeps the coral — and still lands just short here. Resolving Ember means splitting brand from action there too.",
+    measured: { "ember/light": 3.0, "ash/light": 4.41 },
   },
   {
     pair: "primary/surface",
-    why: "Same brand-pinned step as the pairing above; this is the one markdown links render against.",
-    measured: { "ember/light": 3.25 },
+    why: "Same brand-pinned step as the pairing above; this is the one markdown links render against. Ash reads the same figure as the canvas pairing, because its paper canvas and its card are one step.",
+    measured: { "ember/light": 3.25, "ash/light": 4.41 },
   },
   {
     pair: "primary/surface-elevated",

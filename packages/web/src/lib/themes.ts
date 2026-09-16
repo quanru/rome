@@ -407,7 +407,11 @@ const ashPalette: Palette = {
   "neutral-25": "#fefdfb",
   "neutral-50": "#fbfaf7",
   "neutral-100": "#f8f7f4",
-  "neutral-150": "#f5f4f1",
+  // Ash's light ramp bunched at the top — 0, 25, 50, 100 and 150 spanned .10
+  // of lightness and then dropped .12 in one step to 200. Nothing in between
+  // could carry a faint fill: a region on 150 was invisible against the
+  // canvas, and one on 200 read as a slab. 150 moves into that gap.
+  "neutral-150": "#efeeea",
   "neutral-200": "#e7e5e2",
   "neutral-250": "#dfddd9",
   "neutral-300": "#d6d4d0",
@@ -437,27 +441,22 @@ const ash: ThemeDefinition = {
   label: "Ash",
   palette: ashPalette,
   light: {
-    // Paper: the canvas sits on the card step, so content reads the same
-    // whether a page lays it bare or wraps it in a card, and a card is its
-    // hairline alone. Ash trials this before Ember decides; the mapping is
-    // the one lever, since Card already carries `border-border`.
-    background: "var(--neutral-25)",
+    // Paper: the canvas and the card sit on one step, so content reads the
+    // same whether a page lays it bare or wraps it in a card, and a card is
+    // its hairline alone. Ash trials this before Ember decides. The step is
+    // 50 rather than the top of the ramp, so the paper keeps its tint and the
+    // chrome around it has somewhere to recess to.
+    background: "var(--neutral-50)",
     foreground: "var(--neutral-900)",
 
-    surface: "var(--neutral-25)",
+    surface: "var(--neutral-50)",
     "surface-foreground": "var(--neutral-900)",
-    // A recessed region has to clear the paper it is cut into, and the step
-    // Ash used sits at 1.05:1 against the new canvas — a well, a table header,
-    // and the sidebar all dissolve into it.
-    "surface-muted": "var(--neutral-200)",
+    "surface-muted": "var(--neutral-150)",
     "surface-muted-foreground": "var(--neutral-600)",
     "surface-elevated": "var(--neutral-0)",
     "surface-hover": "var(--neutral-100)",
 
-    // One step deeper than Ember's, because the recessed step deepened under
-    // it: muted ink on `surface-muted` is the Badge label and the sidebar's
-    // secondary line, and `--neutral-550` lands at 4.23:1 there.
-    "muted-foreground": "var(--neutral-600)",
+    "muted-foreground": "var(--neutral-550)",
     "subtle-foreground": "var(--neutral-500)",
 
     border: "var(--neutral-300)",
