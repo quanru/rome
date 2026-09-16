@@ -283,7 +283,7 @@ const KNOWN_FAILURES: KnownFailure[] = [
   {
     pair: "subtle-foreground/background",
     why: "The third text tier was never held to AA. It carries 12px sidebar labels and empty-state prose, and it is the resting state of rows that only reach `foreground` on hover, so no decorative exemption applies. Raising it needs a call on whether three text tiers can coexist above 4.5:1.",
-    measured: { "ember/light": 2.24, "ash/light": 4.05, "slate/light": 2.48, "slate/dark": 4.18 },
+    measured: { "ember/light": 2.24, "ash/light": 4.16, "slate/light": 2.48, "slate/dark": 4.18 },
   },
   {
     pair: "subtle-foreground/surface",
@@ -299,8 +299,8 @@ const KNOWN_FAILURES: KnownFailure[] = [
   },
   {
     pair: "primary/background",
-    why: "Ember points `primary` at the identity-locked `--orange-300`, which cannot carry body text on a pale canvas at any lightness without moving the brand value. Ash already took the documented route — a deeper `--orange-550` for the action token while `brand` keeps the coral — and still lands just short here. Resolving Ember means splitting brand from action there too.",
-    measured: { "ember/light": 3.0, "ash/light": 4.41 },
+    why: "Ember points `primary` at the identity-locked `--orange-300`, which cannot carry body text on a pale canvas at any lightness without moving the brand value. Ash took the documented route — a deeper `--orange-550` for the action token while `brand` keeps the coral — and clears the bar once its canvas sits on the paper step. Resolving Ember means splitting brand from action there too.",
+    measured: { "ember/light": 3.0 },
   },
   {
     pair: "primary/surface",

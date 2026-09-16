@@ -31,7 +31,7 @@ Ash's dark half maps the same steps as Ember's, against its own palette. Every t
 
 | Token | Ember light | Ember dark | Ash light | Slate light | Slate dark |
 |---|---|---|---|---|---|
-| `--background` | `--neutral-50` | `--neutral-950` | `--neutral-50` | `--neutral-50` | `--neutral-950` |
+| `--background` | `--neutral-50` | `--neutral-950` | `--neutral-25` | `--neutral-50` | `--neutral-950` |
 | `--surface` | `--neutral-25` | `--neutral-925` | `--neutral-25` | `--neutral-0` | `--neutral-900` |
 | `--surface-muted` | `--neutral-100` | `--neutral-850` | `--neutral-150` | `--neutral-100` | `--neutral-850` |
 | `--surface-elevated` | `--neutral-0` | `--neutral-850` | `--neutral-0` | `--neutral-0` | `--neutral-850` |
@@ -41,8 +41,9 @@ Ash's dark half maps the same steps as Ember's, against its own palette. Every t
 
 ## Constraints
 
-- The canvas is never white. A raised surface reads as raised because the canvas sits below it. `[mech]`
-- The stack reverses between modes. In light the canvas is darker than the card, and a recessed region is darker still. In dark every layer rises from the canvas, and no layer sits below it. `[mech]`
+- The canvas is never white. A raised surface reads as raised because the canvas sits below it, or, where a theme puts the canvas on the card step, because it carries a hairline. `[mech]`
+- The stack reverses between modes. In light the canvas is no lighter than the card, and a recessed region is darker still. In dark every layer rises from the canvas, and no layer sits below it. `[mech]`
+- Ash light is the paper case: `--background` and `--surface` resolve to the same step, so bare content and carded content read alike and a card is its border alone. A theme that collapses the pair keeps `--surface-elevated` a step above it, so a popover still floats. `[mech]`
 - Two pairs collapse in some themes. Slate light resolves `--surface` and `--surface-elevated` to the same white, and every dark half resolves `--surface-muted` and `--surface-elevated` to the same step. A layer that must read as floating carries a border or a shadow, never fill alone. `[mech]`
 - `--surface-hover` states a transient fill. A row at rest takes `--surface`. `[mech]`
 - A fill changes only alongside its foreground partner. `[mech]`

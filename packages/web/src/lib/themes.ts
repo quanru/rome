@@ -437,7 +437,11 @@ const ash: ThemeDefinition = {
   label: "Ash",
   palette: ashPalette,
   light: {
-    background: "var(--neutral-50)",
+    // Paper: the canvas sits on the card step, so content reads the same
+    // whether a page lays it bare or wraps it in a card, and a card is its
+    // hairline alone. Ash trials this before Ember decides; the mapping is
+    // the one lever, since Card already carries `border-border`.
+    background: "var(--neutral-25)",
     foreground: "var(--neutral-900)",
 
     surface: "var(--neutral-25)",
