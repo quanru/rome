@@ -1,7 +1,11 @@
 [Unit]
 Description=Block container egress to the cloud metadata endpoint
+# dockerd recreates DOCKER-USER on every start, dropping this rule with it.
+# PartOf restarts this unit whenever docker restarts, and the docker.service
+# drop-in in files/ pulls it in whenever docker starts.
 After=docker.service
 Requires=docker.service
+PartOf=docker.service
 
 [Service]
 Type=oneshot

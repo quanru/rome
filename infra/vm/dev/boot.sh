@@ -18,6 +18,20 @@ if [[ "${1:-}" == "--fresh" ]]; then
 fi
 ssh_port="${ROME_VM_SSH_PORT:-2222}"
 web_port="${ROME_VM_WEB_PORT:-18080}"
+# qemu-system-x86_64 with KVM and OVMF: this script boots amd64 images on an
+# amd64 host. An arm64 image needs qemu-system-aarch64 with AAVMF, which the
+# desktop's Lima provider covers.
+case "$(basename "$image")" in
+  *amd64*) ;;
+  *)
+    echo "boot.sh: only amd64 images boot here; got $(basename "$image")" >&2
+    exit 2
+    ;;
+esac
+[[ "$(uname -m)" == x86_64 ]] || {
+  echo "boot.sh: needs an x86_64 host with KVM" >&2
+  exit 2
+}
 work="$(dirname "$image")/dev"
 mkdir -p "$work"
 overlay="$work/$(basename "$image" .qcow2)-dev.qcow2"

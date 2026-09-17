@@ -3,8 +3,9 @@
 # build runs, over SSH instead of inside a disk file. Idempotent: applying
 # to a host built from the same tree changes nothing.
 #
-#   infra/vm/apply.sh [--wechat] [--hostd PATH] [ssh options...] user@host
+#   infra/vm/apply.sh [--wechat] [--hostd PATH] user@host [-- ssh options...]
 #
+# Everything after `--` goes to ssh verbatim, so both `-p 22` and `-v` work.
 # The user needs passwordless sudo. --wechat turns on the host helper and
 # personal WeChat and stays on for later applies; --hostd stages a new
 # rome-hostd binary (needs --wechat, or a host that already has it).
@@ -24,18 +25,23 @@ while [[ $# -gt 0 ]]; do
       hostd="$2"
       shift 2
       ;;
-    -*)
-      ssh_args+=("$1" "$2")
-      shift 2
+    --)
+      shift
+      ssh_args=("$@")
+      break
       ;;
     *)
+      [[ -z "$target" ]] || {
+        echo "apply.sh: unexpected argument $1 (ssh options go after --)" >&2
+        exit 2
+      }
       target="$1"
       shift
       ;;
   esac
 done
 [[ -n "$target" ]] || {
-  echo "usage: apply.sh [--wechat] [--hostd PATH] [ssh options] user@host" >&2
+  echo "usage: apply.sh [--wechat] [--hostd PATH] user@host [-- ssh options]" >&2
   exit 2
 }
 

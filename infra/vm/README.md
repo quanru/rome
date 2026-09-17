@@ -26,7 +26,8 @@ provenance.
 - `pins.env` pins every input: host layer version, Ubuntu release serial and
   sha256, Docker apt versions, Rome image digest.
 - `provision/10-docker.sh` installs Docker at the pin and holds it.
-- `provision/20-harden.sh` installs the fail2ban jail and the metadata block.
+- `provision/20-harden.sh` installs fail2ban with its jail, and the metadata
+  block with a docker.service drop-in that reasserts it on every Docker start.
 - `provision/30-rome.sh` places the compose file and the first-boot load unit.
 - `provision/40-wechat.sh` installs `rome-hostd`, its unit, and the WeChat
   compose override. Runs when `/etc/rome-host/wechat` exists.
@@ -55,7 +56,7 @@ host's architecture, so an arm64 image is built on an arm64 host.
 ## Upgrade a live host
 
 ```sh
-infra/vm/apply.sh -p 22 root@tenant-host
+infra/vm/apply.sh root@tenant-host -- -p 22
 infra/vm/apply.sh --wechat --hostd packages/host-helper/dist/rome-hostd root@tenant-host
 ```
 

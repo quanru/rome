@@ -1,6 +1,5 @@
 #!/bin/bash
-# Docker Engine at the pinned version, plus fail2ban. Versions come from
-# /etc/rome-host/pins.env.
+# Docker Engine at the pinned version. Versions come from /etc/rome-host/pins.env.
 set -euo pipefail
 . /etc/rome-host/pins.env
 export DEBIAN_FRONTEND=noninteractive
@@ -8,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 if ! dpkg -s docker-ce 2>/dev/null | grep -q "^Version: ${DOCKER_CE_VERSION}$"; then
   apt-get update
-  apt-get install -y --no-install-recommends ca-certificates curl gnupg fail2ban
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL "https://download.docker.com/linux/ubuntu/gpg" -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
