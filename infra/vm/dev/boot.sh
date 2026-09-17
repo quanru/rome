@@ -54,6 +54,11 @@ if [[ ! -f "$overlay" ]]; then
   new_vm=true
 fi
 
+if $wechat && ! $new_vm; then
+  echo "boot.sh: --wechat is first-boot state and this VM already booted; enable it with: infra/vm/apply.sh --wechat dev@127.0.0.1 -- -p $ssh_port" >&2
+  exit 2
+fi
+
 # The seed is first-boot state, like a tenant's. It is written with the
 # overlay and reused on later boots, so the JWT secret and the instance id
 # stay put and cloud-init does not run its first-boot modules again.
@@ -92,8 +97,13 @@ fi
 
 ovmf_dir="${OVMF_DIR:-$(dirname "$(dirname "$(command -v qemu-system-x86_64)")")/share/OVMF}"
 [[ -d "$ovmf_dir" ]] || ovmf_dir="${OVMF_FD:?set OVMF_DIR or OVMF_FD to the OVMF firmware dir}"
-code="$(find "$ovmf_dir" -name 'OVMF_CODE*.fd' | head -1)"
-vars_src="$(find "$ovmf_dir" -name 'OVMF_VARS*.fd' | head -1)"
+# The plain firmware, not a secure-boot build: an unsigned guest would not boot.
+code="$(find "$ovmf_dir" -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' | head -1)"
+vars_src="$(find "$ovmf_dir" -name 'OVMF_VARS.fd' -o -name 'OVMF_VARS_4M.fd' | head -1)"
+[[ -f "$code" && -f "$vars_src" ]] || {
+  echo "boot.sh: no OVMF_CODE.fd / OVMF_VARS.fd under $ovmf_dir" >&2
+  exit 2
+}
 [[ -f "$work/OVMF_VARS.fd" ]] || install -m 0644 "$vars_src" "$work/OVMF_VARS.fd"
 
 # Interactive by default: serial console and qemu monitor on this terminal.

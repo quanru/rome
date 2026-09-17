@@ -14,5 +14,9 @@ install -m 0644 "$files/rome-load-image.service" /etc/systemd/system/rome-load-i
 if [[ -f /etc/rome-host/rome.tar ]]; then
   mv /etc/rome-host/rome.tar /var/lib/rome/rome.tar
 fi
+# Ownership and modes are the host's, whatever umask the build ran under.
+# rome-hostd refuses a config directory that others can write.
 chown -R root:root /etc/rome-host /opt/rome/docker-compose.yml /var/lib/rome
+chmod -R go-w /etc/rome-host
+chmod 755 /etc/rome-host /etc/rome-host/provision /etc/rome-host/files
 systemctl enable rome-load-image.service >/dev/null 2>&1

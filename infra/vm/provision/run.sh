@@ -14,6 +14,13 @@ mode="${1:?usage: run.sh build|apply}"
 root=/etc/rome-host
 cd "$root"
 . "$root/pins.env"
+. "$root/provision/lib.sh"
+rm -rf /run/rome-host-changes
+
+if [[ -e "$root/wechat" && ! -x /usr/local/bin/rome-hostd ]]; then
+  echo "run.sh: WeChat is enabled on this host but no helper is installed; apply with --hostd PATH" >&2
+  exit 1
+fi
 
 step() { echo "[rome-host] $*"; }
 
@@ -32,23 +39,25 @@ case "$mode" in
     bash "$root/provision/90-seal.sh"
     ;;
   apply)
+    # Only what a step changed is restarted. A routine apply on a converged
+    # host touches nothing: no fail2ban blip, no orphaned root job, no
+    # container recreate.
     systemctl daemon-reload
-    systemctl restart rome-block-metadata.service fail2ban.service
-    # An enabled helper runs. It restarts only when its binary, unit, or
-    # config changed, so a routine apply never orphans a running root job.
+    changed rome-block-metadata.service && systemctl restart rome-block-metadata.service
+    changed rome-sshd.local && systemctl restart fail2ban.service
     if [[ -e "$root/wechat" ]]; then
-      if [[ -e /run/rome-host/changed ]]; then
+      if changed rome-hostd; then
         systemctl restart rome-hostd.service
       else
         systemctl start rome-hostd.service
       fi
     fi
-    rm -f /run/rome-host/changed
-    if [[ -f /opt/rome/.env ]]; then
+    if changed docker-compose.override.yml && [[ -f /opt/rome/.env ]]; then
       # The project name comes from the compose file, so a tenant's bundle
       # keeps its own.
       (cd /opt/rome && docker compose up -d)
     fi
+    rm -rf /run/rome-host-changes
     ;;
   *)
     echo "run.sh: unknown mode $mode" >&2

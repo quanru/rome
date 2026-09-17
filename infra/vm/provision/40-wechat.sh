@@ -15,6 +15,7 @@
 set -euo pipefail
 root=/etc/rome-host
 files=$root/files
+. "$root/provision/lib.sh"
 changed=false
 
 if [[ -f $root/rome-hostd ]]; then
@@ -52,14 +53,18 @@ if ! cmp -s "$config" "$root/config.json"; then
 fi
 rm -f "$config"
 
+# The override is the host layer's enabling switch and is owned here, unlike
+# the compose file beside it. It is written on enable and removed on disable.
 if $enabled; then
-  install -m 0644 "$files/docker-compose.override.wechat.yml" /opt/rome/docker-compose.override.yml
+  install_if_changed "$files/docker-compose.override.wechat.yml" /opt/rome/docker-compose.override.yml
   systemctl enable rome-hostd.service >/dev/null 2>&1
 elif [[ ! -e $root/wechat ]]; then
   # Disabled on this host: the helper neither runs nor starts at boot.
-  rm -f /opt/rome/docker-compose.override.yml
+  if [[ -f /opt/rome/docker-compose.override.yml ]]; then
+    rm -f /opt/rome/docker-compose.override.yml
+    mark_changed docker-compose.override.yml
+  fi
   systemctl disable --now rome-hostd.service >/dev/null 2>&1 || true
 fi
-if $changed; then
-  mkdir -p /run/rome-host && : >/run/rome-host/changed
-fi
+$changed && mark_changed rome-hostd
+true

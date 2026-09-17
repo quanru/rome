@@ -5,7 +5,9 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 . /etc/os-release
 
-if ! dpkg -s docker-ce 2>/dev/null | grep -q "^Version: ${DOCKER_CE_VERSION}$"; then
+at_pin() { dpkg -s "$1" 2>/dev/null | grep -q "^Version: $2$"; }
+if ! at_pin docker-ce "$DOCKER_CE_VERSION" || ! at_pin docker-ce-cli "$DOCKER_CE_VERSION" ||
+  ! at_pin containerd.io "$CONTAINERD_VERSION" || ! at_pin docker-compose-plugin "$DOCKER_COMPOSE_PLUGIN_VERSION"; then
   apt-get update
   apt-get install -y --no-install-recommends ca-certificates curl gnupg
   install -m 0755 -d /etc/apt/keyrings

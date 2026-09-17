@@ -116,6 +116,16 @@ mkdir -p "$stage/rome-host"
 cp -r "$here/pins.env" "$here/provision" "$here/files" "$stage/rome-host/"
 cp --reflink=auto "$rome_tar" "$stage/rome-host/rome.tar"
 if [[ -n "$hostd" ]]; then
+  # An ELF for the target arch: e_machine 0x3e is x86-64, 0xb7 is aarch64.
+  magic="$(od -An -tx1 -N4 "$hostd" 2>/dev/null | tr -d ' ' || true)"
+  machine="$(od -An -tx1 -j18 -N1 "$hostd" 2>/dev/null | tr -d ' ' || true)"
+  case "$arch:$magic:$machine" in
+    amd64:7f454c46:3e | arm64:7f454c46:b7) ;;
+    *)
+      echo "build.sh: $hostd is not a linux/$arch ELF binary" >&2
+      exit 1
+      ;;
+  esac
   cp "$hostd" "$stage/rome-host/rome-hostd"
 fi
 export LIBGUESTFS_MEMSIZE="${LIBGUESTFS_MEMSIZE:-2048}"
