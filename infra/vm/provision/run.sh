@@ -11,7 +11,20 @@
 # already-provisioned host changes nothing.
 set -euo pipefail
 mode="${1:?usage: run.sh build|apply}"
+case "$mode" in
+  build | apply) ;;
+  *)
+    echo "run.sh: unknown mode $mode" >&2
+    exit 2
+    ;;
+esac
 root=/etc/rome-host
+
+# The tree arrived with whatever owner and modes the build host or the
+# developer's checkout had. Root owns it and nobody else writes it.
+chown -R root:root "$root"
+find "$root" -type d -exec chmod 755 {} +
+find "$root" -type f -exec chmod 644 {} +
 cd "$root"
 . "$root/pins.env"
 . "$root/provision/lib.sh"
@@ -59,12 +72,10 @@ case "$mode" in
     fi
     rm -rf /run/rome-host-changes
     ;;
-  *)
-    echo "run.sh: unknown mode $mode" >&2
-    exit 2
-    ;;
 esac
 
-printf 'HOST_LAYER_VERSION=%s\nAPPLIED_AT=%s\nMODE=%s\n' \
-  "$HOST_LAYER_VERSION" "$(date -u +%FT%TZ)" "$mode" >"$root/applied"
+# The version is what a human said; the tree hash is what the host got.
+tree_sha="$(cd "$root" && find pins.env provision files -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+printf 'HOST_LAYER_VERSION=%s\nTREE_SHA256=%s\nAPPLIED_AT=%s\nMODE=%s\n' \
+  "$HOST_LAYER_VERSION" "$tree_sha" "$(date -u +%FT%TZ)" "$mode" >"$root/applied"
 step "done: host layer $HOST_LAYER_VERSION ($mode)"

@@ -53,9 +53,10 @@ run() { ssh ${ssh_args[@]+"${ssh_args[@]}"} "$target" "$@"; }
 
 # The tree replaces what the host had, so a file removed from the tree is
 # removed from the host too. Per-host state (the wechat marker, applied,
-# config.json) lives beside the tree and is kept.
+# config.json) lives beside the tree and is kept. Modes are not the
+# developer's: run.sh normalizes the tree before anything runs from it.
 tar -C "$here" -c pins.env provision files |
-  run 'sudo rm -rf /etc/rome-host/provision /etc/rome-host/files && sudo mkdir -p /etc/rome-host && sudo tar -x -C /etc/rome-host --no-same-owner'
+  run 'sudo rm -rf /etc/rome-host/provision /etc/rome-host/files && sudo mkdir -p /etc/rome-host && sudo tar -x -C /etc/rome-host --no-same-owner --no-same-permissions'
 case "$wechat" in
   on) run 'sudo touch /etc/rome-host/wechat' ;;
   off) run 'sudo rm -f /etc/rome-host/wechat /opt/rome/docker-compose.override.yml' ;;

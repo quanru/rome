@@ -4,6 +4,10 @@ set -euo pipefail
 . /etc/rome-host/pins.env
 export DEBIAN_FRONTEND=noninteractive
 . /etc/os-release
+[[ "${VERSION_CODENAME:-}" == "$UBUNTU_RELEASE" ]] || {
+  echo "10-docker.sh: pins.env targets Ubuntu $UBUNTU_RELEASE, this host is ${PRETTY_NAME:-unknown}" >&2
+  exit 1
+}
 
 at_pin() { dpkg -s "$1" 2>/dev/null | grep -q "^Version: $2$"; }
 if ! at_pin docker-ce "$DOCKER_CE_VERSION" || ! at_pin docker-ce-cli "$DOCKER_CE_VERSION" ||

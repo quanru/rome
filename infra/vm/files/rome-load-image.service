@@ -6,6 +6,8 @@ ConditionPathExists=/var/lib/rome/rome.tar
 
 [Service]
 Type=oneshot
+# Loading a multi-GB archive on a slow disk outweighs the default 90s.
+TimeoutStartSec=30min
 ExecStart=/usr/bin/docker load -i /var/lib/rome/rome.tar
 ExecStartPost=/bin/rm -f /var/lib/rome/rome.tar
 RemainAfterExit=yes

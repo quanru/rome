@@ -13,18 +13,29 @@
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/../pins.env"
-image="${1:?image path}"
-shift || true
+image=""
 fresh=false
 wechat=false
-while [[ "${1:-}" == --* ]]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --fresh) fresh=true ;;
     --wechat) wechat=true ;;
-    *) break ;;
+    --*)
+      echo "boot.sh: unknown option $1" >&2
+      exit 2
+      ;;
+    *)
+      [[ -z "$image" ]] || break
+      image="$1"
+      ;;
   esac
   shift
 done
+[[ -n "$image" ]] || {
+  echo "usage: boot.sh IMAGE [--fresh] [--wechat] [-- qemu args]" >&2
+  exit 2
+}
+[[ "${1:-}" == "--" ]] && shift
 ssh_port="${ROME_VM_SSH_PORT:-2222}"
 web_port="${ROME_VM_WEB_PORT:-18080}"
 # qemu-system-x86_64 with KVM and OVMF: this script boots amd64 images on an
