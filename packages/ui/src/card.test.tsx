@@ -27,15 +27,19 @@ describe("Card", () => {
     );
 
     expect(screen.getByTestId("card").textContent).toBe("Delivery is on.");
-    for (const token of ["bg-surface", "border-border", "rounded-12"]) {
+    for (const token of ["bg-surface", "border-edge", "rounded-12"]) {
       expect(classes("card")).toContain(token);
     }
   });
 
-  it("is flat — a panel carries no shadow of its own", () => {
+  it("carries the container cast and no elevation step of its own", () => {
+    // `shadow-surface` is the theme's call: `none` where a hairline outlines
+    // a panel, a step where depth does. A numbered step here would raise a
+    // card in every theme, including the ones that keep panels flat.
     render(<Card data-testid="card" />);
 
-    expect(classes("card").some((name) => name.startsWith("shadow"))).toBe(false);
+    const shadows = classes("card").filter((name) => name.startsWith("shadow"));
+    expect(shadows).toEqual(["shadow-surface"]);
   });
 
   it("holds the vertical inset itself, so a headerless card keeps its top padding", () => {

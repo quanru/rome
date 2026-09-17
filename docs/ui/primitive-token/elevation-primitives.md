@@ -8,7 +8,7 @@ The scale is a set of names, and a theme supplies the values, one shadow list pe
 
 One flat scale, `--rome-shadow-*`, of four steps: 1, 4, 10 and 25. A step's number is its light-half y-offset in px, and a higher number is a higher surface in both halves. `[mech]`
 
-A value is one or two layers. A layer holds an x-offset, a y-offset, a blur, a spread, and an ink. Every theme supplies the values below.
+A value is one or two layers. A layer holds an x-offset, a y-offset, a blur, a spread, and an ink. Ember and Slate supply the values below. Ash supplies the same dark half and its own light values at steps 4 and 10.
 
 | Step | Light | Dark |
 |---|---|---|
@@ -16,6 +16,15 @@ A value is one or two layers. A layer holds an x-offset, a y-offset, a blur, a s
 | `--rome-shadow-4` | `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` | `0 6px 16px -2px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.5)` |
 | `--rome-shadow-10` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | `0 12px 28px -4px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.5)` |
 | `--rome-shadow-25` | `0 25px 50px -12px rgb(0 0 0 / 0.25)` | `0 25px 60px -12px rgb(0 0 0 / 0.7)` |
+
+Ash's containers carry no hairline, so a tight cast at their edge would draw the line back. Its light half widens the blur to 3× the offset at the two steps a container reads, and holds every other property to the constraints below.
+
+| Step | Ash light |
+|---|---|
+| `--rome-shadow-4` | `0 4px 12px -4px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` |
+| `--rome-shadow-10` | `0 10px 30px -10px rgb(0 0 0 / 0.14), 0 4px 8px -4px rgb(0 0 0 / 0.1)` |
+
+Two semantic tokens alias a step: `--rome-shadow-card-hover` reads step 4 in every theme, and `--rome-shadow-surface`, the cast a raised container carries at rest, reads step 4 in Ash and `none` in Ember and Slate. [edges.md](../semantic-token/edges.md) holds the second one's contract.
 
 ## How the scale is built
 

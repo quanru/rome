@@ -20,10 +20,7 @@ export interface SafariProps extends HTMLAttributes<HTMLDivElement> {
 export function Safari({ url, imageSrc, overlay, className, ...props }: SafariProps) {
   return (
     <div
-      className={cn(
-        "overflow-hidden rounded-12 border border-border bg-surface shadow-1",
-        className,
-      )}
+      className={cn("overflow-hidden rounded-12 border border-edge bg-surface shadow-1", className)}
       {...props}
     >
       <div className="flex items-center gap-3 border-b border-border bg-surface-muted px-4 py-2">

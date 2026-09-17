@@ -31,7 +31,7 @@ describe("Alert", () => {
   });
 
   it.each([
-    ["default", ["border-border", "bg-surface", "text-foreground"]],
+    ["default", ["border-edge", "bg-surface", "text-foreground"]],
     ["info", ["border-info-border", "bg-info-bg", "text-info-fg"]],
     ["success", ["border-success-border", "bg-success-bg", "text-success-fg"]],
     ["warning", ["border-warning-border", "bg-warning-bg", "text-warning-fg"]],

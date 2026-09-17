@@ -136,7 +136,7 @@ export function ShareBar({
   const count = selectedTurnIds.length;
 
   return (
-    <div className="rounded-16 border border-border bg-surface/95 p-4 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
+    <div className="rounded-16 border border-edge bg-surface/95 p-4 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
       {/* Header */}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">

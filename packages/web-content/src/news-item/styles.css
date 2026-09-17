@@ -3,8 +3,11 @@
   width: 100%;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--rome-news-border, var(--border));
+  /* A raised container: the host's edge and container cast, with the divider
+     hairline as the fallback for a host that declares neither. */
+  border: 1px solid var(--rome-news-border, var(--edge, var(--border)));
   border-radius: 0.5rem;
+  box-shadow: var(--rome-news-shadow, var(--rome-shadow-surface, none));
   background: var(--rome-news-surface, var(--surface, var(--card, var(--background))));
   color: var(--rome-news-foreground, var(--foreground));
   text-align: left;

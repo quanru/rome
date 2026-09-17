@@ -14,7 +14,7 @@ const SURFACE_TOKENS = [
 
 const INK_TOKENS = ["foreground", "muted-foreground", "subtle-foreground"] as const;
 
-const LINE_TOKENS = ["border", "border-strong", "border-subtle", "input", "ring"] as const;
+const LINE_TOKENS = ["edge", "border", "border-strong", "border-subtle", "input", "ring"] as const;
 
 const ACCENT_TOKENS = ["primary", "secondary", "muted", "accent", "overlay"] as const;
 
@@ -255,6 +255,9 @@ export function FoundationsSection() {
           </Item>
           <Item label="shadow-card-hover">
             <div className="h-16 w-24 rounded-12 border border-border bg-surface-elevated shadow-card-hover" />
+          </Item>
+          <Item label="shadow-surface">
+            <div className="h-16 w-24 rounded-12 border border-edge bg-surface shadow-surface" />
           </Item>
         </Row>
       </Specimen>

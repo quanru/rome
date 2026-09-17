@@ -51,7 +51,7 @@ describe("Toaster", () => {
     expect(renderedToast?.getAttribute("data-styled")).toBe("false");
     expect([...renderedToast!.classList]).toEqual(
       expect.arrayContaining([
-        "border-border",
+        "border-edge",
         "bg-surface-elevated",
         "flex",
         "p-4",
@@ -69,7 +69,7 @@ describe("Toaster", () => {
     expect(cancel?.className).toContain("bg-surface-muted");
     expect(cancel?.className).toContain("text-muted-foreground");
     expect(close?.className).toContain("bg-surface-elevated");
-    expect(close?.className).toContain("border-border");
+    expect(close?.className).toContain("border-edge");
     expect(close?.className).toContain("text-foreground");
   });
 

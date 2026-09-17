@@ -73,6 +73,17 @@ const SHADOWS_DARK = {
   "rome-shadow-25": "0 25px 60px -12px rgb(0 0 0 / 0.7)",
 } satisfies ThemeTokens;
 
+/** Ash's light half widens the blur at steps 4 and 10. Its containers carry no
+ *  hairline, so a tight cast at their edge would draw the line back; a wide,
+ *  low-alpha cast reads as ambient light instead. Both values stay inside the
+ *  scale's constraints: blur at 3× the offset, spread at or below zero, alpha
+ *  from .1. The dark half keeps the shared values, where the ink is deep enough
+ *  already. */
+const ASH_SHADOWS_LIGHT = {
+  "rome-shadow-4": "0 4px 12px -4px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+  "rome-shadow-10": "0 10px 30px -10px rgb(0 0 0 / 0.14), 0 4px 8px -4px rgb(0 0 0 / 0.1)",
+} satisfies ThemeTokens;
+
 /** Deprecated status label tokens, kept as host declarations only.
  *
  *  An app is installed as a built artifact: its CSS was compiled against
@@ -272,9 +283,13 @@ const ember: ThemeDefinition = {
 
     ...SHADOWS_LIGHT,
     "rome-shadow-card-hover": SHADOWS_LIGHT["rome-shadow-4"],
+    "rome-shadow-surface": "none",
 
     ring: "var(--orange-400)",
     input: "var(--neutral-150)",
+    // A container's outline and a row divider are the same hairline here; Ash
+    // is the theme that tells them apart.
+    edge: "var(--neutral-150)",
 
     primary: "var(--orange-300)",
     "primary-foreground": "var(--neutral-0)",
@@ -334,6 +349,7 @@ const ember: ThemeDefinition = {
 
     ...SHADOWS_DARK,
     "rome-shadow-card-hover": SHADOWS_DARK["rome-shadow-4"],
+    "rome-shadow-surface": "none",
 
     border: "var(--neutral-700)",
     "border-strong": "var(--neutral-650)",
@@ -341,6 +357,7 @@ const ember: ThemeDefinition = {
 
     ring: "var(--orange-400)",
     input: "var(--neutral-700)",
+    edge: "var(--neutral-700)",
 
     primary: "var(--orange-300)",
     "primary-foreground": "var(--neutral-0)",
@@ -398,16 +415,23 @@ const ember: ThemeDefinition = {
  *  Because the surfaces lightened, the mapping reaches for deeper accent steps
  *  to hold contrast: `primary` is `--orange-550` (white label 4.6:1, against
  *  3.3:1 on the step Ember uses), the link is `--orange-700` at 5.7:1, and muted
- *  text is `--neutral-550` at 5.2:1. Don't re-point those at lighter steps
- *  without re-measuring — they are why this theme clears AA where Ember doesn't.
- *  `brand` stays on Ember's step: only the interactive accent deepened, so logo
- *  and marketing marks stay on-brand across themes. */
+ *  text is `--neutral-550` at 5.2:1 on a card. Don't re-point those at lighter
+ *  steps without re-measuring — they are why this theme clears AA where Ember
+ *  doesn't. `brand` stays on Ember's step: only the interactive accent
+ *  deepened, so logo and marketing marks stay on-brand across themes.
+ *
+ *  Ash separates regions by depth, not by line. Its canvas sits two steps
+ *  below its cards, a raised container carries a cast (`--rome-shadow-surface`)
+ *  and an edge that is nearly nothing (`--edge`), and every divider is ink at
+ *  an alpha. Ember and Slate keep the hairline: their `--edge` is their
+ *  `--border`, and their container cast is `none`.
+ *  docs/ui/semantic-token/edges.md is the contract. */
 const ashPalette: Palette = {
   "neutral-0": "#ffffff",
   "neutral-25": "#fefdfb",
   "neutral-50": "#fbfaf7",
   "neutral-100": "#f8f7f4",
-  "neutral-150": "#f5f4f1",
+  "neutral-150": "#f3f1ee",
   "neutral-200": "#e7e5e2",
   "neutral-250": "#dfddd9",
   "neutral-300": "#d6d4d0",
@@ -437,30 +461,40 @@ const ash: ThemeDefinition = {
   label: "Ash",
   palette: ashPalette,
   light: {
-    background: "var(--neutral-50)",
+    // The canvas sits two steps below the cards, so a card reads as raised by
+    // its fill and its cast alone. Muted text still clears AA there: 4.7:1
+    // against `--neutral-150`, which is why the canvas stops at that step.
+    background: "var(--neutral-150)",
     foreground: "var(--neutral-900)",
 
     surface: "var(--neutral-25)",
     "surface-foreground": "var(--neutral-900)",
-    "surface-muted": "var(--neutral-150)",
+    "surface-muted": "var(--neutral-100)",
     "surface-muted-foreground": "var(--neutral-600)",
     "surface-elevated": "var(--neutral-0)",
-    "surface-hover": "var(--neutral-100)",
+    "surface-hover": "var(--neutral-150)",
 
     "muted-foreground": "var(--neutral-550)",
     "subtle-foreground": "var(--neutral-500)",
 
-    border: "var(--neutral-300)",
-    "border-strong": "var(--neutral-400)",
-    "border-subtle": "var(--neutral-200)",
+    // Lines are ink at an alpha rather than a step, so a divider reads the
+    // same on the canvas, on a card and on a tinted well, and it fades rather
+    // than cuts. The container edge is the faintest of them: the cast in
+    // `--rome-shadow-surface` is what separates a card from the canvas.
+    edge: "color-mix(in srgb, var(--neutral-900) 4%, transparent)",
+    border: "color-mix(in srgb, var(--neutral-900) 8%, transparent)",
+    "border-strong": "color-mix(in srgb, var(--neutral-900) 16%, transparent)",
+    "border-subtle": "color-mix(in srgb, var(--neutral-900) 5%, transparent)",
 
     ...SHADOWS_LIGHT,
-    "rome-shadow-card-hover": SHADOWS_LIGHT["rome-shadow-4"],
+    ...ASH_SHADOWS_LIGHT,
+    "rome-shadow-card-hover": ASH_SHADOWS_LIGHT["rome-shadow-4"],
+    "rome-shadow-surface": ASH_SHADOWS_LIGHT["rome-shadow-4"],
 
     ring: "var(--orange-500)",
-    // Field edge sits one step darker than the dividers, on purpose: a control
-    // should read as a control before you focus it.
-    input: "var(--neutral-350)",
+    // The field edge stays a solid step, one lighter than before, so a control
+    // still reads as a control before you focus it while the dividers fade.
+    input: "var(--neutral-300)",
 
     primary: "var(--orange-550)",
     "primary-foreground": "var(--neutral-0)",
@@ -471,10 +505,10 @@ const ash: ThemeDefinition = {
 
     overlay: "color-mix(in srgb, var(--neutral-900) 45%, transparent)",
 
-    secondary: "var(--neutral-150)",
+    secondary: "var(--neutral-200)",
     "secondary-foreground": "var(--neutral-900)",
     muted: "var(--neutral-150)",
-    accent: "var(--neutral-100)",
+    accent: "var(--neutral-150)",
     "accent-foreground": "var(--neutral-900)",
 
     destructive: "var(--red-400)",
@@ -502,16 +536,26 @@ const ash: ThemeDefinition = {
 
     ...LEGACY_STATUS_LABELS_WARM_LIGHT,
   },
-  // Spread rather than copied: the two dark mappings are meant to stay
-  // identical, so a future Ember dark change should land here too instead of
-  // silently leaving Ash behind.
+  // Spread rather than copied: the depths are meant to stay Ember's, so a
+  // future Ember dark change should land here too instead of silently leaving
+  // Ash behind. Only the lines and the container cast are Ash's own — the
+  // same edge-versus-divider split as its light half, in the dark ink.
   //
   // It resolves against Ash's palette, not Ember's, so the two dark halves are
-  // no longer pixel-identical: every step from 450 down is shared, but the ink
+  // not pixel-identical: every step from 450 down is shared, but the ink
   // reads `--neutral-50`, and Ash's is its own cooler near-white (.985 against
   // Ember's .964). That is the theme being consistent with itself — Ash is
   // Ember cooled, in both modes — rather than borrowing Ember's swatch.
-  dark: { ...ember.dark },
+  dark: {
+    ...ember.dark,
+    // A lit edge rather than a dark one: on a canvas near black a cast alone
+    // cannot lift a container, so the edge carries a little of the ink.
+    edge: "color-mix(in srgb, var(--neutral-50) 8%, transparent)",
+    border: "color-mix(in srgb, var(--neutral-50) 10%, transparent)",
+    "border-strong": "color-mix(in srgb, var(--neutral-50) 18%, transparent)",
+    "border-subtle": "color-mix(in srgb, var(--neutral-50) 6%, transparent)",
+    "rome-shadow-surface": SHADOWS_DARK["rome-shadow-4"],
+  },
 };
 
 // ─── Slate ────────────────────────────────────────────────────────────────────
@@ -578,9 +622,11 @@ const slate: ThemeDefinition = {
 
     ...SHADOWS_LIGHT,
     "rome-shadow-card-hover": SHADOWS_LIGHT["rome-shadow-4"],
+    "rome-shadow-surface": "none",
 
     ring: "var(--neutral-900)",
     input: "var(--neutral-200)",
+    edge: "var(--neutral-200)",
 
     primary: "var(--neutral-900)",
     "primary-foreground": "var(--neutral-50)",
@@ -637,6 +683,7 @@ const slate: ThemeDefinition = {
 
     ...SHADOWS_DARK,
     "rome-shadow-card-hover": SHADOWS_DARK["rome-shadow-4"],
+    "rome-shadow-surface": "none",
 
     border: "var(--neutral-700)",
     "border-strong": "var(--neutral-650)",
@@ -644,6 +691,7 @@ const slate: ThemeDefinition = {
 
     ring: "var(--neutral-50)",
     input: "var(--neutral-700)",
+    edge: "var(--neutral-700)",
 
     primary: "var(--neutral-50)",
     "primary-foreground": "var(--neutral-950)",

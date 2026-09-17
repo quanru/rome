@@ -16,8 +16,10 @@ import { cn } from "./cn.js";
  *     by every theme block — the alias is host-local, and the kit must not
  *     depend on a host having it.
  *   - `rounded-12`, the panel step of the radius scale, not `rounded-16`.
- *   - Flat: no `shadow-sm`. Dashboard panels sit on `background` and the
- *     `border-border` hairline is what separates them.
+ *   - No `shadow-sm`. The boundary is the theme's call: `border-edge` and
+ *     `shadow-surface` resolve to a hairline and no cast where a theme
+ *     outlines its panels, and to nearly no edge and a soft cast where it
+ *     separates them by depth (docs/ui/semantic-token/edges.md).
  *   - 16px inset and 4px title/description gap, against upstream's 24px/8px.
  *
  * The one structural deviation: `CardTitle` renders `h3` rather than a `div`,
@@ -31,7 +33,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-4 rounded-12 border border-border bg-surface py-4 text-surface-foreground",
+        "flex flex-col gap-4 rounded-12 border border-edge bg-surface py-4 text-surface-foreground shadow-surface",
         className,
       )}
       {...props}

@@ -521,6 +521,11 @@
 
   /* ── Border, ring & input. ────────────────────────────────────────────────── */
 
+  /* Outline of a raised container — a card, a panel, a dialog. A theme that
+     separates containers by depth resolves it to nearly nothing and lets
+     `shadow-surface` carry the boundary; `border` stays the divider between
+     rows. docs/ui/semantic-token/edges.md. */
+  --color-edge: var(--edge);
   /* Default hairline between regions. */
   --color-border: var(--border);
   /* Heavier divider where `border` reads too faint. */
@@ -545,6 +550,10 @@
   --shadow-25: var(--rome-shadow-25);
   /* Semantic card-hover elevation; reads step 4. */
   --shadow-card-hover: var(--rome-shadow-card-hover);
+  /* Semantic container elevation: the cast a raised container carries at
+     rest. `none` in a theme that outlines containers with a hairline, a step
+     in one that separates them by depth. Pairs with `border-edge`. */
+  --shadow-surface: var(--rome-shadow-surface);
 
   /* ── Radius. The Rome scale and its steps:
      docs/ui/primitive-token/border-radius-primitives.md. The numbered

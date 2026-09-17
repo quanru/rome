@@ -243,7 +243,7 @@ export function RomeShellLayout() {
             column's end instead of the viewport. `clip` clips and stays out
             of the scroll chain. */}
         <main
-          className="flex min-w-0 flex-1 flex-col bg-surface md:m-3 md:ml-0 md:overflow-clip md:rounded-12 md:border md:border-border md:has-[[data-slot=tool-workspace]]:border-transparent md:has-[[data-slot=tool-workspace]]:bg-transparent"
+          className="flex min-w-0 flex-1 flex-col bg-surface md:m-3 md:ml-0 md:overflow-clip md:rounded-12 md:border md:border-edge md:shadow-surface md:has-[[data-slot=tool-workspace]]:border-transparent md:has-[[data-slot=tool-workspace]]:bg-transparent md:has-[[data-slot=tool-workspace]]:shadow-none"
           style={
             {
               "--rome-chat-left": hideSidebar ? "0px" : railMode ? "4rem" : "16rem",

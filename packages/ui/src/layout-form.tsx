@@ -27,7 +27,7 @@ export function FormRows({ className, ...props }: ComponentProps<"div">) {
     <div
       data-slot="form-rows"
       className={cn(
-        "w-full max-w-2xl divide-y divide-border overflow-hidden rounded-12 border border-border bg-surface",
+        "w-full max-w-2xl divide-y divide-border overflow-hidden rounded-12 border border-edge bg-surface shadow-surface",
         className,
       )}
       {...props}

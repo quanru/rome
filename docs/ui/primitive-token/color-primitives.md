@@ -13,7 +13,7 @@ Six ramps, 68 names. Every theme carries all of them.
 | Step | 0 | 25 | 50 | 100 | 150 | 200 | 250 | 300 | 350 | 400 | 450 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Ember | `#ffffff` | `#fdfcf9` | `#f4f3ef` | `#efe9e1` | `#ece6de` | `#eae6df` | `#e5dfd6` | `#e0d8cd` | `#d0c6ba` | `#c0b4a7` | `#b0a294` |
-| Ash | `#ffffff` | `#fefdfb` | `#fbfaf7` | `#f8f7f4` | `#f5f4f1` | `#e7e5e2` | `#dfddd9` | `#d6d4d0` | `#cecbc7` | `#bcb8b3` | `#b0a294` |
+| Ash | `#ffffff` | `#fefdfb` | `#fbfaf7` | `#f8f7f4` | `#f3f1ee` | `#e7e5e2` | `#dfddd9` | `#d6d4d0` | `#cecbc7` | `#bcb8b3` | `#b0a294` |
 | Slate | 1 | .992 | .985 | .97 | .945 | .92 | .9 | .83 | .769 | .708 | .632 |
 
 | Step | 500 | 550 | 600 | 650 | 700 | 750 | 800 | 850 | 900 | 925 | 950 |

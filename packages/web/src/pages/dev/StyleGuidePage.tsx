@@ -23,7 +23,10 @@ const TOKEN_GROUPS: TokenGroup[] = [
     ],
   },
   { name: "Text", tokens: ["muted-foreground", "subtle-foreground"] },
-  { name: "Border & Input", tokens: ["border", "border-strong", "border-subtle", "ring", "input"] },
+  {
+    name: "Border & Input",
+    tokens: ["edge", "border", "border-strong", "border-subtle", "ring", "input"],
+  },
   { name: "Primary", tokens: ["primary", "primary-foreground", "primary-hover"] },
   { name: "Brand (our violet)", tokens: ["brand", "brand-fg"] },
   {

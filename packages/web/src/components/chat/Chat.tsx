@@ -1768,7 +1768,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
                     // `touch-target` because this control, unlike the timeline
                     // rail, has no width gate: it is reachable on a phone, where
                     // the 36px step is under the 44px floor.
-                    "touch-target pointer-events-auto absolute bottom-full left-1/2 mb-3 -translate-x-1/2 rounded-full border border-border bg-surface/95 text-muted-foreground shadow-10 backdrop-blur-md transition-[opacity,visibility] duration-150 ease-out supports-[backdrop-filter]:bg-surface/80 hover:text-foreground motion-reduce:transition-none",
+                    "touch-target pointer-events-auto absolute bottom-full left-1/2 mb-3 -translate-x-1/2 rounded-full border border-edge bg-surface/95 text-muted-foreground shadow-10 backdrop-blur-md transition-[opacity,visibility] duration-150 ease-out supports-[backdrop-filter]:bg-surface/80 hover:text-foreground motion-reduce:transition-none",
                     isAtBottom ? "invisible opacity-0" : "visible opacity-100",
                   )}
                 />
@@ -1780,7 +1780,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
                       onExit={exitShareMode}
                     />
                   ) : isArchived ? (
-                    <div className="flex items-center justify-between gap-3 rounded-16 border border-border bg-surface/95 px-4 py-3 text-ui text-muted-foreground shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
+                    <div className="flex items-center justify-between gap-3 rounded-16 border border-edge bg-surface/95 px-4 py-3 text-ui text-muted-foreground shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
                       <span className="min-w-0 flex-1">{t("archived.readOnly")}</span>
                       <Button
                         type="button"
@@ -1797,7 +1797,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
                       ref={composerRef}
                       // The box look lives on the composer now so the chip row can sit
                       // outside it; this mount adds the floating blur/translucency.
-                      boxClassName="rounded-16 border border-border bg-surface/95 p-4 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80"
+                      boxClassName="rounded-16 border border-edge bg-surface/95 p-4 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80"
                       onSend={handleComposerSend}
                       isStreaming={displayedStreaming}
                       onStop={() => void stopMessage()}

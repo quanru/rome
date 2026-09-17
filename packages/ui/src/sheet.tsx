@@ -38,7 +38,7 @@ export function Sheet({
         <DialogPrimitive.Content
           aria-label={ariaLabel}
           className={cn(
-            "fixed inset-y-0 right-0 z-50 flex flex-col border-l border-border bg-surface text-foreground shadow-25 outline-none",
+            "fixed inset-y-0 right-0 z-50 flex flex-col border-l border-edge bg-surface text-foreground shadow-25 outline-none",
             "duration-200 data-open:animate-in data-open:slide-in-from-right data-closed:animate-out data-closed:slide-out-to-right",
             widthClassName,
             className,

@@ -168,7 +168,7 @@ export function ToolWorkspace({
       style={{ "--rome-chat-col": open && !compact ? `${chatWidth}px` : "100%" } as CSSProperties}
     >
       <div
-        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface md:rounded-12 md:border md:border-border"
+        className="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface md:rounded-12 md:border md:border-edge md:shadow-surface"
         data-testid="workspace-chat"
         style={{
           display: compact && open ? "none" : undefined,
@@ -228,7 +228,7 @@ export function ToolWorkspace({
         value={view.activeId ?? ""}
         onValueChange={selectTool}
         activationMode="automatic"
-        className="min-h-0 min-w-0 flex-1 gap-0 overflow-hidden bg-surface md:rounded-12 md:border md:border-border"
+        className="min-h-0 min-w-0 flex-1 gap-0 overflow-hidden bg-surface md:rounded-12 md:border md:border-edge md:shadow-surface"
         style={{ display: open ? undefined : "none" }}
       >
         <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">

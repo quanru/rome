@@ -35,11 +35,13 @@ Ash's dark half maps the same steps as Ember's, against its own palette. Every t
 
 | Token | Ember light | Ember dark | Ash light | Slate light | Slate dark |
 |---|---|---|---|---|---|
-| `--background` | `--neutral-50` | `--neutral-950` | `--neutral-50` | `--neutral-50` | `--neutral-950` |
+| `--background` | `--neutral-50` | `--neutral-950` | `--neutral-150` | `--neutral-50` | `--neutral-950` |
 | `--surface` | `--neutral-25` | `--neutral-925` | `--neutral-25` | `--neutral-0` | `--neutral-900` |
-| `--surface-muted` | `--neutral-100` | `--neutral-850` | `--neutral-150` | `--neutral-100` | `--neutral-850` |
+| `--surface-muted` | `--neutral-100` | `--neutral-850` | `--neutral-100` | `--neutral-100` | `--neutral-850` |
 | `--surface-elevated` | `--neutral-0` | `--neutral-850` | `--neutral-0` | `--neutral-0` | `--neutral-850` |
-| `--surface-hover` | `--neutral-200` | `--neutral-750` | `--neutral-100` | `--neutral-100` | `--neutral-750` |
+| `--surface-hover` | `--neutral-200` | `--neutral-750` | `--neutral-150` | `--neutral-100` | `--neutral-750` |
+
+Ash's light canvas sits two steps below its cards rather than one, because Ash separates a card from the canvas by fill and cast and not by a hairline. The edge and the cast are in [edges.md](edges.md).
 
 `--overlay` resolves to a `color-mix` expression rather than to a step. `--card` and `--popover` alias other tokens and carry no mapping of their own. `--color-sidebar` is a kit-level binding onto `--surface` with nothing behind it. `[mech]`
 

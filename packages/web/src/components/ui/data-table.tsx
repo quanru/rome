@@ -62,7 +62,7 @@ function DataTable<TData>({
     column.sortKey !== undefined && onSortChange !== undefined;
 
   return (
-    <div className="overflow-hidden rounded-12 border border-border">
+    <div className="overflow-hidden rounded-12 border border-edge shadow-surface">
       <Table>
         <TableHeader>
           <TableRow>

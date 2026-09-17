@@ -12,7 +12,7 @@ type AlertVariant = "default" | "info" | "success" | "warning" | "destructive";
 const tinted = (classes: string) => `${classes} [--alert-description-color:var(--foreground)]`;
 
 const variantClasses: Record<AlertVariant, string> = {
-  default: "border-border bg-surface text-foreground [&>svg]:text-muted-foreground",
+  default: "border-edge bg-surface text-foreground shadow-surface [&>svg]:text-muted-foreground",
   info: tinted("border-info-border bg-info-bg text-info-fg [&>svg]:text-info-fg"),
   success: tinted("border-success-border bg-success-bg text-success-fg [&>svg]:text-success-fg"),
   warning: tinted("border-warning-border bg-warning-bg text-warning-fg [&>svg]:text-warning-fg"),

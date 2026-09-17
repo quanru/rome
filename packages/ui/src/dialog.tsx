@@ -59,7 +59,7 @@ export function Dialog({
             }
           }}
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 rounded-16 border border-border bg-surface text-foreground shadow-25 ring-1 ring-black/5",
+            "fixed left-1/2 top-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 rounded-16 border border-edge bg-surface text-foreground shadow-25 ring-1 ring-black/5",
             sizeClasses[size],
             className,
           )}
