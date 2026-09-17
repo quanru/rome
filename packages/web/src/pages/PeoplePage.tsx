@@ -207,7 +207,7 @@ export default function PeoplePage({ view }: { view: PeopleView }) {
           }
         />
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Input
             type="search"
             value={search}
@@ -309,6 +309,11 @@ export default function PeoplePage({ view }: { view: PeopleView }) {
   );
 }
 
+/** The rows sit in a raised container on the pane, the way every other list
+ *  on a page does, so the boundary is the theme's call rather than a rule
+ *  under the toolbar. */
+const LIST_FRAME = "overflow-hidden rounded-12 border border-edge bg-surface shadow-surface";
+
 /** The stream. Accounts nobody has placed are dense — the placement decision
  *  runs on their evidence — and every other row is lean. */
 function LatestView({
@@ -339,7 +344,7 @@ function LatestView({
   // No heading: the stream is one ungrouped list, and the segmented control
   // above it already says which view is on screen.
   return (
-    <section>
+    <section className={LIST_FRAME}>
       <List>
         {rows.map((row) =>
           row.kind === "account" ? (
@@ -384,7 +389,7 @@ function DirectoryView({
     <>
       {groups.map((group) => (
         <section key={group.level}>
-          <div className="flex flex-wrap items-baseline gap-2 border-b border-border pb-1">
+          <div className="flex flex-wrap items-baseline gap-2 pb-2">
             <h2 className="text-section uppercase tracking-wide text-muted-foreground">
               {t(levelLabelKey(group.level))}
             </h2>
@@ -395,15 +400,17 @@ function DirectoryView({
               {counts[group.level]}
             </span>
           </div>
-          <List>
-            {group.rows.map((row) =>
-              row.kind === "account" ? (
-                renderUnplaced(row)
-              ) : (
-                <DirectoryRow key={row.id} row={row} onOpen={() => onOpen(row)} />
-              ),
-            )}
-          </List>
+          <div className={LIST_FRAME}>
+            <List>
+              {group.rows.map((row) =>
+                row.kind === "account" ? (
+                  renderUnplaced(row)
+                ) : (
+                  <DirectoryRow key={row.id} row={row} onOpen={() => onOpen(row)} />
+                ),
+              )}
+            </List>
+          </div>
         </section>
       ))}
     </>

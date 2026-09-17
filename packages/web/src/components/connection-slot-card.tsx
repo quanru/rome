@@ -125,7 +125,7 @@ export function ConnectionSlotCard({
       className={cn(
         "space-y-4",
         !bare && "rounded-12 border bg-surface p-4",
-        !bare && (connected ? "border-border" : "border-dashed border-border"),
+        !bare && (connected ? "border-edge shadow-surface" : "border-dashed border-border"),
       )}
     >
       {(title || subtitle || action) && (

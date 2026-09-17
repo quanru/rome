@@ -53,9 +53,11 @@ describe("ConnectionSlotCard", () => {
     // No identity detail means no subtitle; the dialog header already carries
     // the connected status.
     expect(screen.queryByText("Connected")).toBeNull();
-    // Solid (non-dashed) border for a held credential.
+    // A held credential is a raised container: the theme's edge and cast,
+    // not the dashed placeholder outline.
     const section = container.querySelector("section");
-    expect(section?.className).toContain("border-border");
+    expect(section?.className).toContain("border-edge");
+    expect(section?.className).toContain("shadow-surface");
     expect(section?.className).not.toContain("border-dashed");
   });
 

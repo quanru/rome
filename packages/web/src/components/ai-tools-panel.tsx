@@ -823,7 +823,7 @@ export function AiToolsPanel({
           </>
         )}
 
-        <div className="divide-y divide-border overflow-hidden rounded-8 border border-border bg-surface">
+        <div className="divide-y divide-border overflow-hidden rounded-8 border border-edge bg-surface shadow-surface">
           {visibleProviders.map((provider) => {
             const status = toolStatus[provider.statusKey];
             const isLoggedIn = status?.loggedIn === true;
@@ -1146,7 +1146,7 @@ export function AiToolsPanel({
                 </p>
               )}
             {selectedProvider?.kind === "custom" && (
-              <div className="space-y-3 rounded-12 border border-border bg-muted/20 p-3">
+              <div className="space-y-3 rounded-12 bg-surface-muted p-3">
                 <p className="text-ui text-foreground">
                   {t("aiTools.otherProviders.custom.title")}
                 </p>

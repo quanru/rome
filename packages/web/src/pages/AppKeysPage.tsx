@@ -158,7 +158,7 @@ export default function AppKeysPage() {
         <Section>
           {form !== null && (
             <form
-              className="space-y-4 rounded-8 border border-border bg-surface p-4"
+              className="space-y-4 rounded-8 border border-edge bg-surface p-4 shadow-surface"
               onSubmit={(event) => {
                 event.preventDefault();
                 submit();
@@ -275,7 +275,7 @@ export default function AppKeysPage() {
               </EmptyState>
             )
           ) : (
-            <ListCollection className="rounded-8 border border-border bg-surface">
+            <ListCollection className="rounded-8 border border-edge bg-surface shadow-surface">
               <Table className="min-w-lg">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">

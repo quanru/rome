@@ -231,7 +231,7 @@ function Note({ children }: { children: React.ReactNode }) {
 function Floor({ children }: { children: React.ReactNode }) {
   return (
     <div className={`pointer-events-none sticky bottom-0 z-10 mt-auto pt-4 ${PAGE_FLOOR}`}>
-      <div className="pointer-events-auto rounded-16 border border-border bg-surface/95 p-3 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
+      <div className="pointer-events-auto rounded-16 border border-edge bg-surface/95 p-3 shadow-10 backdrop-blur-md supports-[backdrop-filter]:bg-surface/80">
         {children}
       </div>
     </div>

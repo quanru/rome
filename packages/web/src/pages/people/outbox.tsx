@@ -45,7 +45,10 @@ export function Outbox({
   if (visible.length === 0) return null;
 
   return (
-    <ul aria-label={t("send.outbox.label")} className="mt-3 rounded-14 border border-border p-1">
+    <ul
+      aria-label={t("send.outbox.label")}
+      className="mt-3 rounded-14 border border-edge bg-surface p-1 shadow-surface"
+    >
       {visible.map((message) => (
         <li
           key={message.id}

@@ -839,7 +839,7 @@ function FavorsSection() {
         </Card>
       </div>
 
-      <Section className="gap-0 overflow-hidden rounded-12 border border-border bg-surface">
+      <Section className="gap-0 overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <h3 className="text-section text-foreground">Recharge</h3>
           <CreditCard className="size-4 text-muted-foreground" />
@@ -875,7 +875,7 @@ function FavorsSection() {
         )}
       </Section>
 
-      <Section className="gap-0 overflow-hidden rounded-12 border border-border bg-surface">
+      <Section className="gap-0 overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-section text-foreground">Awaiting your payment decision</h3>
         </div>
@@ -896,7 +896,7 @@ function FavorsSection() {
       </Section>
 
       {failed.length > 0 && (
-        <Section className="gap-0 overflow-hidden rounded-12 border border-border bg-surface">
+        <Section className="gap-0 overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
           <div className="border-b border-border px-4 py-3">
             <h3 className="text-section text-foreground">Failed owner-side actions</h3>
           </div>
@@ -913,7 +913,7 @@ function FavorsSection() {
         </Section>
       )}
 
-      <Section className="gap-0 overflow-hidden rounded-12 border border-border bg-surface">
+      <Section className="gap-0 overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-section text-foreground">Paid action requests</h3>
         </div>
@@ -933,7 +933,7 @@ function FavorsSection() {
         )}
       </Section>
 
-      <Section className="gap-0 overflow-hidden rounded-12 border border-border bg-surface">
+      <Section className="gap-0 overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
         <div className="border-b border-border px-4 py-3">
           <h3 className="text-section text-foreground">Ledger</h3>
         </div>
@@ -2275,7 +2275,7 @@ function AllowedCloudEmailsSection() {
             {emails.map((email) => (
               <li
                 key={email}
-                className="flex items-center gap-3 rounded-8 border border-border px-3 py-2"
+                className="flex items-center gap-3 rounded-8 bg-surface-muted px-3 py-2"
               >
                 <Avatar>
                   <AvatarFallback className="bg-primary/15 text-primary">

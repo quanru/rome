@@ -456,7 +456,7 @@ function ConversationRow({
   return (
     <article
       aria-labelledby={headingId}
-      className="overflow-hidden rounded-12 border border-border bg-surface px-4"
+      className="overflow-hidden rounded-12 border border-edge bg-surface px-4 shadow-surface"
     >
       <header className="-mx-4 flex items-start gap-3 border-b border-border px-4 py-4">
         <ConnectionBrandBadge connection={conversation.service} />

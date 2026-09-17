@@ -118,7 +118,7 @@ function PersonDetailPage({ personId }: { personId: string | undefined }) {
             and is changed from the menu, so the card states the facts and keeps
             every gesture in one place — nothing here has to stack or wrap into
             pieces when the card is narrow. */}
-        <div className="flex items-start gap-4 rounded-14 border border-border bg-surface p-5 shadow-1">
+        <div className="flex items-start gap-4 rounded-14 border border-edge bg-surface p-5 shadow-surface">
           <Avatar
             name={person.displayName}
             size="lg"
