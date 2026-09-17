@@ -1,0 +1,1 @@
+{"hostId":"rome-host","enabled":true,"socketPath":"/run/rome-host/control.sock","stateDir":"/var/lib/rome-host","socketGid":0,"maxTimeoutSeconds":600,"maxOutputBytes":131072}

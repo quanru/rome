@@ -1,0 +1,31 @@
+# Compose project the host boots. Production uses Rome Cloud's deployment
+# bundle; this file is the subset needed to prove the image boots Rome.
+name: rome
+services:
+  rome:
+    image: ${ROME_DOCKER_IMAGE}
+    ports:
+      - "8080:8080"
+    volumes:
+      - app:/app
+      - rome-memory:/app/memory
+      - rome-home:/home/rome
+      - user-home:/home/user
+      - ssh-keys:/etc/ssh/ssh_host_keys
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - WEB_HOST=0.0.0.0
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor:unconfined
+    restart: unless-stopped
+volumes:
+  app:
+  rome-memory:
+  rome-home:
+  user-home:
+  ssh-keys:
