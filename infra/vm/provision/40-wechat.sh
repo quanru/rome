@@ -35,12 +35,13 @@ fi
 mkdir -p /var/lib/rome-host && chmod 700 /var/lib/rome-host
 
 # Identity comes from the machine, never from the image. A sealed image has an
-# empty machine-id, so the build leaves the config disabled and unnamed.
+# empty machine-id, so a build writes a placeholder the helper accepts but no
+# job can name; the first apply on a host replaces it.
 enabled=false
-host_id=""
-if [[ -e $root/wechat && -s /etc/machine-id ]]; then
-  enabled=true
+host_id=unprovisioned
+if [[ -s /etc/machine-id ]]; then
   host_id="$(cut -c1-12 /etc/machine-id)"
+  [[ -e $root/wechat ]] && enabled=true
 fi
 config="$(mktemp)"
 printf '{"hostId":"%s","enabled":%s,"socketPath":"/run/rome-host/control.sock","stateDir":"/var/lib/rome-host","socketGid":0,"maxTimeoutSeconds":600,"maxOutputBytes":131072}\n' \

@@ -49,6 +49,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 mkdir -p "$out"
+host_arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+[[ "$arch" == "$host_arch" ]] || {
+  echo "build.sh: --arch $arch needs a $arch host; this one is $host_arch (the libguestfs appliance runs the host's architecture)" >&2
+  exit 2
+}
 
 # 1. Pinned base image. The dated release URL never changes content.
 base_name="ubuntu-${UBUNTU_VERSION}-server-cloudimg-${arch}.img"
@@ -83,6 +88,13 @@ $base_only && {
 #    `docker load` consumes on first boot.
 rome_tar="$out/rome-${arch}-${ROME_IMAGE_DIGEST#sha256:}.tar"
 if [[ ! -s "$rome_tar" ]]; then
+  # The tag is the human name for the digest; refuse a pins.env where the
+  # two have drifted apart.
+  tag_digest="sha256:$(skopeo inspect --policy "$here/files/skopeo-policy.json" --raw "docker://${ROME_IMAGE_REPO}:${ROME_IMAGE_TAG}" | sha256sum | cut -d' ' -f1)"
+  [[ "$tag_digest" == "$ROME_IMAGE_DIGEST" ]] || {
+    echo "build.sh: ${ROME_IMAGE_REPO}:${ROME_IMAGE_TAG} resolves to $tag_digest, pins.env says $ROME_IMAGE_DIGEST" >&2
+    exit 1
+  }
   skopeo copy --policy "$here/files/skopeo-policy.json" --override-arch "$arch" --override-os linux \
     "docker://${ROME_IMAGE_REPO}@${ROME_IMAGE_DIGEST}" \
     "docker-archive:$rome_tar.part:${ROME_IMAGE_REPO#docker.io/}:${ROME_IMAGE_TAG}"

@@ -45,7 +45,9 @@ case "$mode" in
     fi
     rm -f /run/rome-host/changed
     if [[ -f /opt/rome/.env ]]; then
-      (cd /opt/rome && docker compose --project-name rome up -d)
+      # The project name comes from the compose file, so a tenant's bundle
+      # keeps its own.
+      (cd /opt/rome && docker compose up -d)
     fi
     ;;
   *)
