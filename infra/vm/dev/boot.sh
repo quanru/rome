@@ -48,10 +48,18 @@ $fresh && rm -f "$overlay" "$work/OVMF_VARS.fd"
 # The overlay is larger than the image; cloud-init growpart expands the root
 # filesystem at first boot, as it does on a Vultr disk. Worktree image pulls
 # need the headroom.
-[[ -f "$overlay" ]] || qemu-img create -q -f qcow2 -b "$(realpath "$image")" -F qcow2 "$overlay" "${ROME_VM_DISK:-40G}"
+new_vm=false
+if [[ ! -f "$overlay" ]]; then
+  qemu-img create -q -f qcow2 -b "$(realpath "$image")" -F qcow2 "$overlay" "${ROME_VM_DISK:-40G}"
+  new_vm=true
+fi
 
-pubkey="$(cat "${ROME_VM_SSH_PUBKEY:-$HOME/.ssh/id_ed25519.pub}")"
-cat >"$work/user-data" <<UD
+# The seed is first-boot state, like a tenant's. It is written with the
+# overlay and reused on later boots, so the JWT secret and the instance id
+# stay put and cloud-init does not run its first-boot modules again.
+if $new_vm; then
+  pubkey="$(cat "${ROME_VM_SSH_PUBKEY:-$HOME/.ssh/id_ed25519.pub}")"
+  cat >"$work/user-data" <<UD
 #cloud-config
 hostname: rome-host-dev
 users:
@@ -72,15 +80,15 @@ write_files:
     content: |
       ROME_DOCKER_IMAGE=${ROME_IMAGE_REPO#docker.io/}:${ROME_IMAGE_TAG}
       ROME_JWT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-      ROME_DEV_MODE=1
 runcmd:
   - systemctl restart docker
   - systemctl start rome-load-image.service
   - cd /opt/rome && docker compose up -d
 $($wechat && printf '  - touch /etc/rome-host/wechat && bash /etc/rome-host/provision/run.sh apply\n')
 UD
-printf 'instance-id: rome-host-dev-%s\nlocal-hostname: rome-host-dev\n' "$(date +%s)" >"$work/meta-data"
-cloud-localds "$work/seed.iso" "$work/user-data" "$work/meta-data"
+  printf 'instance-id: rome-host-dev-%s\nlocal-hostname: rome-host-dev\n' "$(date +%s)" >"$work/meta-data"
+  cloud-localds "$work/seed.iso" "$work/user-data" "$work/meta-data"
+fi
 
 ovmf_dir="${OVMF_DIR:-$(dirname "$(dirname "$(command -v qemu-system-x86_64)")")/share/OVMF}"
 [[ -d "$ovmf_dir" ]] || ovmf_dir="${OVMF_FD:?set OVMF_DIR or OVMF_FD to the OVMF firmware dir}"

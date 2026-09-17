@@ -60,7 +60,10 @@ if [[ ! -f "$base" ]]; then
   curl -fsSL --retry 5 -o "$base.part" "$base_url"
   mv "$base.part" "$base"
 fi
-echo "$base_sha  $base" | sha256sum -c -
+echo "$base_sha  $base" | sha256sum -c - || {
+  rm -f "$base"
+  exit 1
+}
 
 # 2. Grow the root filesystem offline so the preloaded image fits. The cloud
 #    image ships a 3.5G disk; virt-resize writes a new file with sda1 expanded.
@@ -92,7 +95,10 @@ fi
 #    invoked through bash explicitly.
 image="$out/rome-host-${arch}.qcow2"
 cp --reflink=auto "$grown" "$image.part"
-stage="$(mktemp -d)"
+# Staged under $out, next to the tar, so the multi-GB copy is a reflink or
+# at least stays off a small tmpfs.
+stage="$out/.stage"
+rm -rf "$stage"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/rome-host"
 cp -r "$here/pins.env" "$here/provision" "$here/files" "$stage/rome-host/"

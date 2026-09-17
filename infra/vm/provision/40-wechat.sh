@@ -54,6 +54,10 @@ rm -f "$config"
 if $enabled; then
   install -m 0644 "$files/docker-compose.override.wechat.yml" /opt/rome/docker-compose.override.yml
   systemctl enable rome-hostd.service >/dev/null 2>&1
+elif [[ ! -e $root/wechat ]]; then
+  # Disabled on this host: the helper neither runs nor starts at boot.
+  rm -f /opt/rome/docker-compose.override.yml
+  systemctl disable --now rome-hostd.service >/dev/null 2>&1 || true
 fi
 if $changed; then
   mkdir -p /run/rome-host && : >/run/rome-host/changed

@@ -34,10 +34,14 @@ case "$mode" in
   apply)
     systemctl daemon-reload
     systemctl restart rome-block-metadata.service fail2ban.service
-    # Only when the helper's binary, unit, or config changed, so a routine
-    # apply never orphans a running root job.
-    if [[ -e /run/rome-host/changed ]] && systemctl is-active -q rome-hostd.service; then
-      systemctl restart rome-hostd.service
+    # An enabled helper runs. It restarts only when its binary, unit, or
+    # config changed, so a routine apply never orphans a running root job.
+    if [[ -e "$root/wechat" ]]; then
+      if [[ -e /run/rome-host/changed ]]; then
+        systemctl restart rome-hostd.service
+      else
+        systemctl start rome-hostd.service
+      fi
     fi
     rm -f /run/rome-host/changed
     if [[ -f /opt/rome/.env ]]; then

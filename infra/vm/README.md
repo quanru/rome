@@ -67,7 +67,10 @@ infra/vm/apply.sh --wechat root@tenant-host                                     
 ```
 
 A host-layer change is an edit to `provision/` or `files/` plus a bump of
-`HOST_LAYER_VERSION`. New machines get it through a rebuilt image; existing
+`HOST_LAYER_VERSION`. The bump is a human act; the version says what a host
+was told to be, and the step scripts converge it regardless. Moving the
+Docker pin on a live host reinstalls the engine and restarts every
+container, so schedule such an apply like a Rome upgrade. New machines get it through a rebuilt image; existing
 machines through `apply.sh`, which Rome Cloud can call over the SSH channel
 its upgrade script already uses. The tree on the host is replaced whole, so
 a file removed from the tree is removed there too. `--wechat` persists on the
@@ -92,10 +95,12 @@ key instead. The VM boots from a 40G overlay (`ROME_VM_DISK`) that cloud-init
 grows into, so worktree image pulls fit. Ports come from `ROME_VM_SSH_PORT`
 and `ROME_VM_WEB_PORT`.
 
-Changing Rome code needs no new host image. Push a worktree build to the host
-registry and pull it in the guest, the loop `scripts/vm/vm.sh deploy` runs.
-Changing the host layer means `apply.sh` against the running VM, which is
-also the rehearsal for applying it to tenants.
+Changing Rome code needs no new host image. Push a worktree build to a
+registry the guest trusts (`docker push 127.0.0.1:5000/rome:dev` on the host,
+`docker pull 10.0.2.2:5000/rome:dev` in the guest), point `ROME_DOCKER_IMAGE`
+in the guest's `.env` at it, and `docker compose up -d`. Changing the host
+layer means `apply.sh` against the running VM, which is also the rehearsal for
+applying it to tenants.
 
 ## Known boundaries
 
