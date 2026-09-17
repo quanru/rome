@@ -3,12 +3,13 @@
 # and the Rome runtime image preloaded. Runs offline against the disk file via
 # libguestfs; no VM boots during the build.
 #
-#   infra/vm/build.sh [--arch amd64|arm64] [--out DIR] [--base-only] [--wechat]
+#   infra/vm/build.sh [--arch amd64|arm64] [--out DIR] [--base-only] [--hostd PATH]
 #
-# --wechat bakes the host helper and the personal WeChat compose override in
-# (docs/wechat-personal.md). It needs a rome-hostd binary for the target arch
-# at $ROME_HOSTD, built with: CGO_ENABLED=0 GOOS=linux GOARCH=<arch> go build
-# -o rome-hostd ./cmd/rome-hostd from packages/host-helper.
+# --hostd installs the host helper binary and unit, disabled. Enabling it on a
+# host is a separate act: apply.sh --wechat, or a first-boot seed that sets the
+# marker (docs/architecture/host-execution.md). Build the binary for the
+# target arch with: CGO_ENABLED=0 GOOS=linux GOARCH=<arch> go build -o
+# rome-hostd ./cmd/rome-hostd from packages/host-helper.
 #
 # Needs on PATH: virt-customize virt-resize qemu-img skopeo curl sha256sum.
 # The appliance runs the host's architecture, so build arm64 on an arm64 host.
@@ -21,7 +22,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 arch="$(dpkg --print-architecture 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 out="${ROME_VM_OUT:-$PWD/out}"
 base_only=false
-wechat=false
+hostd=""
 disk_size="${ROME_VM_DISK_SIZE:-20G}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,9 +38,9 @@ while [[ $# -gt 0 ]]; do
       base_only=true
       shift
       ;;
-    --wechat)
-      wechat=true
-      shift
+    --hostd)
+      hostd="$2"
+      shift 2
       ;;
     *)
       echo "unknown arg: $1" >&2
@@ -77,7 +78,7 @@ $base_only && {
 # 3. Rome image by digest, one platform, no daemon. The digest pin is the
 #    integrity check, so the signature policy accepts anything. docker-archive is what
 #    `docker load` consumes on first boot.
-rome_tar="$out/rome-${arch}-${ROME_IMAGE_TAG}.tar"
+rome_tar="$out/rome-${arch}-${ROME_IMAGE_DIGEST#sha256:}.tar"
 if [[ ! -s "$rome_tar" ]]; then
   skopeo copy --policy "$here/files/skopeo-policy.json" --override-arch "$arch" --override-os linux \
     "docker://${ROME_IMAGE_REPO}@${ROME_IMAGE_DIGEST}" \
@@ -96,10 +97,8 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/rome-host"
 cp -r "$here/pins.env" "$here/provision" "$here/files" "$stage/rome-host/"
 cp --reflink=auto "$rome_tar" "$stage/rome-host/rome.tar"
-if $wechat; then
-  hostd="${ROME_HOSTD:?--wechat needs ROME_HOSTD=path/to/rome-hostd}"
+if [[ -n "$hostd" ]]; then
   cp "$hostd" "$stage/rome-host/rome-hostd"
-  : >"$stage/rome-host/wechat"
 fi
 export LIBGUESTFS_MEMSIZE="${LIBGUESTFS_MEMSIZE:-2048}"
 virt-customize -a "$image.part" --smp 4 \

@@ -4,4 +4,9 @@
 set -euo pipefail
 truncate -s0 /etc/machine-id
 rm -f /var/lib/dbus/machine-id /etc/ssh/ssh_host_*
-cloud-init clean --logs || true
+# Every clone would otherwise credit the same bytes to its entropy pool.
+rm -f /var/lib/systemd/random-seed
+rm -rf /var/lib/dhcp/* /run/rome-host
+# A failed clean leaves the build's instance state baked in, and the seed on
+# first boot is then ignored. That fails the build, not the boot.
+cloud-init clean --logs

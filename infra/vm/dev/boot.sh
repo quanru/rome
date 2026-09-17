@@ -2,7 +2,11 @@
 # Boot a built host image under qemu/KVM with a NoCloud seed that injects your
 # SSH key and a dev .env, then starts Rome. SSH lands on localhost:2222.
 #
-#   infra/vm/dev/boot.sh out/rome-host-amd64.qcow2 [--fresh]
+#   infra/vm/dev/boot.sh out/rome-host-amd64.qcow2 [--fresh] [--wechat]
+#
+# --wechat enables the host helper and personal WeChat at first boot, the
+# per-host act that a tenant gets from apply.sh --wechat. The image must have
+# been built with --hostd.
 #
 # The image is booted through a throwaway overlay, so the built artifact is
 # never modified. --fresh discards the previous overlay.
@@ -12,10 +16,15 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 image="${1:?image path}"
 shift || true
 fresh=false
-if [[ "${1:-}" == "--fresh" ]]; then
-  fresh=true
+wechat=false
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --fresh) fresh=true ;;
+    --wechat) wechat=true ;;
+    *) break ;;
+  esac
   shift
-fi
+done
 ssh_port="${ROME_VM_SSH_PORT:-2222}"
 web_port="${ROME_VM_WEB_PORT:-18080}"
 # qemu-system-x86_64 with KVM and OVMF: this script boots amd64 images on an
@@ -68,6 +77,7 @@ runcmd:
   - systemctl restart docker
   - systemctl start rome-load-image.service
   - cd /opt/rome && docker compose up -d
+$($wechat && printf '  - touch /etc/rome-host/wechat && bash /etc/rome-host/provision/run.sh apply\n')
 UD
 printf 'instance-id: rome-host-dev-%s\nlocal-hostname: rome-host-dev\n' "$(date +%s)" >"$work/meta-data"
 cloud-localds "$work/seed.iso" "$work/user-data" "$work/meta-data"
@@ -82,7 +92,7 @@ vars_src="$(find "$ovmf_dir" -name 'OVMF_VARS*.fd' | head -1)"
 # ROME_VM_CONSOLE_LOG=path detaches the console to a file for scripted runs.
 console=(-nographic -serial mon:stdio)
 [[ -n "${ROME_VM_CONSOLE_LOG:-}" ]] && console=(-display none -monitor none -serial "file:$ROME_VM_CONSOLE_LOG")
-exec qemu-system-x86_64 -enable-kvm -cpu host -smp 4 -m 6G "${console[@]}" \
+exec qemu-system-x86_64 -enable-kvm -cpu host -smp 4 -m 6G ${console[@]+"${console[@]}"} \
   -drive if=pflash,format=raw,readonly=on,file="$code" \
   -drive if=pflash,format=raw,file="$work/OVMF_VARS.fd" \
   -drive file="$overlay",if=virtio,format=qcow2 \

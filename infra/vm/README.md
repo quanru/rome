@@ -28,9 +28,14 @@ provenance.
 - `provision/10-docker.sh` installs Docker at the pin and holds it.
 - `provision/20-harden.sh` installs fail2ban with its jail, and the metadata
   block with a docker.service drop-in that reasserts it on every Docker start.
-- `provision/30-rome.sh` places the compose file and the first-boot load unit.
-- `provision/40-wechat.sh` installs `rome-hostd`, its unit, and the WeChat
-  compose override. Runs when `/etc/rome-host/wechat` exists.
+- `provision/30-rome.sh` seeds the compose file when `/opt/rome` has none, and
+  places the first-boot load unit. A tenant's Rome Cloud bundle is never
+  overwritten.
+- `provision/40-wechat.sh` installs `rome-hostd` disabled whenever a binary is
+  staged, and enables it with the WeChat compose override only on a host
+  carrying the `/etc/rome-host/wechat` marker. Installing and enabling stay
+  two acts, as [host execution](../../docs/architecture/host-execution.md)
+  requires, and the helper's `hostId` comes from the machine, not the image.
 - `provision/90-seal.sh` strips machine identity. Build only.
 - `provision/run.sh build|apply` runs the steps, then seals (build) or
   reloads systemd and restarts the affected units (apply). Writes
@@ -43,7 +48,7 @@ provenance.
 
 ```sh
 infra/vm/build.sh --arch amd64 --out out
-ROME_HOSTD=packages/host-helper/dist/rome-hostd infra/vm/build.sh --arch amd64 --out out --wechat
+infra/vm/build.sh --arch amd64 --out out --hostd packages/host-helper/dist/rome-hostd
 qemu-img convert -O raw out/rome-host-amd64.qcow2 out/rome-host-amd64.raw   # Vultr
 ```
 
@@ -57,20 +62,25 @@ host's architecture, so an arm64 image is built on an arm64 host.
 
 ```sh
 infra/vm/apply.sh root@tenant-host -- -p 22
-infra/vm/apply.sh --wechat --hostd packages/host-helper/dist/rome-hostd root@tenant-host
+infra/vm/apply.sh --hostd packages/host-helper/dist/rome-hostd root@tenant-host   # install, disabled
+infra/vm/apply.sh --wechat root@tenant-host                                       # enable on this host
 ```
 
 A host-layer change is an edit to `provision/` or `files/` plus a bump of
 `HOST_LAYER_VERSION`. New machines get it through a rebuilt image; existing
 machines through `apply.sh`, which Rome Cloud can call over the SSH channel
-its upgrade script already uses. `--wechat` persists on the host, so a later
-plain apply keeps WeChat enabled.
+its upgrade script already uses. The tree on the host is replaced whole, so
+a file removed from the tree is removed there too. `--wechat` persists on the
+host, so a later plain apply keeps WeChat enabled; `--no-wechat` turns it
+off. The helper restarts only when its binary, unit, or config changed, so a
+routine apply never interrupts a running root job.
 
 ## Run a VM locally
 
 ```sh
 infra/vm/dev/boot.sh out/rome-host-amd64.qcow2            # SSH :2222, Rome :18080
 infra/vm/dev/boot.sh out/rome-host-amd64.qcow2 --fresh    # discard the overlay
+infra/vm/dev/boot.sh out/rome-host-amd64.qcow2 --wechat   # enable the helper at first boot
 ```
 
 The image boots exactly as on Vultr: untouched, with a NoCloud seed doing
@@ -86,6 +96,15 @@ Changing Rome code needs no new host image. Push a worktree build to the host
 registry and pull it in the guest, the loop `scripts/vm/vm.sh deploy` runs.
 Changing the host layer means `apply.sh` against the running VM, which is
 also the rehearsal for applying it to tenants.
+
+## Known boundaries
+
+- The metadata block lives in `DOCKER-USER`, so it covers bridge-network
+  egress only, IPv4 and the common IPv6 metadata address. Same scope as the
+  cloud-init it replaces.
+- `rome-hostd` is built from this repository by the caller and is not
+  checksum-pinned; its provenance is the build that produced it.
+- `dev/boot.sh` boots amd64 images on an x86_64 host only.
 
 ## Debugging an image without booting
 

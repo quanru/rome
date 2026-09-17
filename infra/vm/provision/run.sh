@@ -23,10 +23,8 @@ step "20 harden"
 bash "$root/provision/20-harden.sh"
 step "30 rome"
 bash "$root/provision/30-rome.sh"
-if [[ -e "$root/wechat" ]]; then
-  step "40 wechat"
-  bash "$root/provision/40-wechat.sh"
-fi
+step "40 wechat"
+bash "$root/provision/40-wechat.sh"
 
 case "$mode" in
   build)
@@ -36,9 +34,12 @@ case "$mode" in
   apply)
     systemctl daemon-reload
     systemctl restart rome-block-metadata.service fail2ban.service
-    if [[ -e "$root/wechat" ]]; then
+    # Only when the helper's binary, unit, or config changed, so a routine
+    # apply never orphans a running root job.
+    if [[ -e /run/rome-host/changed ]] && systemctl is-active -q rome-hostd.service; then
       systemctl restart rome-hostd.service
     fi
+    rm -f /run/rome-host/changed
     if [[ -f /opt/rome/.env ]]; then
       (cd /opt/rome && docker compose --project-name rome up -d)
     fi

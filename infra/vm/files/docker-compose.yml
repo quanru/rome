@@ -1,5 +1,10 @@
-# Compose project the host boots. Production uses Rome Cloud's deployment
-# bundle; this file is the subset needed to prove the image boots Rome.
+# Compose project for a host that boots without a Rome Cloud deployment
+# bundle: dev VMs and self-hosted boxes. 30-rome.sh writes it only when
+# /opt/rome has no compose file yet, so a tenant's bundle is never replaced.
+#
+# Rome listens on every interface so the VM's port forward reaches it. Nothing
+# here restricts inbound traffic; an internet-facing host needs a firewall or
+# the Rome Cloud bundle.
 name: rome
 services:
   rome:
@@ -22,7 +27,14 @@ services:
       - /dev/fuse:/dev/fuse
     security_opt:
       - apparmor:unconfined
+    # Chromium-based clients fault at startup on Docker's 64 MB default.
+    shm_size: 1gb
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9368/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 volumes:
   app:
   rome-memory:

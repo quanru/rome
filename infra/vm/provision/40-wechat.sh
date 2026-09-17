@@ -1,18 +1,60 @@
 #!/bin/bash
-# Host helper + personal WeChat (docs/wechat-personal.md). Runs when the
-# /etc/rome-host/wechat marker exists. A new rome-hostd binary is staged at
-# /etc/rome-host/rome-hostd by the runner; a running helper holds its binary
-# open, so it is installed beside and renamed over the old one.
+# Host helper for personal WeChat (docs/wechat-personal.md), in two acts that
+# stay separate (docs/architecture/host-execution.md):
+#
+#   install  whenever a rome-hostd binary is staged at /etc/rome-host/rome-hostd
+#            or already installed: binary, unit, and a config with
+#            "enabled": false. A build does only this.
+#   enable   only when the /etc/rome-host/wechat marker exists, which apply.sh
+#            --wechat or a first-boot seed sets per host: config flips to
+#            enabled with a hostId derived from this machine, and the compose
+#            override gives the container the socket and the WeChat flags.
+#
+# Writes /run/rome-host/changed when the running helper needs a restart, so
+# run.sh restarts it only then and never orphans an in-flight job otherwise.
 set -euo pipefail
-files=/etc/rome-host/files
-if [[ -f /etc/rome-host/rome-hostd ]]; then
-  install -m 0755 /etc/rome-host/rome-hostd /usr/local/bin/.rome-hostd.new
-  mv /usr/local/bin/.rome-hostd.new /usr/local/bin/rome-hostd
-  rm -f /etc/rome-host/rome-hostd
+root=/etc/rome-host
+files=$root/files
+changed=false
+
+if [[ -f $root/rome-hostd ]]; then
+  if ! cmp -s "$root/rome-hostd" /usr/local/bin/rome-hostd; then
+    # A running helper holds its binary open: install beside, then rename over.
+    install -m 0755 "$root/rome-hostd" /usr/local/bin/.rome-hostd.new
+    mv /usr/local/bin/.rome-hostd.new /usr/local/bin/rome-hostd
+    changed=true
+  fi
+  rm -f "$root/rome-hostd"
 fi
-test -x /usr/local/bin/rome-hostd
-install -m 0644 "$files/rome-host-config.json" /etc/rome-host/config.json
-install -m 0644 "$files/rome-hostd.service" /etc/systemd/system/rome-hostd.service
-install -m 0644 "$files/docker-compose.override.wechat.yml" /opt/rome/docker-compose.override.yml
+[[ -x /usr/local/bin/rome-hostd ]] || exit 0
+
+if ! cmp -s "$files/rome-hostd.service" /etc/systemd/system/rome-hostd.service; then
+  install -m 0644 "$files/rome-hostd.service" /etc/systemd/system/rome-hostd.service
+  changed=true
+fi
 mkdir -p /var/lib/rome-host && chmod 700 /var/lib/rome-host
-systemctl enable rome-hostd.service >/dev/null 2>&1
+
+# Identity comes from the machine, never from the image. A sealed image has an
+# empty machine-id, so the build leaves the config disabled and unnamed.
+enabled=false
+host_id=""
+if [[ -e $root/wechat && -s /etc/machine-id ]]; then
+  enabled=true
+  host_id="$(cut -c1-12 /etc/machine-id)"
+fi
+config="$(mktemp)"
+printf '{"hostId":"%s","enabled":%s,"socketPath":"/run/rome-host/control.sock","stateDir":"/var/lib/rome-host","socketGid":0,"maxTimeoutSeconds":600,"maxOutputBytes":131072}\n' \
+  "$host_id" "$enabled" >"$config"
+if ! cmp -s "$config" "$root/config.json"; then
+  install -m 0644 "$config" "$root/config.json"
+  changed=true
+fi
+rm -f "$config"
+
+if $enabled; then
+  install -m 0644 "$files/docker-compose.override.wechat.yml" /opt/rome/docker-compose.override.yml
+  systemctl enable rome-hostd.service >/dev/null 2>&1
+fi
+if $changed; then
+  mkdir -p /run/rome-host && : >/run/rome-host/changed
+fi
