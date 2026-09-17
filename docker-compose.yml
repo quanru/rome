@@ -35,10 +35,11 @@ services:
       - ROME_NOVNC_PORT=6080
       - ROME_DOCKER_APP_CODE_MODE=${ROME_DOCKER_APP_CODE_MODE:-source}
       - ROME_DOCKER_USER_MODE=${ROME_DOCKER_USER_MODE:-multi}
-      # Personal WeChat (docs/wechat-personal.md). Off unless the operator opts
-      # in, because it runs the WeChat desktop client in this container and
-      # recovers its store key through a host-root script. Turning it on means
-      # host execution on as well, plus ROME_DOCKER_USER_MODE=root.
+      # Personal WeChat (docs/wechat-personal.md). Offered when the operator opts
+      # in here or the `wechat_user` feature gate passes for this instance. It
+      # runs the WeChat desktop client in this container and recovers its store
+      # key through a host-root script, so connecting also needs host execution
+      # on, plus ROME_DOCKER_USER_MODE=root.
       - WECHAT_USER_ENABLED=${WECHAT_USER_ENABLED:-false}
       - ROME_HOST_EXECUTION_ENABLED=${ROME_HOST_EXECUTION_ENABLED:-false}
       - ROME_HOST_EXECUTION_SOCKET=${ROME_HOST_EXECUTION_SOCKET:-/run/rome-host/control.sock}

@@ -196,6 +196,31 @@ describe("GET /connections", () => {
     });
   });
 
+  it("lists a placeholder only for a service the live offer check allows", async () => {
+    const registry = new ConnectionRegistry({ ledger: makeLedger() });
+    registry.register(makePasteTalkWithProfile().descriptor);
+    registry.register(makeTwoGrant().descriptor);
+    let discordOffered = false;
+    const app = new Hono().route(
+      "/",
+      connectionsRoutes({
+        connectionRegistry: registry,
+        personMappingRepo: fakePersonMappingRepo(),
+        isServiceOffered: async (service: string) => service !== "fake-discord" || discordOffered,
+      } as unknown as ApiDeps),
+    );
+    const services = async () =>
+      (
+        (await (await app.request("/connections")).json()).connections as Array<{
+          service: string;
+        }>
+      ).map((c) => c.service);
+
+    expect(await services()).toEqual(["fake-telegram"]);
+    discordOffered = true;
+    expect(await services()).toEqual(["fake-discord", "fake-telegram"]);
+  });
+
   it("offers OAuth placeholders only for host-enabled providers", async () => {
     const prev = process.env.SHOW_GOOGLE_OAUTH;
     delete process.env.SHOW_GOOGLE_OAUTH;

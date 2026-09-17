@@ -174,6 +174,11 @@ export interface ApiDeps {
    * (`GET /api/bootstrap` behind `/login`) and the cloud-login start/callback —
    * so flipping the gate takes effect without restarting the instance. */
   isCloudAuthEnabled: () => Promise<boolean>;
+  /** Live offer decision for a service the guardian has not connected yet,
+   * re-evaluated on each connections listing and setup start. False hides the
+   * placeholder and refuses a fresh setup; an existing connection is unaffected.
+   * Absent offers every registered service. */
+  isServiceOffered?: (service: string) => Promise<boolean>;
   /** Use-side registry. Present but with zero registered descriptors in
    *  this phase — later phases register real integrations and route through it. */
   connectionRegistry?: ConnectionRegistry;

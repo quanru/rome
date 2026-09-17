@@ -75,8 +75,6 @@ export interface BuiltinConnectionDeps {
    *  the begin-redirect (mints the PKCE attempt) and the return-leg redeem both
    *  read/write the `oauth_pending_attempts` table. */
   db: DrizzleDb;
-  /** Offer the personal WeChat connection (config `wechatUserEnabled`). */
-  wechatUserEnabled?: boolean;
   hostExecutionEnabled?: boolean;
   /** Runs actions, so the WeChat key recovery can drive a host-root script.
    *  Only the WeChat personal connection needs it. */
@@ -108,20 +106,19 @@ export function registerBuiltinConnections(
   );
   registry.register(makeTelegramUserDescriptor());
   registry.register(createWechatDescriptor());
-  // The personal WeChat connection is opt-in (see config `wechatUserEnabled`).
-  // It runs the client in this container and recovers its store key through a
-  // host-root script, so its key recovery is wired to the action engine; when
-  // host execution is disabled, connecting fails before installation with a
-  // clear message rather than being hidden here.
-  if (deps.wechatUserEnabled) {
-    registry.register(
-      createWechatUserDescriptor(
-        deps.actionEngine && deps.hostExecutionEnabled
-          ? { rootScriptRunner: createActionRootScriptRunner(deps.actionEngine) }
-          : {},
-      ),
-    );
-  }
+  // The personal WeChat connection registers unconditionally so an existing
+  // account keeps loading; whether a new one is offered is the live
+  // `wechat_user` gate (see lib/wechat-user-gate.ts). It runs the client in this
+  // container and recovers its store key through a host-root script, so its key
+  // recovery is wired to the action engine; when host execution is disabled,
+  // connecting fails before installation with a clear message.
+  registry.register(
+    createWechatUserDescriptor(
+      deps.actionEngine && deps.hostExecutionEnabled
+        ? { rootScriptRunner: createActionRootScriptRunner(deps.actionEngine) }
+        : {},
+    ),
+  );
   registry.register(
     createFeishuDescriptor({
       conversationSettings: deps.conversationSettings,

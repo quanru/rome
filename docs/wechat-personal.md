@@ -6,16 +6,25 @@ The personal WeChat connection reads the guardian's account through the Linux de
 
 - An x86-64 Linux VM running the Rome container.
 - The [host helper](../packages/host-helper/README.md) installed and enabled on that VM, with its socket directory mounted into the container.
-- `WECHAT_USER_ENABLED=true` and `ROME_HOST_EXECUTION_ENABLED=true` in the container environment.
+- The connection offered to the instance, through the `wechat_user` feature gate or `WECHAT_USER_ENABLED=true`.
+- `ROME_HOST_EXECUTION_ENABLED=true` in the container environment.
 - `ROME_HOST_EXECUTION_SOCKET` set to the mounted helper socket.
 - `ROME_DOCKER_USER_MODE=root` so the client and the reader can access the same files under `/home/rome`.
 - At least 1 GB of container shared memory (`shm_size: 1gb` in Compose).
 
-Set `WECHAT_USER_ENABLED` to `true` to offer this connection. `false` keeps it disabled. If host execution is disabled, setup stops before downloading the client.
+## Offer the connection
+
+The `wechat_user` Statsig gate decides whether an instance offers the connection. Rome checks it on each connections listing and setup start, keyed on the instance slug, so changing the gate's rules takes effect without a restart. An instance without a slug or without `STATSIG_SERVER_SECRET_KEY` reads the gate as off.
+
+`WECHAT_USER_ENABLED=true` offers the connection regardless of the gate, for a deployment with no Statsig project. `FEATURE_GATE_WECHAT_USER=on` or `off` pins the gate from the environment.
+
+The gate controls only new connections. When it turns off, the Connect button disappears. An existing connection keeps reading history and can still sign in again.
+
+Target the gate only at instances that meet the rest of the requirements above. On an instance without them, the Connect button appears but setup fails. If host execution is disabled, setup stops before downloading the client.
 
 ## Enable on a Compose deployment
 
-The production [`docker-compose.yml`](../docker-compose.yml) reads every knob below from the `.env` file beside it, and defaults all of them to off. Add these four lines to that `.env` on a VM that runs the host helper:
+The production [`docker-compose.yml`](../docker-compose.yml) reads every knob below from the `.env` file beside it, and defaults all of them to off. Add these lines to that `.env` on a VM that runs the host helper. Leave out `WECHAT_USER_ENABLED` when the `wechat_user` gate offers the connection:
 
 ```sh
 WECHAT_USER_ENABLED=true

@@ -3,6 +3,7 @@ import { fork } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { loadConfig } from "./config.js";
 import { resolveCloudAuthEnabled } from "./lib/cloud-auth-gate.js";
+import { resolveWechatUserOffered } from "./lib/wechat-user-gate.js";
 import { createLogger } from "./logger.js";
 import {
   getInstanceToken,
@@ -172,7 +173,10 @@ import {
 } from "./apps/artifact-id.js";
 import { ConnectionRegistry, DrizzleGrantLedger, createTalkRouter } from "./connections/index.js";
 import { SetupManager } from "./connections/setup/manager.js";
-import { registerBuiltinConnections } from "./connections/integrations/index.js";
+import {
+  registerBuiltinConnections,
+  WECHAT_USER_SERVICE,
+} from "./connections/integrations/index.js";
 import {
   ConversationSettingsRepository,
   ConversationSettingsService,
@@ -247,16 +251,15 @@ async function main() {
   const linkedInStoreRepo = new LinkedInStoreRepository(db);
   const linkedInAccounts = new LinkedInAccounts(linkedInStoreRepo);
   const sentinelLogRepo = new SentinelLogRepository(db);
-  // The personal WeChat account contributes a people-timeline source only when
-  // the connection is enabled; its store is the client's own database, read live.
-  const wechatUserReader = config.wechatUserEnabled
-    ? new WechatUserReader(new WechatUserRuntime())
-    : undefined;
+  // The personal WeChat account contributes a people-timeline source; its store
+  // is the client's own database, read live. Before the reader is installed it
+  // reads as an empty address book, so an instance never offered WeChat is
+  // unaffected.
   const channels = channelList({
     db,
     whatsAppAccounts,
     linkedInAccounts,
-    ...(wechatUserReader ? { wechatUserReader } : {}),
+    wechatUserReader: new WechatUserReader(new WechatUserRuntime()),
   });
   const accountNames = createAccountNames({ channels, sentinelLogRepo });
   const approvalsRepo = new ApprovalsRepository(db);
@@ -1025,9 +1028,8 @@ async function main() {
     // The Rome Cloud-OAuth conferral setups (github/slack/google) read/write the
     // oauth_pending_attempts table for the begin-redirect + return-leg redeem.
     db,
-    // The personal WeChat connection is opt-in; its key recovery drives a
-    // host-root script through the action engine.
-    wechatUserEnabled: config.wechatUserEnabled,
+    // The personal WeChat key recovery drives a host-root script through the
+    // action engine.
     hostExecutionEnabled: config.hostExecutionEnabled,
     actionEngine,
   });
@@ -1264,6 +1266,8 @@ async function main() {
   const { installEnvGateOverrides } = await import("@rome-os/libs/feature-flags/env-overrides");
   const gateOverrides = installEnvGateOverrides(process.env);
   const isCloudAuthEnabled = () => resolveCloudAuthEnabled(config, db);
+  const isServiceOffered = async (service: string) =>
+    service === WECHAT_USER_SERVICE ? resolveWechatUserOffered(config) : true;
   log.info("Cloud-auth gating configured", {
     slug: config.instanceSlug ?? null,
     gateConfigured: shutdownFeatureFlags !== undefined,
@@ -1323,6 +1327,7 @@ async function main() {
       favorService,
       systemUpgradeService,
       isCloudAuthEnabled,
+      isServiceOffered,
       connectionRegistry,
       setupManager,
     };

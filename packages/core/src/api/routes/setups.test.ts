@@ -83,7 +83,7 @@ function fakePersonRepo(): PersonMappingRepository {
   } as unknown as PersonMappingRepository;
 }
 
-function harness() {
+function harness(options: { isServiceOffered?: (service: string) => Promise<boolean> } = {}) {
   const { db, close } = createTestDb();
   openDbs.push(close);
   const registry = new ConnectionRegistry({ ledger: new DrizzleGrantLedger(db) });
@@ -97,6 +97,7 @@ function harness() {
     connectionRegistry: registry,
     setupManager: manager,
     personMappingRepo,
+    ...options,
   } as unknown as ApiDeps;
   const app = new Hono().route("/", setupsRoutes(deps)).route("/", connectionsRoutes(deps));
   return { app, registry };
@@ -122,6 +123,20 @@ describe("POST /connections/:id/grants/:name/setup", () => {
     expect(json.reattached).toBe(false);
     expect(json.state.status).toBe("awaiting-input");
     expect(json.cid).toBeTruthy();
+  });
+
+  it("refuses a never-connected service that is not offered", async () => {
+    const { app } = harness({ isServiceOffered: async () => false });
+    const { res } = await start(app);
+    expect(res.status).toBe(404);
+  });
+
+  it("re-authorizes an existing connection whose service is no longer offered", async () => {
+    const { app, registry } = harness({ isServiceOffered: async () => false });
+    const conn = await registry.connect("fake-telegram", "Telegram");
+    const { res, json } = await start(app, conn.id);
+    expect(res.status).toBe(200);
+    expect(json.state.status).toBe("awaiting-input");
   });
 
   it("re-attaches a second start to the same live setup", async () => {

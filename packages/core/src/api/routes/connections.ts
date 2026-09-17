@@ -221,23 +221,29 @@ function placeholderView(
 
 /** The offerable catalog: every registered service with no connection row.
  *  OAuth-brokered services only appear when the host actually offers them
- *  (env-enabled) — their descriptors register unconditionally so an existing
- *  account's state imports regardless, but a placeholder is a connect
- *  invitation. */
-function placeholderViews(
+ *  (env-enabled), and any service only when `isServiceOffered` allows it —
+ *  descriptors register unconditionally so an existing account's state imports
+ *  regardless, but a placeholder is a connect invitation. */
+async function placeholderViews(
   registry: ConnectionRegistry,
   manager: SetupManager | null,
-): ConnectionView[] {
-  return registry
+  isServiceOffered: (service: string) => Promise<boolean>,
+): Promise<ConnectionView[]> {
+  const candidates = registry
     .registeredServices()
     .filter((service) => registry.find(service).length === 0)
-    .filter((service) => !isOAuthProvider(service) || isEnabledOAuthProvider(service))
+    .filter((service) => !isOAuthProvider(service) || isEnabledOAuthProvider(service));
+  const offered = await Promise.all(candidates.map(isServiceOffered));
+  return candidates
+    .filter((_, index) => offered[index])
     .map((service) => {
       const descriptor = registry.getDescriptor(service);
       return descriptor ? placeholderView(service, descriptor, manager) : null;
     })
     .filter((view): view is ConnectionView => view !== null);
 }
+
+const offerEveryService = async (): Promise<boolean> => true;
 
 export function connectionsRoutes(deps: ApiDeps): Hono {
   const app = new Hono();
@@ -254,7 +260,12 @@ export function connectionsRoutes(deps: ApiDeps): Hono {
     // Stable ordering for the UI: by service, then label, then id — the
     // registry's own iteration order is insertion-dependent. Placeholders sort
     // like a connection whose label is its service name and whose id is empty.
-    const connections = [...connected, ...placeholderViews(registry, manager)].sort(
+    const placeholders = await placeholderViews(
+      registry,
+      manager,
+      deps.isServiceOffered ?? offerEveryService,
+    );
+    const connections = [...connected, ...placeholders].sort(
       (a, b) =>
         a.service.localeCompare(b.service) ||
         a.label.localeCompare(b.label) ||

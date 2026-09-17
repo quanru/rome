@@ -36,9 +36,9 @@ export function channelList(deps: {
   db: DrizzleDb;
   whatsAppAccounts: Accounts;
   linkedInAccounts: Accounts;
-  /** The personal WeChat reader, present only when that connection is enabled.
-   *  It contributes a live store and an address book of the guardian's own
-   *  contacts, read straight from the client's database rather than a sync. */
+  /** The personal WeChat reader. It contributes a live store and an address
+   *  book of the guardian's own contacts, read straight from the client's
+   *  database rather than a sync. */
   wechatUserReader?: WechatUserReader;
 }): Channels {
   return [

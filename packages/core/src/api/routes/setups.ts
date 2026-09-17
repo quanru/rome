@@ -24,12 +24,18 @@ import { requireSetupManager, requireConnectionRegistry } from "../helpers.js";
 /** Resolve what a setup start addresses. `:id` is either a live connection id
  *  (carry the id AND its service so the terminal write imports into THAT
  *  connection) or, for a never-connected service, the bare service name — valid
- *  only when a descriptor is registered for it (placeholder; the write mints the
- *  row). Null when neither. */
-function resolveTarget(registry: ConnectionRegistry, id: string): SetupTarget | null {
+ *  only when a descriptor is registered for it and the service is offered
+ *  (placeholder; the write mints the row). Null when neither. */
+async function resolveTarget(
+  registry: ConnectionRegistry,
+  id: string,
+  isServiceOffered: ApiDeps["isServiceOffered"],
+): Promise<SetupTarget | null> {
   const conn = registry.all().find((c) => c.id === id);
   if (conn) return { service: conn.service, connectionId: conn.id };
-  return registry.isRegistered(id) ? { service: id } : null;
+  if (!registry.isRegistered(id)) return null;
+  if (isServiceOffered && !(await isServiceOffered(id))) return null;
+  return { service: id };
 }
 
 function crossOriginBlocked(c: Context): Response | null {
@@ -48,7 +54,7 @@ export function setupsRoutes(deps: ApiDeps): Hono {
     if (blocked) return blocked;
     const registry = requireConnectionRegistry(deps);
     const manager = requireSetupManager(deps);
-    const target = resolveTarget(registry, c.req.param("id"));
+    const target = await resolveTarget(registry, c.req.param("id"), deps.isServiceOffered);
     if (!target) return c.json({ error: "Unknown connection." }, 404);
     const grant = c.req.param("name");
     const body = await c.req.json<{ force?: unknown }>().catch(() => ({}) as { force?: unknown });

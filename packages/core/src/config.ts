@@ -39,11 +39,11 @@ const configSchema = z.object({
   linkedinPollMinMinutes: z.coerce.number().int().positive().default(15),
   linkedinPollMaxMinutes: z.coerce.number().int().positive().default(30),
 
-  // Offer the personal WeChat connection. Off by default: it runs the WeChat
-  // desktop client in the container and recovers its store key via a host-root
-  // script, so it needs host execution enabled and carries WeChat ToS/account
-  // risk. Registered only when this is on, so an instance that does not want it
-  // shows no Connect button that would fail.
+  // Force the personal WeChat connection offer on. Off by default: it runs the
+  // WeChat desktop client in the container and recovers its store key via a
+  // host-root script, so it needs host execution enabled and carries WeChat
+  // ToS/account risk. When off, the live `wechat_user` gate decides per instance
+  // (lib/wechat-user-gate.ts).
   wechatUserEnabled: z
     .enum(["true", "false"])
     .default("false")
