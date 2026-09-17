@@ -16,13 +16,28 @@ ssh_args=()
 target=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --wechat) wechat=true; shift ;;
-    --hostd) hostd="$2"; shift 2 ;;
-    -*) ssh_args+=("$1" "$2"); shift 2 ;;
-    *) target="$1"; shift ;;
+    --wechat)
+      wechat=true
+      shift
+      ;;
+    --hostd)
+      hostd="$2"
+      shift 2
+      ;;
+    -*)
+      ssh_args+=("$1" "$2")
+      shift 2
+      ;;
+    *)
+      target="$1"
+      shift
+      ;;
   esac
 done
-[[ -n "$target" ]] || { echo "usage: apply.sh [--wechat] [--hostd PATH] [ssh options] user@host" >&2; exit 2; }
+[[ -n "$target" ]] || {
+  echo "usage: apply.sh [--wechat] [--hostd PATH] [ssh options] user@host" >&2
+  exit 2
+}
 
 run() { ssh "${ssh_args[@]}" "$target" "$@"; }
 
@@ -33,6 +48,6 @@ if $wechat; then
   run 'sudo touch /etc/rome-host/wechat'
 fi
 if [[ -n "$hostd" ]]; then
-  run 'sudo tee /etc/rome-host/rome-hostd >/dev/null' < "$hostd"
+  run 'sudo tee /etc/rome-host/rome-hostd >/dev/null' <"$hostd"
 fi
 run 'sudo bash /etc/rome-host/provision/run.sh apply'

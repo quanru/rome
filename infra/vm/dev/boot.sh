@@ -9,9 +9,13 @@
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/../pins.env"
-image="${1:?image path}"; shift || true
+image="${1:?image path}"
+shift || true
 fresh=false
-if [[ "${1:-}" == "--fresh" ]]; then fresh=true; shift; fi
+if [[ "${1:-}" == "--fresh" ]]; then
+  fresh=true
+  shift
+fi
 ssh_port="${ROME_VM_SSH_PORT:-2222}"
 web_port="${ROME_VM_WEB_PORT:-18080}"
 work="$(dirname "$image")/dev"
@@ -24,7 +28,7 @@ $fresh && rm -f "$overlay" "$work/OVMF_VARS.fd"
 [[ -f "$overlay" ]] || qemu-img create -q -f qcow2 -b "$(realpath "$image")" -F qcow2 "$overlay" "${ROME_VM_DISK:-40G}"
 
 pubkey="$(cat "${ROME_VM_SSH_PUBKEY:-$HOME/.ssh/id_ed25519.pub}")"
-cat > "$work/user-data" <<UD
+cat >"$work/user-data" <<UD
 #cloud-config
 hostname: rome-host-dev
 users:
@@ -51,7 +55,7 @@ runcmd:
   - systemctl start rome-load-image.service
   - cd /opt/rome && docker compose up -d
 UD
-printf 'instance-id: rome-host-dev-%s\nlocal-hostname: rome-host-dev\n' "$(date +%s)" > "$work/meta-data"
+printf 'instance-id: rome-host-dev-%s\nlocal-hostname: rome-host-dev\n' "$(date +%s)" >"$work/meta-data"
 cloud-localds "$work/seed.iso" "$work/user-data" "$work/meta-data"
 
 ovmf_dir="${OVMF_DIR:-$(dirname "$(dirname "$(command -v qemu-system-x86_64)")")/share/OVMF}"

@@ -17,16 +17,21 @@ cd "$root"
 
 step() { echo "[rome-host] $*"; }
 
-step "10 docker"; bash "$root/provision/10-docker.sh"
-step "20 harden"; bash "$root/provision/20-harden.sh"
-step "30 rome";   bash "$root/provision/30-rome.sh"
+step "10 docker"
+bash "$root/provision/10-docker.sh"
+step "20 harden"
+bash "$root/provision/20-harden.sh"
+step "30 rome"
+bash "$root/provision/30-rome.sh"
 if [[ -e "$root/wechat" ]]; then
-  step "40 wechat"; bash "$root/provision/40-wechat.sh"
+  step "40 wechat"
+  bash "$root/provision/40-wechat.sh"
 fi
 
 case "$mode" in
   build)
-    step "90 seal"; bash "$root/provision/90-seal.sh"
+    step "90 seal"
+    bash "$root/provision/90-seal.sh"
     ;;
   apply)
     systemctl daemon-reload
@@ -38,9 +43,12 @@ case "$mode" in
       (cd /opt/rome && docker compose --project-name rome up -d)
     fi
     ;;
-  *) echo "run.sh: unknown mode $mode" >&2; exit 2 ;;
+  *)
+    echo "run.sh: unknown mode $mode" >&2
+    exit 2
+    ;;
 esac
 
 printf 'HOST_LAYER_VERSION=%s\nAPPLIED_AT=%s\nMODE=%s\n' \
-  "$HOST_LAYER_VERSION" "$(date -u +%FT%TZ)" "$mode" > "$root/applied"
+  "$HOST_LAYER_VERSION" "$(date -u +%FT%TZ)" "$mode" >"$root/applied"
 step "done: host layer $HOST_LAYER_VERSION ($mode)"

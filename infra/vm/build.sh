@@ -25,11 +25,26 @@ wechat=false
 disk_size="${ROME_VM_DISK_SIZE:-20G}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --arch) arch="$2"; shift 2 ;;
-    --out) out="$2"; shift 2 ;;
-    --base-only) base_only=true; shift ;;
-    --wechat) wechat=true; shift ;;
-    *) echo "unknown arg: $1" >&2; exit 2 ;;
+    --arch)
+      arch="$2"
+      shift 2
+      ;;
+    --out)
+      out="$2"
+      shift 2
+      ;;
+    --base-only)
+      base_only=true
+      shift
+      ;;
+    --wechat)
+      wechat=true
+      shift
+      ;;
+    *)
+      echo "unknown arg: $1" >&2
+      exit 2
+      ;;
   esac
 done
 mkdir -p "$out"
@@ -54,7 +69,10 @@ if [[ ! -f "$grown" ]]; then
   virt-resize --expand /dev/sda1 "$base" "$grown.part"
   mv "$grown.part" "$grown"
 fi
-$base_only && { echo "$grown"; exit 0; }
+$base_only && {
+  echo "$grown"
+  exit 0
+}
 
 # 3. Rome image by digest, one platform, no daemon. The digest pin is the
 #    integrity check, so the signature policy accepts anything. docker-archive is what
@@ -81,12 +99,12 @@ cp --reflink=auto "$rome_tar" "$stage/rome-host/rome.tar"
 if $wechat; then
   hostd="${ROME_HOSTD:?--wechat needs ROME_HOSTD=path/to/rome-hostd}"
   cp "$hostd" "$stage/rome-host/rome-hostd"
-  : > "$stage/rome-host/wechat"
+  : >"$stage/rome-host/wechat"
 fi
 export LIBGUESTFS_MEMSIZE="${LIBGUESTFS_MEMSIZE:-2048}"
 virt-customize -a "$image.part" --smp 4 \
   --copy-in "$stage/rome-host:/etc" \
   --run-command "bash /etc/rome-host/provision/run.sh build"
 mv "$image.part" "$image"
-sha256sum "$image" > "$image.sha256"
+sha256sum "$image" >"$image.sha256"
 echo "$image"

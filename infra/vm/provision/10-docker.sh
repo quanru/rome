@@ -13,7 +13,7 @@ if ! dpkg -s docker-ce 2>/dev/null | grep -q "^Version: ${DOCKER_CE_VERSION}$"; 
   curl -fsSL "https://download.docker.com/linux/ubuntu/gpg" -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
-    > /etc/apt/sources.list.d/docker.list
+    >/etc/apt/sources.list.d/docker.list
   apt-get update
   apt-mark unhold docker-ce docker-ce-cli docker-compose-plugin 2>/dev/null || true
   apt-get install -y --no-install-recommends --allow-downgrades \
