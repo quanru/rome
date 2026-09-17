@@ -17,12 +17,12 @@ A value is one or two layers. A layer holds an x-offset, a y-offset, a blur, a s
 | `--rome-shadow-10` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | `0 12px 28px -4px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.5)` |
 | `--rome-shadow-25` | `0 25px 50px -12px rgb(0 0 0 / 0.25)` | `0 25px 60px -12px rgb(0 0 0 / 0.7)` |
 
-Ash's containers carry no hairline, so a tight cast at their edge would draw the line back. Its light half widens the blur to 3× the offset at the two steps a container reads, and holds every other property to the constraints below.
+Ash's containers carry no hairline, so a tight cast at their edge would draw the line back, and a heavy one would float every card. Its light half widens the blur to 3× the offset at the two steps a container reads and pulls the spread in to keep the cast inside the silhouette, so it reads as contact with the canvas rather than height. Every other property holds to the constraints below.
 
 | Step | Ash light |
 |---|---|
-| `--rome-shadow-4` | `0 4px 12px -4px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` |
-| `--rome-shadow-10` | `0 10px 30px -10px rgb(0 0 0 / 0.14), 0 4px 8px -4px rgb(0 0 0 / 0.1)` |
+| `--rome-shadow-4` | `0 4px 12px -6px rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)` |
+| `--rome-shadow-10` | `0 10px 30px -14px rgb(0 0 0 / 0.12), 0 2px 6px -4px rgb(0 0 0 / 0.1)` |
 
 Two semantic tokens alias a step: `--rome-shadow-card-hover` reads step 4 in every theme, and `--rome-shadow-surface`, the cast a raised container carries at rest, reads step 4 in Ash and `none` in Ember and Slate. [edges.md](../semantic-token/edges.md) holds the second one's contract.
 

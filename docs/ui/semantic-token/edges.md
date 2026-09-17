@@ -28,7 +28,7 @@ Ash's dark half keeps Ember's depths and supplies its own edge and divider value
 
 | Token | Ember light | Ember dark | Ash light | Ash dark | Slate light | Slate dark |
 |---|---|---|---|---|---|---|
-| `--edge` | `--neutral-150` | `--neutral-700` | `--neutral-900` at 4% | `--neutral-50` at 8% | `--neutral-200` | `--neutral-700` |
+| `--edge` | `--neutral-150` | `--neutral-700` | `--neutral-900` at 5% | `--neutral-50` at 8% | `--neutral-200` | `--neutral-700` |
 | `--rome-shadow-surface` | `none` | `none` | `--rome-shadow-4` | `--rome-shadow-4` | `none` | `none` |
 | `--border` | `--neutral-150` | `--neutral-700` | `--neutral-900` at 8% | `--neutral-50` at 10% | `--neutral-200` | `--neutral-700` |
 | `--border-strong` | `--neutral-300` | `--neutral-650` | `--neutral-900` at 16% | `--neutral-50` at 18% | `--neutral-300` | `--neutral-650` |

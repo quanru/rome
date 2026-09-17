@@ -73,15 +73,16 @@ const SHADOWS_DARK = {
   "rome-shadow-25": "0 25px 60px -12px rgb(0 0 0 / 0.7)",
 } satisfies ThemeTokens;
 
-/** Ash's light half widens the blur at steps 4 and 10. Its containers carry no
- *  hairline, so a tight cast at their edge would draw the line back; a wide,
- *  low-alpha cast reads as ambient light instead. Both values stay inside the
- *  scale's constraints: blur at 3× the offset, spread at or below zero, alpha
- *  from .1. The dark half keeps the shared values, where the ink is deep enough
- *  already. */
+/** Ash's light half widens the blur at steps 4 and 10 and pulls the spread in
+ *  hard. Its containers carry no hairline, so a tight cast at their edge would
+ *  draw the line back, and a heavy one would turn every card into a float; a
+ *  wide cast held inside the silhouette reads as a little contact with the
+ *  canvas and nothing more. Both values stay inside the scale's constraints:
+ *  blur at 3× the offset, spread at or below zero, alpha from .1. The dark
+ *  half keeps the shared values, where the ink is deep enough already. */
 const ASH_SHADOWS_LIGHT = {
-  "rome-shadow-4": "0 4px 12px -4px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-  "rome-shadow-10": "0 10px 30px -10px rgb(0 0 0 / 0.14), 0 4px 8px -4px rgb(0 0 0 / 0.1)",
+  "rome-shadow-4": "0 4px 12px -6px rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+  "rome-shadow-10": "0 10px 30px -14px rgb(0 0 0 / 0.12), 0 2px 6px -4px rgb(0 0 0 / 0.1)",
 } satisfies ThemeTokens;
 
 /** Deprecated status label tokens, kept as host declarations only.
@@ -481,7 +482,7 @@ const ash: ThemeDefinition = {
     // same on the canvas, on a card and on a tinted well, and it fades rather
     // than cuts. The container edge is the faintest of them: the cast in
     // `--rome-shadow-surface` is what separates a card from the canvas.
-    edge: "color-mix(in srgb, var(--neutral-900) 4%, transparent)",
+    edge: "color-mix(in srgb, var(--neutral-900) 5%, transparent)",
     border: "color-mix(in srgb, var(--neutral-900) 8%, transparent)",
     "border-strong": "color-mix(in srgb, var(--neutral-900) 16%, transparent)",
     "border-subtle": "color-mix(in srgb, var(--neutral-900) 5%, transparent)",
