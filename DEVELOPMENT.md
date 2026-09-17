@@ -94,19 +94,23 @@ Chrome's CDP listener stays available for login tabs and URL opening in either m
 ## shadcn lint
 
 Run `pnpm lint:shadcn` after changes to dashboard, shared UI, desktop-base-web, web-content, Rome apps, or example-app sources.
-The command uses [the advisory configuration](.oxlintrc.shadcn.json) and leaves Biome and the existing Tailwind policy checks unchanged.
+The command uses [the lint configuration](.oxlintrc.shadcn.json) and leaves Biome and the existing Tailwind policy checks unchanged.
 Use `pnpm --silent lint:shadcn:report` for JSON diagnostics with source paths, lines, and columns.
 Tests, stories, declarations, dependencies, and build output are excluded. Mobile and app-template sources are outside this scan.
 
-CI runs the independent `shadcn lint (advisory)` job on the workflow's push and pull request events.
-The job does not block other jobs or make the workflow fail, including when setup or scanning fails.
-Keep this advisory job out of required branch-protection checks.
-Warnings produce a GitHub annotation and a per-rule table in the job summary.
+CI runs `Scan shadcn usage` on the workflow's push and pull request events.
+A result check shows `shadcn lint · ⚠ N findings`, `No findings`, or a scan/coverage warning in its name.
+GitHub still shows a successful execution as passed. Read the result name for the finding status.
+Neither job blocks other jobs or makes the workflow fail, including when setup or scanning fails.
+Keep these jobs out of required branch-protection checks.
+Warnings produce a count annotation and up to nine source-line annotations with repair messages.
+The scan summary includes rule counts and up to 20 source-linked examples with suggested repairs.
+The examples omit undeclared-color and CSS-variable arbitrary-value messages for separate token compatibility review. Totals and logs retain all findings.
 The job logs contain grouped JSON diagnostics and stderr, subject to the repository's normal Actions log retention.
 CI does not upload diagnostic artifacts or local reports from `reports/`.
 
-Agents must inspect this job even when CI is green.
-Use `gh run view <run-id> --job <job-id> --log` for its summary and all findings.
+Agents must inspect the result check even when CI is green.
+Use `gh run view <run-id> --job <scan-job-id> --log` for the scan summary and all findings.
 Report actionable findings in changed files, accepted exceptions, and coverage limits in the handoff.
 A failed or unavailable scan is not a clean result. A warning-only run can exit with code 0.
 

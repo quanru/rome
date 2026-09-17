@@ -125,12 +125,14 @@ jobs:
       - run: pnpm typecheck:lint-agents
 
   shadcn-lint:
-    name: shadcn lint (advisory)
+    name: Scan shadcn usage
     runs-on: ubuntu-latest
     timeout-minutes: 10
     continue-on-error: true
     permissions:
       contents: read
+    outputs:
+      status: ${{ steps.report.outputs.status }}
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v5
@@ -144,11 +146,29 @@ jobs:
         continue-on-error: true
         run: |
           pnpm --silent lint:shadcn:report > "$RUNNER_TEMP/shadcn-lint.json" 2> "$RUNNER_TEMP/shadcn-lint.stderr.txt"
-      - name: Summarize advisory findings
+      - name: Summarize findings
+        id: report
         if: ${{ !cancelled() }}
         env:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         run: node scripts/report-shadcn-lint.mjs "$RUNNER_TEMP/shadcn-lint.json" "$RUNNER_TEMP/shadcn-lint.stderr.txt" "$SCAN_OUTCOME"
+
+  shadcn-lint-result:
+    name: "shadcn lint · ${{ needs.shadcn-lint.outputs.status || '⚠ Scan incomplete' }}"
+    needs: shadcn-lint
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    continue-on-error: true
+    permissions: {}
+    steps:
+      - name: Show findings status
+        env:
+          SCAN_STATUS: ${{ needs.shadcn-lint.outputs.status || '⚠ Scan incomplete' }}
+          SCAN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '%s\n' "$SCAN_STATUS"
+          printf '## %s\n\n[View findings and recommendations](%s) in the Scan shadcn usage summary.\n' "$SCAN_STATUS" "$SCAN_URL" >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────────────────
   # Job 1b: DB schema drift — committed migrations must match the schema files

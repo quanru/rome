@@ -7,7 +7,7 @@
   "settings": {
     "shadcn": {
       "componentImports": ["^@rome-os/ui(/|$)"],
-      "note": "See DESIGN.md and docs/design-system.md. This audit is advisory; review suggestions against Rome's token scales."
+      "note": "See DESIGN.md and docs/design-system.md. Review suggestions against Rome's token scales."
     }
   },
   "ignorePatterns": [
