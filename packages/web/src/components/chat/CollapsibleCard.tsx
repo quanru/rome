@@ -19,7 +19,7 @@ export function CollapsibleCard({ className, ...props }: ComponentProps<"div">) 
   return (
     <div
       className={cn(
-        "w-full divide-y divide-border overflow-clip rounded-12 border border-border-strong bg-surface",
+        "w-full divide-y divide-border overflow-clip rounded-12 border border-edge bg-surface shadow-surface",
         className,
       )}
       {...props}

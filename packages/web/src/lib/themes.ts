@@ -73,16 +73,26 @@ const SHADOWS_DARK = {
   "rome-shadow-25": "0 25px 60px -12px rgb(0 0 0 / 0.7)",
 } satisfies ThemeTokens;
 
-/** Ash's light half widens the blur at steps 4 and 10 and pulls the spread in
- *  hard. Its containers carry no hairline, so a tight cast at their edge would
- *  draw the line back, and a heavy one would turn every card into a float; a
- *  wide cast held inside the silhouette reads as a little contact with the
- *  canvas and nothing more. Both values stay inside the scale's constraints:
- *  blur at 3× the offset, spread at or below zero, alpha from .1. The dark
- *  half keeps the shared values, where the ink is deep enough already. */
+/** Ash's casts. Ash separates a container from the canvas by depth rather than
+ *  by a hairline, so its casts do the work a line does elsewhere: a thin
+ *  contact layer that seats the container, and a wide ambient layer that
+ *  lifts it. Both sit below the scale's alpha floor and past its blur ratio
+ *  on purpose — at the scale's values a soft lift is impossible, since a cast
+ *  dark enough to clear the floor reads as a rim, and one blurred enough to
+ *  stay soft is clipped by the ratio. The ink is Ash's own `--neutral-900`
+ *  rather than black, so the cast warms with the canvas instead of greying it.
+ *
+ *  `surface` is the resting container: a card, the pane, a framed list.
+ *  Step 4 is what floats above it (menus, hover), step 10 what floats above
+ *  that (chat pills). The dark half keeps one wide layer over a deep contact
+ *  layer; the lit `--edge` carries the rest there. */
 const ASH_SHADOWS_LIGHT = {
-  "rome-shadow-4": "0 4px 12px -6px rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
-  "rome-shadow-10": "0 10px 30px -14px rgb(0 0 0 / 0.12), 0 2px 6px -4px rgb(0 0 0 / 0.1)",
+  "rome-shadow-4": "0 2px 4px rgb(26 19 15 / 0.05), 0 16px 36px -10px rgb(26 19 15 / 0.16)",
+  "rome-shadow-10": "0 2px 6px rgb(26 19 15 / 0.06), 0 16px 40px -8px rgb(26 19 15 / 0.2)",
+  "rome-shadow-surface": "0 1px 2px rgb(26 19 15 / 0.05), 0 6px 16px -6px rgb(26 19 15 / 0.1)",
+} satisfies ThemeTokens;
+const ASH_SHADOWS_DARK = {
+  "rome-shadow-surface": "0 1px 2px rgb(0 0 0 / 0.3), 0 6px 18px -6px rgb(0 0 0 / 0.55)",
 } satisfies ThemeTokens;
 
 /** Deprecated status label tokens, kept as host declarations only.
@@ -490,7 +500,6 @@ const ash: ThemeDefinition = {
     ...SHADOWS_LIGHT,
     ...ASH_SHADOWS_LIGHT,
     "rome-shadow-card-hover": ASH_SHADOWS_LIGHT["rome-shadow-4"],
-    "rome-shadow-surface": ASH_SHADOWS_LIGHT["rome-shadow-4"],
 
     ring: "var(--orange-500)",
     // The field edge stays a solid step, one lighter than before, so a control
@@ -555,7 +564,7 @@ const ash: ThemeDefinition = {
     border: "color-mix(in srgb, var(--neutral-50) 10%, transparent)",
     "border-strong": "color-mix(in srgb, var(--neutral-50) 18%, transparent)",
     "border-subtle": "color-mix(in srgb, var(--neutral-50) 6%, transparent)",
-    "rome-shadow-surface": SHADOWS_DARK["rome-shadow-4"],
+    ...ASH_SHADOWS_DARK,
   },
 };
 

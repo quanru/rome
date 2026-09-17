@@ -24,12 +24,12 @@ A region has two kinds of boundary. A container's outline says where a card, a p
 
 ## Theme mapping
 
-Ash's dark half keeps Ember's depths and supplies its own edge and divider values. `--rome-shadow-surface` aliases a step of the [elevation scale](../primitive-token/elevation-primitives.md).
+Ash's dark half keeps Ember's depths and supplies its own edge and divider values. `--rome-shadow-surface` is `none` where a theme outlines its containers, and Ash's own cast where it does not; the value is in the [elevation doc](../primitive-token/elevation-primitives.md).
 
 | Token | Ember light | Ember dark | Ash light | Ash dark | Slate light | Slate dark |
 |---|---|---|---|---|---|---|
 | `--edge` | `--neutral-150` | `--neutral-700` | `--neutral-900` at 5% | `--neutral-50` at 8% | `--neutral-200` | `--neutral-700` |
-| `--rome-shadow-surface` | `none` | `none` | `--rome-shadow-4` | `--rome-shadow-4` | `none` | `none` |
+| `--rome-shadow-surface` | `none` | `none` | Ash light cast | Ash dark cast | `none` | `none` |
 | `--border` | `--neutral-150` | `--neutral-700` | `--neutral-900` at 8% | `--neutral-50` at 10% | `--neutral-200` | `--neutral-700` |
 | `--border-strong` | `--neutral-300` | `--neutral-650` | `--neutral-900` at 16% | `--neutral-50` at 18% | `--neutral-300` | `--neutral-650` |
 | `--border-subtle` | `--neutral-100` | `--neutral-850` | `--neutral-900` at 5% | `--neutral-50` at 6% | `--neutral-100` | `--neutral-800` |
@@ -41,7 +41,7 @@ Ash's dark half keeps Ember's depths and supplies its own edge and divider value
 
 - `--edge` and `--rome-shadow-surface` travel together. A container that writes one without the other has no boundary in one theme: no edge and no cast in Ash, or a hairline plus no cast in Ember, which is what `--border` already gives. `[mech]`
 - A container's fill sits above the canvas in every theme. In Ash the fill step is what separates the container once the edge is nearly gone, so `--edge` on a region painted `--background` marks nothing. `[mech]`
-- The cast is a step of the elevation scale or `none`, never a list written at the call site, and it never carries a 1px layer standing in for the edge. `[mech]`
+- The cast is a theme value or `none`, never a list written at the call site, and it never carries a 1px layer standing in for the edge. `[mech]`
 - Dividers are not measured for contrast. A row is identified by its content and its hover fill, and the line is decoration, which is why Ash can fade it to 8%. `[mech]`
 - A field's edge stays solid in Ash because it identifies a control at rest. Fading it to the divider alpha turns a field into a well. `[mech]`
 
