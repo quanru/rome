@@ -16,6 +16,7 @@ import { ConnectionDetailDialog } from "@/components/ConnectionDetail";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateIcon, EmptyStateTitle } from "@/components/ui/empty-state";
+import { List, ListRow, ListRowContent, ListRowTitle } from "@/components/ui/list-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildConnectionCards } from "@/lib/connection-cards";
 import { StatusIndicator } from "@/lib/connection-status";
@@ -77,6 +78,10 @@ export function ConnectionsSection({
           </SectionHeading>
         </SectionHeader>
 
+        {/* One raised container for the whole roster, with the rows divided
+            inside it, rather than one card per service: a connection is a
+            record in a list, and the theme decides how the list separates
+            from the pane. The App keys entry is the roster's last row. */}
         <ListCollection className="flex flex-col gap-2">
           {loading ? (
             <div
@@ -113,27 +118,27 @@ export function ConnectionsSection({
               </EmptyStateIcon>
               <EmptyStateTitle>{t("connections.emptyTitle")}</EmptyStateTitle>
             </EmptyState>
-          ) : (
-            cards.map((card) => (
-              <Button
-                key={card.service}
-                type="button"
-                variant="outline"
-                size="default"
-                align="between"
-                onClick={() => setSelectedService(card.service)}
-                className="h-auto w-full bg-surface py-3 text-left hover:bg-accent"
-                aria-label={`Open ${card.label}`}
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <ConnectionBrandBadge connection={card.service} />
-                  <span className="truncate text-ui text-foreground">{card.label}</span>
-                </span>
-                <StatusIndicator card={card} />
-              </Button>
-            ))
-          )}
-          <AppKeysRow />
+          ) : null}
+          <List className="overflow-hidden rounded-12 border border-edge bg-surface shadow-surface">
+            {!loading && !error
+              ? cards.map((card) => (
+                  <ListRow key={card.service} asChild interactive>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedService(card.service)}
+                      aria-label={`Open ${card.label}`}
+                    >
+                      <ConnectionBrandBadge connection={card.service} />
+                      <ListRowContent>
+                        <ListRowTitle className="truncate">{card.label}</ListRowTitle>
+                      </ListRowContent>
+                      <StatusIndicator card={card} />
+                    </button>
+                  </ListRow>
+                ))
+              : null}
+            <AppKeysRow />
+          </List>
         </ListCollection>
 
         <ConnectionDetailDialog
