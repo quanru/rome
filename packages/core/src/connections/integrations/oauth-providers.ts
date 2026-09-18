@@ -79,6 +79,10 @@ export const slackGrantProfileSchema = z
     /** Slack workspace id — identity, never credential material; the token-file
      *  custody writes it beside the secret tokens. */
     teamId: identityField,
+    /** Slack workspace name and bot identity captured from `auth.test`. */
+    workspaceName: identityField,
+    botUserId: identityField,
+    botUsername: identityField,
   })
   .strict();
 export type SlackGrantProfile = z.infer<typeof slackGrantProfileSchema>;
@@ -140,9 +144,9 @@ export function toGithubDisplay(profile: GithubGrantProfile): ProfileDisplay {
 
 export function toSlackDisplay(profile: SlackGrantProfile): ProfileDisplay {
   return Object.freeze({
-    displayName: profile.displayName,
-    /** The workspace name reads as Slack's handle. */
-    handle: profile.login,
+    /** A connected Slack card names the workspace and identifies the Rome bot. */
+    displayName: profile.workspaceName ?? profile.displayName,
+    handle: profile.botUsername ? `@${profile.botUsername}` : profile.login,
     email: profile.email,
     avatarUrl: profile.avatarUrl,
   });

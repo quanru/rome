@@ -96,6 +96,10 @@ const configSchema = z.object({
   // Anthropic
   anthropicApiKey: z.string().optional(),
 
+  // Slack Events API request signing. Optional so instances that do not offer
+  // Slack can still boot; the Connections UI marks Slack unavailable without it.
+  slackSigningSecret: z.string().min(1).optional(),
+
   // Observability
   otelExporterEndpoint: z.string().optional(),
 
@@ -199,6 +203,10 @@ function envToRawConfig(env: NodeJS.ProcessEnv): Record<string, unknown> {
   // Anthropic (optional — falls back to Claude subscription when unset)
   if (env.ANTHROPIC_API_KEY) {
     raw.anthropicApiKey = env.ANTHROPIC_API_KEY;
+  }
+
+  if (env.SLACK_SIGNING_SECRET) {
+    raw.slackSigningSecret = env.SLACK_SIGNING_SECRET;
   }
 
   // Observability

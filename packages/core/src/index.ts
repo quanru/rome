@@ -58,6 +58,7 @@ import { WhatsAppAccounts } from "./channels/whatsapp-accounts.js";
 import { createAccountNames } from "./channels/account-names.js";
 import { channelList } from "./channels/channel-list.js";
 import { SentinelLogRepository } from "./db/repositories/sentinel-log.js";
+import { SlackIngress } from "./channels/slack.js";
 import { ApprovalsRepository } from "./db/repositories/approvals.js";
 import { SettingsRepository } from "./db/repositories/settings.js";
 import { ComputerUseService } from "./computer-use/service.js";
@@ -293,6 +294,7 @@ async function main() {
   // the load()/import that hydrate + rebuild live connections run LATER — after
   // the message hook exists, so the first Talk unlock can attach its subscription.
   const connectionRegistry = new ConnectionRegistry({ ledger: new DrizzleGrantLedger(db) });
+  const slackIngress = new SlackIngress(config.slackSigningSecret);
   const talkRouter = createTalkRouter(connectionRegistry);
   // Conferral setups: in-memory session store keyed per grant,
   // sharing the registry (descriptor lookup + terminal write) and the person
@@ -1014,6 +1016,7 @@ async function main() {
     // The Rome Cloud-OAuth conferral setups (github/slack/google) read/write the
     // oauth_pending_attempts table for the begin-redirect + return-leg redeem.
     db,
+    slackIngress,
   });
 
   let messageHook: ChannelMessageHook = createNoopChannelMessageHook();
@@ -1309,6 +1312,7 @@ async function main() {
       isCloudAuthEnabled,
       connectionRegistry,
       setupManager,
+      slackIngress,
     };
     internalApi = await startApi(config.internalApi, apiDeps);
   } catch (err) {

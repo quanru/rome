@@ -9,6 +9,7 @@
 
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { SlackIngress } from "../../channels/slack.js";
 import { DrizzleGrantLedger } from "../../connections/ledger-db.js";
 import { ConnectionRegistry } from "../../connections/registry.js";
 import { tokenPaste } from "../../connections/schemes.js";
@@ -37,10 +38,18 @@ function fakePersonMappingRepo(): PersonMappingRepository {
   } as unknown as PersonMappingRepository;
 }
 
-function makeApp(registry: ConnectionRegistry, personMappingRepo = fakePersonMappingRepo()): Hono {
+function makeApp(
+  registry: ConnectionRegistry,
+  personMappingRepo = fakePersonMappingRepo(),
+  slackIngress?: SlackIngress,
+): Hono {
   return new Hono().route(
     "/",
-    connectionsRoutes({ connectionRegistry: registry, personMappingRepo } as unknown as ApiDeps),
+    connectionsRoutes({
+      connectionRegistry: registry,
+      personMappingRepo,
+      slackIngress,
+    } as unknown as ApiDeps),
   );
 }
 
@@ -243,6 +252,28 @@ describe("GET /connections", () => {
       if (prev === undefined) delete process.env.PANTHEON_BASE_ORIGIN;
       else process.env.PANTHEON_BASE_ORIGIN = prev;
     }
+  });
+
+  it("marks Slack unavailable until Events API signing is configured", async () => {
+    const registry = new ConnectionRegistry({ ledger: makeLedger() });
+    registry.register({
+      service: "slack",
+      auth: { workspace: tokenPaste({ label: "token", validate: async () => {} }) },
+      capabilities: {},
+    });
+
+    const res = await makeApp(
+      registry,
+      fakePersonMappingRepo(),
+      new SlackIngress(undefined),
+    ).request("/connections");
+    const { connections } = await res.json();
+
+    expect(connections[0].connect).toEqual({
+      url: null,
+      available: false,
+      unavailableReason: "Slack bot events are not configured on this Rome instance.",
+    });
   });
 });
 
