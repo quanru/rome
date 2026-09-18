@@ -163,22 +163,22 @@ export class AgentSessionBridge implements AgentSessionChildBridge {
         };
 
         const attachRun = (handle: AgentTurnHandle) => {
-          const recorder =
-            this.webchatRepo && shouldPersistAgentTrace(req.init?.threadContext)
-              ? new AgentTraceRecorder({
-                  webchatRepo: this.webchatRepo,
-                  agentName: req.key.agentName,
-                  agentSessionId: session.sessionId,
-                  romeSessionId,
-                  existingSessionId: boundRomeSessionId ? romeSessionId : undefined,
-                  channelThreadKey: req.key.channelThreadKey,
-                  turnId: handle.turnId,
-                  threadContext: req.init?.threadContext,
-                  actionContext: req.actionContext,
-                  persistTranscript: true,
-                  persistUserTranscript: !boundRomeSessionId,
-                })
-              : null;
+          let recorder: AgentTraceRecorder | null = null;
+          if (this.webchatRepo && shouldPersistAgentTrace(req.init?.threadContext)) {
+            recorder = new AgentTraceRecorder({
+              webchatRepo: this.webchatRepo,
+              agentName: req.key.agentName,
+              agentSessionId: session.sessionId,
+              romeSessionId,
+              existingSessionId: boundRomeSessionId ? romeSessionId : undefined,
+              channelThreadKey: req.key.channelThreadKey,
+              turnId: handle.turnId,
+              threadContext: req.init?.threadContext,
+              actionContext: req.actionContext,
+              persistTranscript: true,
+              persistUserTranscript: !boundRomeSessionId,
+            });
+          }
 
           log.info("agent.session.runTurn response ready", {
             ...baseLogFields,
@@ -229,20 +229,23 @@ export class AgentSessionBridge implements AgentSessionChildBridge {
                     });
                   }
                 }
-                if (!deliveryInitialized) {
+                const thread = req.init?.threadContext;
+                if (
+                  !deliveryInitialized &&
+                  req.admissionOnly &&
+                  thread?.connectionId &&
+                  this.talkRouter
+                ) {
                   deliveryInitialized = true;
-                  const thread = req.init?.threadContext;
-                  if (req.admissionOnly && thread?.connectionId && this.talkRouter) {
-                    delivery = await this.talkRouter.createRunDelivery(
-                      thread.connectionId,
-                      handle.turnId,
-                      {
-                        conversationId: thread.threadId as ConversationId,
-                        replyToMessageId: req.platformMessageId,
-                      },
-                    );
-                    if (stopped) await delivery?.stop();
-                  }
+                  delivery = await this.talkRouter.createRunDelivery(
+                    thread.connectionId,
+                    handle.turnId,
+                    {
+                      conversationId: thread.threadId as ConversationId,
+                      replyToMessageId: req.platformMessageId,
+                    },
+                  );
+                  if (stopped) await delivery?.stop();
                 }
                 if (msg.type === "text_delta") delivery?.append(msg.content, msg.blockId);
                 if (msg.type === "text")
@@ -261,39 +264,41 @@ export class AgentSessionBridge implements AgentSessionChildBridge {
                 }
                 stream?.send(msg);
               }
-              if (delivery && !stopped) {
-                const receipts = await delivery.finish(resultContent);
-                if (resultContent && this.approvals) {
-                  await this.approvals
-                    .create({
-                      type: "outgoing_message",
-                      requestedBy: req.key.agentName,
-                      description: "Skipped envoy (guardian)",
-                      status: "auto_approved",
-                      payload: {
-                        response: resultContent,
-                        ...req.init?.threadContext,
-                        turnId: handle.turnId,
-                        messageId: req.platformMessageId,
-                      },
-                    })
-                    .catch((error) =>
-                      log.warn("failed to record guardian delivery audit", {
-                        turnId: handle.turnId,
-                        error: error instanceof Error ? error.message : String(error),
-                      }),
-                    );
-                }
-                if (resultContent && this.webchatRepo) {
-                  await this.webchatRepo.recordOutboundConversationMessage({
-                    sessionId: romeSessionId,
-                    content: JSON.stringify([{ type: "text", content: resultContent }]),
-                    platformMessageId: receipts.at(-1)?.messageId,
-                    replyToPlatformMessageId: req.platformMessageId,
-                    turnId: handle.turnId,
-                    knownToProvider: true,
-                  });
-                }
+              if (!delivery || stopped) {
+                stream?.close();
+                return;
+              }
+              const receipts = await delivery.finish(resultContent);
+              if (resultContent && this.approvals) {
+                await this.approvals
+                  .create({
+                    type: "outgoing_message",
+                    requestedBy: req.key.agentName,
+                    description: "Skipped envoy (guardian)",
+                    status: "auto_approved",
+                    payload: {
+                      response: resultContent,
+                      ...req.init?.threadContext,
+                      turnId: handle.turnId,
+                      messageId: req.platformMessageId,
+                    },
+                  })
+                  .catch((error) =>
+                    log.warn("failed to record guardian delivery audit", {
+                      turnId: handle.turnId,
+                      error: error instanceof Error ? error.message : String(error),
+                    }),
+                  );
+              }
+              if (resultContent && this.webchatRepo) {
+                await this.webchatRepo.recordOutboundConversationMessage({
+                  sessionId: romeSessionId,
+                  content: JSON.stringify([{ type: "text", content: resultContent }]),
+                  platformMessageId: receipts.at(-1)?.messageId,
+                  replyToPlatformMessageId: req.platformMessageId,
+                  turnId: handle.turnId,
+                  knownToProvider: true,
+                });
               }
               stream?.close();
             } catch (err) {

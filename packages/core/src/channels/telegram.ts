@@ -524,21 +524,20 @@ export class TelegramAdapter implements ProviderAdapter {
 
 function telegramDeliveryFailure(error: unknown): DeliveryFailure {
   if (error instanceof DeliveryFailure) return error;
-  if (error instanceof GrammyError) {
-    if (error.error_code === 429)
-      return new DeliveryFailure(
-        "rate-limit",
-        error.description,
-        [],
-        (error.parameters.retry_after ?? 1) * 1000,
-      );
-    if (error.error_code === 401 || error.error_code === 403)
-      return new DeliveryFailure("authorization", error.description);
-    if (error.error_code === 400 && /can't be edited/i.test(error.description))
-      return new DeliveryFailure("unsupported", error.description);
-    return new DeliveryFailure("failed", error.description);
-  }
-  return new DeliveryFailure("unknown", error instanceof Error ? error.message : String(error));
+  if (!(error instanceof GrammyError))
+    return new DeliveryFailure("unknown", error instanceof Error ? error.message : String(error));
+  if (error.error_code === 429)
+    return new DeliveryFailure(
+      "rate-limit",
+      error.description,
+      [],
+      (error.parameters.retry_after ?? 1) * 1000,
+    );
+  if (error.error_code === 401 || error.error_code === 403)
+    return new DeliveryFailure("authorization", error.description);
+  if (error.error_code === 400 && /can't be edited/i.test(error.description))
+    return new DeliveryFailure("unsupported", error.description);
+  return new DeliveryFailure("failed", error.description);
 }
 
 function physicalOperation<T>(

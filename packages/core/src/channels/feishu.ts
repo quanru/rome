@@ -216,27 +216,26 @@ export class FeishuAdapter implements ProviderAdapter {
       const replyInThread = replyToMessageId
         ? ((await this.getChannelConfig(threadId)).autoThread ?? true)
         : false;
-      const sent = await physicalOperation(threadId, "create", () =>
-        replyToMessageId
-          ? this.channel.rawClient.im.message.reply({
-              path: { message_id: replyToMessageId },
-              data: { ...data, reply_in_thread: replyInThread },
-            })
-          : this.channel.rawClient.im.message.create({
-              params: {
-                receive_id_type: threadId.startsWith("oc_")
-                  ? "chat_id"
-                  : threadId.startsWith("ou_")
-                    ? "open_id"
-                    : threadId.startsWith("on_")
-                      ? "union_id"
-                      : threadId.includes("@")
-                        ? "email"
-                        : "user_id",
-              },
-              data: { ...data, receive_id: threadId },
-            }),
-      );
+      const sent = await physicalOperation(threadId, "create", () => {
+        if (replyToMessageId) {
+          return this.channel.rawClient.im.message.reply({
+            path: { message_id: replyToMessageId },
+            data: { ...data, reply_in_thread: replyInThread },
+          });
+        }
+        const receiveIdType: Partial<Record<string, "chat_id" | "open_id" | "union_id">> = {
+          oc_: "chat_id",
+          ou_: "open_id",
+          on_: "union_id",
+        };
+        const prefix = threadId.slice(0, 3);
+        const receive_id_type =
+          receiveIdType[prefix] ?? (threadId.includes("@") ? "email" : "user_id");
+        return this.channel.rawClient.im.message.create({
+          params: { receive_id_type },
+          data: { ...data, receive_id: threadId },
+        });
+      });
       if (sent.code !== 0) throw sent;
       if (!sent.data?.message_id)
         throw new DeliveryFailure("unknown", "Feishu did not return a message identity");

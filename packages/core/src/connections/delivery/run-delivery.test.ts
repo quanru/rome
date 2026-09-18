@@ -67,6 +67,126 @@ async function tick() {
 }
 
 describe("RunDelivery", () => {
+  it.each([
+    false,
+    true,
+  ])("enforces UTF-8 memory bounds and retains accepted receipts (in-flight=%s)", async (inFlight) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: string[] = [];
+    const { run, evidence } = setup({
+      profile: { ...profile, maxPendingBytes: 6 },
+      async create(target, text) {
+        sent.push(text);
+        if (inFlight) await gate;
+        return { messageId: "accepted", conversationId: target.conversationId };
+      },
+    });
+    try {
+      run.append("中文");
+      await tick();
+      run.append("a");
+      run.append("ignored");
+      release();
+      await expect(run.finish("ignored")).rejects.toMatchObject({
+        kind: "failed",
+        message: "Run delivery memory bound exceeded",
+        receipts: [expect.objectContaining({ messageId: "accepted" })],
+      });
+      expect(sent).toEqual(["中文"]);
+      expect(run.signal.aborted).toBe(true);
+      expect(evidence.some((attempt) => attempt.outcome === "accepted")).toBe(true);
+    } finally {
+      release();
+      await run.stop();
+    }
+  });
+
+  it("rejects an oversized final result before any transport call", async () => {
+    const { run, visible } = setup({ profile: { ...profile, mode: "final", maxPendingBytes: 6 } });
+    await expect(run.finish("中文a")).rejects.toMatchObject({ kind: "failed", receipts: [] });
+    expect(visible.size).toBe(0);
+  });
+
+  it.each([
+    "blocks",
+    "final",
+  ] as const)("switches to %s when editing becomes unsupported", async (unsupportedMode) => {
+    let edits = 0;
+    const { run, visible } = setup({
+      profile: { ...profile, unsupportedMode },
+      async update() {
+        edits++;
+        throw new DeliveryFailure("unsupported", "editing disabled");
+      },
+    });
+    try {
+      run.append("old");
+      await tick();
+      run.complete("changed", "final");
+      await tick();
+      expect(edits).toBe(1);
+      expect([...visible.values()].join("")).toBe(
+        unsupportedMode === "final" ? "old" : "oldCorrection:\nchanged",
+      );
+      const final = unsupportedMode === "final" ? "latest" : "changed";
+      await run.finish(final);
+      expect([...visible.values()].join("")).toBe(`oldCorrection:\n${final}`);
+      expect(edits).toBe(1);
+    } finally {
+      await run.stop();
+    }
+  });
+
+  it("falls back when a previously settled overflow part loses editing support", async () => {
+    let edits = 0;
+    const { run, visible, evidence } = setup({
+      profile: { ...profile, maxPartSize: 4 },
+      async update() {
+        edits++;
+        throw new DeliveryFailure("unsupported", "editing disabled");
+      },
+    });
+    try {
+      run.append("abcdefgh");
+      await tick();
+      run.complete("ABCDEFGH", "final");
+      await run.finish("ABCDEFGH");
+      expect([...visible.values()].join("")).toBe("abcdefghCorrection:\nABCDEFGH");
+      expect(edits).toBe(1);
+      expect(
+        evidence.filter((attempt) => attempt.partIx === 0 && attempt.blockIx === 0).at(-1),
+      ).toMatchObject({ outcome: "accepted", operation: "settle" });
+    } finally {
+      await run.stop();
+    }
+  });
+
+  it.each([
+    "short",
+    "ab😀efghij",
+  ])("uses a correction when final text changes physical boundaries: %s", async (final) => {
+    const { run, visible, updates } = setup({ profile: { ...profile, maxPartSize: 3 } });
+    try {
+      run.append("abcdefghij");
+      await tick();
+      const prefix = [...visible.values()];
+      run.complete(final, "final");
+      await run.finish(final);
+      expect([...visible.values()].slice(0, prefix.length)).toEqual(prefix);
+      expect([...visible.values()].slice(prefix.length).join("")).toBe(`Correction:\n${final}`);
+      expect(updates.size).toBe(0);
+      for (const part of visible.values()) {
+        expect(part.length).toBeLessThanOrEqual(3);
+        expect(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/u.test(part)).toBe(false);
+      }
+    } finally {
+      await run.stop();
+    }
+  });
+
   it("keeps append-only corrections distinct from later provider blocks and does not repeat a final correction", async () => {
     const { run, visible } = setup({ profile: { ...profile, mode: "blocks" }, update: undefined });
     run.complete("old", "commentary", "commentary");

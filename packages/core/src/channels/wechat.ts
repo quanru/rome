@@ -352,22 +352,21 @@ async function apiFetch(params: {
       );
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${text}`);
-    if (params.endpoint === "ilink/bot/sendmessage") {
-      let response: { ret?: number; errcode?: number; errmsg?: string };
-      try {
-        response = JSON.parse(text);
-      } catch {
-        throw new DeliveryFailure("unknown", "WeChat returned an unreadable send outcome");
-      }
-      if (
-        (response.ret !== undefined && response.ret !== 0) ||
-        (response.errcode !== undefined && response.errcode !== 0)
-      ) {
-        throw new DeliveryFailure(
-          "failed",
-          response.errmsg ?? `WeChat rejected the message (${response.errcode ?? response.ret})`,
-        );
-      }
+    if (params.endpoint !== "ilink/bot/sendmessage") return text;
+    let response: { ret?: number; errcode?: number; errmsg?: string };
+    try {
+      response = JSON.parse(text);
+    } catch {
+      throw new DeliveryFailure("unknown", "WeChat returned an unreadable send outcome");
+    }
+    if (
+      (response.ret !== undefined && response.ret !== 0) ||
+      (response.errcode !== undefined && response.errcode !== 0)
+    ) {
+      throw new DeliveryFailure(
+        "failed",
+        response.errmsg ?? `WeChat rejected the message (${response.errcode ?? response.ret})`,
+      );
     }
     return text;
   } finally {

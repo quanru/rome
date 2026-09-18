@@ -335,10 +335,10 @@ describe("IM delivery through production wiring and local API peers", () => {
   ] as const)("%s raw input reaches Talk only after pairing approval", async (service) => {
     const test = createTestDb();
     const registry = new ConnectionRegistry({ ledger: new DrizzleGrantLedger(test.db) });
-    const fixture =
-      service === "telegram"
-        ? await new TelegramApiFixture().start()
-        : await new LarkApiFixture().start();
+    const Fixture = { telegram: TelegramApiFixture, feishu: LarkApiFixture }[service];
+    const fixture = new Fixture();
+    await fixture.start();
+    const credentialSlot = { telegram: "bot", feishu: "app" }[service];
     const people = new PersonMappingRepository(test.db);
     const guardianId = await people.create({
       displayName: "Fixture guardian",
@@ -367,7 +367,7 @@ describe("IM delivery through production wiring and local API peers", () => {
       createPairingAdmission({
         approvalsRepo: approvalRepo,
         personMappingRepo: people,
-        talkGrants: () => [service === "telegram" ? "bot" : "app"],
+        talkGrants: () => [credentialSlot],
       }),
       settings,
       new ReplyDeliveryRepository(test.db),
@@ -379,7 +379,7 @@ describe("IM delivery through production wiring and local API peers", () => {
         createSpacingMs: 0,
         conversationSpacingMs: 0,
       });
-      await registry.importCredential(connection.id, service === "telegram" ? "bot" : "app", {
+      await registry.importCredential(connection.id, credentialSlot, {
         material:
           fixture instanceof TelegramApiFixture
             ? { token: TELEGRAM_TOKEN }

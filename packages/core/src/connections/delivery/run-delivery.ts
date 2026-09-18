@@ -129,28 +129,31 @@ export class RunDelivery {
       this.abort.abort();
       return;
     }
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
     this.kick();
   }
 
   private kick(): void {
     if (this.writer || this.timer || this.error || this.abort.signal.aborted) return;
     if (this.mode === "final" && !this.finalizing) return;
+    let wait = 0;
     if (this.mode === "blocks" && !this.finalizing) {
       const age = Math.max(
         0,
         ...[...this.blocks.values()].map((block) => Date.now() - block.createdAt),
       );
-      const wait = Math.min(
+      wait = Math.min(
         this.transport.profile.coalesceMs,
         Math.max(0, this.transport.profile.maxPendingAgeMs - age),
       );
-      if (wait > 0) {
-        this.timer = setTimeout(() => {
-          this.timer = undefined;
-          this.startWriter();
-        }, wait);
-        return;
-      }
+    }
+    if (wait > 0) {
+      this.timer = setTimeout(() => {
+        this.timer = undefined;
+        this.startWriter();
+      }, wait);
+      return;
     }
     this.startWriter();
   }
@@ -164,32 +167,37 @@ export class RunDelivery {
       })
       .finally(() => {
         this.writer = undefined;
-        if (this.drainedVersion !== this.version) this.kick();
-        else if (this.mode === "blocks" && !this.closed && !this.error) {
-          const pending = [...this.blocks.values()].filter(
-            (block) => !block.complete && (block.parts.at(-1)?.end ?? 0) < block.content.length,
-          );
-          if (pending.length) {
-            const due = Math.min(
-              ...pending.map((block) => block.createdAt + this.transport.profile.maxPendingAgeMs),
-            );
-            this.timer = setTimeout(
-              () => {
-                this.timer = undefined;
-                this.startWriter();
-              },
-              Math.max(0, due - Date.now()),
-            );
-          }
+        if (this.drainedVersion !== this.version) {
+          this.kick();
+          return;
         }
+        if (this.mode !== "blocks" || this.closed || this.error) return;
+        const pending = [...this.blocks.values()].filter(
+          (block) => !block.complete && (block.parts.at(-1)?.end ?? 0) < block.content.length,
+        );
+        if (!pending.length) return;
+        const due = Math.min(
+          ...pending.map((block) => block.createdAt + this.transport.profile.maxPendingAgeMs),
+        );
+        this.timer = setTimeout(
+          () => {
+            this.timer = undefined;
+            this.startWriter();
+          },
+          Math.max(0, due - Date.now()),
+        );
       });
   }
 
   private async drain(): Promise<void> {
     this.drainedVersion = this.version;
     for (const blockIx of this.blocks.keys()) {
-      await this.reconcileCompletedParts(blockIx);
       while (!this.abort.signal.aborted) {
+        if (this.mode === "final" && !this.finalizing) return;
+        const version = this.version;
+        await this.reconcileCompletedParts(blockIx);
+        if (version !== this.version) continue;
+        if (this.mode === "final" && !this.finalizing) return;
         const block = this.blocks.get(blockIx)!;
         const part = block.parts.at(-1);
         const start = part && !part.settled ? part.start : (part?.end ?? 0);
@@ -255,6 +263,7 @@ export class RunDelivery {
       while (part.source !== this.blocks.get(blockIx)!.content.slice(part.start, part.end)) {
         this.abort.signal.throwIfAborted();
         await this.submit(blockIx, part.start, part.end, true, part);
+        if (this.mode !== "edit") return;
       }
     }
   }
@@ -316,10 +325,10 @@ export class RunDelivery {
           this.abort.signal.throwIfAborted();
           transport.assertAuthorized();
           let receipt: MessageReceipt;
+          if (part && !transport.update)
+            throw new DeliveryFailure("unsupported", "Text updates are unsupported");
           if (part) {
-            if (!transport.update)
-              throw new DeliveryFailure("unsupported", "Text updates are unsupported");
-            await transport.update(part.receipt, rendered);
+            await transport.update!(part.receipt, rendered);
             receipt = part.receipt;
           } else {
             receipt = await transport.create(this.target, rendered);
@@ -337,17 +346,16 @@ export class RunDelivery {
       );
     } catch (error) {
       if (error instanceof DeliveryFailure && error.kind === "rate-limit") return;
-      if (
-        error instanceof DeliveryFailure &&
-        error.kind === "unsupported" &&
-        update &&
-        !fixedPart
-      ) {
+      if (error instanceof DeliveryFailure && error.kind === "unsupported" && update) {
         this.mode = transport.profile.unsupportedMode;
         const block = this.blocks.get(blockIx)!;
-        const part = block.parts.at(-1)!;
+        const part = fixedPart ?? block.parts.at(-1)!;
         part.settled = true;
-        if (part.source !== block.content.slice(part.start, part.end)) {
+        await this.record(block, part, "settle", "accepted");
+        if (
+          (this.mode !== "final" || this.finalizing) &&
+          part.source !== block.content.slice(part.start, part.end)
+        ) {
           this.correct(block);
         }
         return;
@@ -366,6 +374,9 @@ export class RunDelivery {
           return;
         }
       }
+      let outcome: DeliveryAttempt["outcome"] = "unknown";
+      if (error instanceof DeliveryFailure && error.kind !== "unknown") outcome = "failed";
+      if (this.abort.signal.aborted) outcome = "stopped";
       try {
         await this.repository.record({
           runId: this.runId,
@@ -376,11 +387,7 @@ export class RunDelivery {
           revision: (part?.revision ?? 0) + 1,
           target: this.target,
           operation,
-          outcome: this.abort.signal.aborted
-            ? "stopped"
-            : error instanceof DeliveryFailure && error.kind !== "unknown"
-              ? "failed"
-              : "unknown",
+          outcome,
           receipt: part?.receipt,
         });
       } catch (recordError) {

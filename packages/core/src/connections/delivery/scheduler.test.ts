@@ -27,6 +27,111 @@ const profile = resolveDeliveryProfile(
 );
 
 describe("DeliveryScheduler", () => {
+  it("rejects a full queue, releases cancelled capacity, and keeps other accounts independent", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const scheduler = new DeliveryScheduler();
+    const bounded = {
+      ...profile,
+      maxQueuedOperations: 1,
+      operationSpacingMs: 0,
+      createSpacingMs: 0,
+      conversationSpacingMs: 0,
+    };
+    const sent: string[] = [];
+    const active = scheduler.run(
+      bounded,
+      "a",
+      "create",
+      () => {},
+      async () => {
+        sent.push("active");
+        await gate;
+      },
+    );
+    const abort = new AbortController();
+    const queued = scheduler.run(
+      bounded,
+      "b",
+      "create",
+      () => {},
+      async () => {
+        sent.push("cancelled");
+      },
+      abort.signal,
+    );
+    try {
+      await expect(
+        scheduler.run(
+          bounded,
+          "c",
+          "create",
+          () => {},
+          async () => {
+            sent.push("overflow");
+          },
+        ),
+      ).rejects.toThrow("queue is full");
+      await scheduler.run(
+        { ...bounded, budgetKey: "another-account" },
+        "a",
+        "create",
+        () => {},
+        async () => {
+          sent.push("independent");
+        },
+      );
+      const cancelled = expect(queued).rejects.toThrow("stopped");
+      abort.abort();
+      await cancelled;
+      const replacement = scheduler.run(
+        bounded,
+        "c",
+        "create",
+        () => {},
+        async () => {
+          sent.push("replacement");
+        },
+      );
+      release();
+      await Promise.all([active, replacement]);
+      expect(sent).toEqual(["active", "independent", "replacement"]);
+    } finally {
+      release();
+      await active;
+    }
+  });
+
+  it("replenishes a depleted burst budget after idle time", async () => {
+    let now = 0;
+    const scheduler = new DeliveryScheduler(
+      () => now,
+      async (delay) => {
+        now += delay;
+      },
+    );
+    const burst = { ...profile, burstCapacity: 2, createSpacingMs: 0, conversationSpacingMs: 0 };
+    const times: number[] = [];
+    for (let index = 0; index < 6; index++) {
+      if (index === 3) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        now = 100;
+      }
+      await scheduler.run(
+        burst,
+        "dm",
+        "create",
+        () => {},
+        async () => {
+          times.push(now);
+        },
+      );
+    }
+    expect(times).toEqual([0, 0, 10, 100, 100, 110]);
+  });
+
   it("validates connection overrides and exposes the effective unsupported-mode fallback", () => {
     expect(
       resolveDeliveryProfile(profile, { mode: "edit", unsupportedMode: "final" }, false).mode,
