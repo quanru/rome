@@ -28,7 +28,7 @@
     "prepare": "husky",
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
-    "lint:shadcn": "oxlint --config .oxlintrc.shadcn.json packages/web/src packages/ui/src packages/desktop-base-web/src packages/web-content rome_apps example_apps",
+    "lint:oxlint": "oxlint packages/web/src packages/ui/src packages/desktop-base-web/src packages/web-content rome_apps example_apps",
     "lint:fix": "biome check --write .",
     "lint:sh": "scripts/lint-shell.sh",
     "lint:prose": "node scripts/check-prose.mjs",

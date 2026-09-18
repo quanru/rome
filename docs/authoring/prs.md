@@ -19,10 +19,10 @@ When the PR touches `packages/app-runtime-sdk/`, `packages/app-web-sdk/`, or `pa
 
 ## Design-system self-check
 
-Before opening or updating a PR that changes UI sources, the authoring agent must complete this local check. The shadcn CI job is disabled.
+Before opening or updating a PR that changes UI sources, the authoring agent must complete this local check. The Oxlint CI job is disabled.
 
-1. Identify changed source files within the [scan scope](../../DEVELOPMENT.md#shadcn-lint).
-2. Run `pnpm exec oxlint --config .oxlintrc.shadcn.json <changed-source-files>`, or `pnpm lint:shadcn` for the full scope.
+1. Identify changed source files within the [scan scope](../../DEVELOPMENT.md#oxlint).
+2. Run `pnpm exec oxlint <changed-source-files>`, or `pnpm lint:oxlint` for the full scope.
 3. Review findings against [DESIGN.md](../../DESIGN.md) and the [design system](../design-system.md). Fix actionable findings in the changed code and explain accepted exceptions or known false positives.
 4. Record the command, scope, result, and unresolved findings in the PR test plan. Report scan failures or coverage gaps explicitly.
 

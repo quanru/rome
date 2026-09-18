@@ -91,23 +91,25 @@ Chrome's CDP listener stays available for login tabs and URL opening in either m
 - Validate [configuration with Zod](packages/core/src/config.ts). Log through [`createLogger(component)`](packages/core/src/logger.ts).
 - Use [DnD](packages/web/src/components/ui/sortable.tsx), [Motion](packages/web/src/pages/free/FreeGrid.tsx), [Monaco](packages/web/src/components/monaco-file-editor.tsx), and [Recharts](packages/web/src/pages/SessionsTrendChart.tsx) only when a feature needs them. They are not default abstractions.
 
-## shadcn lint
+## Oxlint
 
-Run `pnpm lint:shadcn` to scan dashboard, shared UI, desktop-base-web, web-content, Rome apps, and example-app sources.
-The command invokes Oxlint with [the shadcn configuration](.oxlintrc.shadcn.json). Tests, stories, declarations, dependencies, and build output are excluded.
+Run `pnpm lint:oxlint` to scan dashboard, shared UI, desktop-base-web, web-content, Rome apps, and example-app sources.
+The command invokes Oxlint with [the root configuration](.oxlintrc.json), which loads `@shadcn/lint` as a JS plugin.
+All enabled shadcn rules use warning severity. Biome remains the main lint command.
+Tests, stories, declarations, dependencies, and build output are excluded.
 Mobile and app-template sources are outside this scan.
 
 For a focused review, pass the changed source files directly:
 
 ```bash
-pnpm exec oxlint --config .oxlintrc.shadcn.json path/to/changed-file.tsx
+pnpm exec oxlint path/to/changed-file.tsx
 ```
 
 Use `--format json` for native JSON output or `--deny-warnings` to return a nonzero exit code for warnings.
 Without `--deny-warnings`, a successful exit does not mean zero findings. Read the diagnostics.
 
 Before opening or updating a UI PR, follow the [design-system self-check](docs/authoring/prs.md#design-system-self-check).
-The `shadcn lint` job is defined in [CI](.github/workflows/ci.yml) behind the `SHADCN_LINT_ENABLED` Actions variable.
+The `oxlint` job is defined in [CI](.github/workflows/ci.yml) behind the `OXLINT_ENABLED` Actions variable.
 Leave the variable unset during the local trial to skip scanning and dependency installation. Set it to `true` to enable the job.
 Keep it out of required checks.
 

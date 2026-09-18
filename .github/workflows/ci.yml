@@ -124,10 +124,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm typecheck:lint-agents
 
-  shadcn-lint:
-    name: shadcn lint
+  oxlint:
+    name: oxlint
     # Enable after the local trial and rule compatibility review.
-    if: ${{ vars.SHADCN_LINT_ENABLED == 'true' }}
+    if: ${{ vars.OXLINT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -140,7 +140,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:shadcn --deny-warnings
+      - run: pnpm lint:oxlint
 
   # ──────────────────────────────────────────
   # Job 1b: DB schema drift — committed migrations must match the schema files
