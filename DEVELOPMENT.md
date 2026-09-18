@@ -98,21 +98,20 @@ The command uses [the lint configuration](.oxlintrc.shadcn.json) and leaves Biom
 Use `pnpm --silent lint:shadcn:report` for JSON diagnostics with source paths, lines, and columns.
 Tests, stories, declarations, dependencies, and build output are excluded. Mobile and app-template sources are outside this scan.
 
-CI runs `Scan shadcn usage` on the workflow's push and pull request events.
-A result check shows `shadcn lint · ⚠ N findings`, `No findings`, or a scan/coverage warning in its name.
-GitHub still shows a successful execution as passed. Read the result name for the finding status.
-Neither job blocks other jobs or makes the workflow fail, including when setup or scanning fails.
-Keep these jobs out of required branch-protection checks.
-Warnings produce a count annotation and up to nine source-line annotations with repair messages.
+CI runs a single `shadcn lint` job on the workflow's push and pull request events.
+Findings, coverage warnings, and setup or scan failures make the check fail.
+The workflow can show a failure, but this check is not required for merging and no other job depends on it.
+Keep it out of required branch-protection checks.
+The reporter emits one aggregate warning for findings or an incomplete scan, with no source-line annotations.
 The scan summary includes rule counts and up to 20 source-linked examples with suggested repairs.
 The examples omit undeclared-color and CSS-variable arbitrary-value messages for separate token compatibility review. Totals and logs retain all findings.
 The job logs contain grouped JSON diagnostics and stderr, subject to the repository's normal Actions log retention.
 CI does not upload diagnostic artifacts or local reports from `reports/`.
 
-Agents must inspect the result check even when CI is green.
+Agents must inspect the `shadcn lint` summary when the check fails, even though merging remains allowed.
 Use `gh run view <run-id> --job <scan-job-id> --log` for the scan summary and all findings.
 Report actionable findings in changed files, accepted exceptions, and coverage limits in the handoff.
-A failed or unavailable scan is not a clean result. A warning-only run can exit with code 0.
+A failed or unavailable scan is not a clean result. The local lint command can exit with code 0 for warnings, but the CI reporter exits with code 1.
 
 The plugin can mistake named typography and shadow tokens for colors, and token references for arbitrary values.
 Review suggestions against [DESIGN.md](DESIGN.md) and the [design system](docs/design-system.md).

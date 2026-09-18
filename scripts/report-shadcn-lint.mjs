@@ -6,14 +6,6 @@ function escapeMarkdown(value) {
   return value.replace(/[&<>|`\[\]\\\r\n]/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-function escapeCommand(value) {
-  return value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
-}
-
-function escapeProperty(value) {
-  return escapeCommand(value).replaceAll(":", "%3A").replaceAll(",", "%2C");
-}
-
 function selectFindings(diagnostics) {
   const perRule = new Map();
   const selected = [];
@@ -44,7 +36,7 @@ export function summarizeReport(reportText, stderr, outcome, sourceBase = "") {
   const introduction = [
     "## shadcn lint",
     "",
-    "This check does not block CI. A successful job does not mean the design system has no findings.",
+    "Findings or an incomplete scan fail this check. It is not required for merging.",
     "",
   ];
   let report;
@@ -68,7 +60,7 @@ export function summarizeReport(reportText, stderr, outcome, sourceBase = "") {
     return {
       incomplete: true,
       status: "⚠ Scan incomplete",
-      locationAnnotations: [],
+      exitCode: 1,
       annotation: "shadcn lint did not complete. This is not a clean scan. Inspect the job logs.",
       summary: introduction
         .concat(
@@ -144,12 +136,7 @@ export function summarizeReport(reportText, stderr, outcome, sourceBase = "") {
   return {
     incomplete: false,
     status,
-    locationAnnotations: selected
-      .slice(0, 9)
-      .map(
-        (diagnostic) =>
-          `::warning file=${escapeProperty(diagnostic.filename)},line=${diagnostic.line},title=${escapeProperty(diagnostic.code)}::${escapeCommand(diagnostic.message)}`,
-      ),
+    exitCode: findings || stderr.trim() ? 1 : 0,
     annotation:
       findings || stderr.trim()
         ? `shadcn lint: ${findings} diagnostics across ${files} files. Review the job summary and diagnostic log groups; known token false positives apply.`
@@ -175,14 +162,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/blob/${process.env.GITHUB_SHA}`
       : "";
   const result = summarizeReport(reportText, stderr, outcome, sourceBase);
-  if (process.env.GITHUB_OUTPUT)
-    appendFileSync(process.env.GITHUB_OUTPUT, `status=${result.status}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, result.summary);
   }
   console.log(result.summary);
   if (result.annotation) console.log(`::warning title=shadcn lint::${result.annotation}`);
-  for (const annotation of result.locationAnnotations) console.log(annotation);
   for (const [title, contents] of [
     ["shadcn JSON diagnostics", reportText],
     ["shadcn stderr", stderr],
@@ -194,5 +178,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`::${token}::`);
     console.log("::endgroup::");
   }
-  if (result.incomplete) process.exitCode = 1;
+  process.exitCode = result.exitCode;
 }
