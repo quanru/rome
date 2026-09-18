@@ -46,8 +46,8 @@ describe("IM API recording through SDK transports", () => {
           headers: { "retry-after": "0.01", "x-ratelimit-reset-after": "0.01" },
         },
       });
-      const receipt = await adapter.createText(DISCORD_DM, "recorded reply");
-      expect(fixture.messages.get(receipt.messageId)?.content).toBe("recorded reply");
+      const receipt = await adapter.sendMessage(DISCORD_DM, DISCORD_DM, { text: "recorded reply" });
+      expect(fixture.messages.get(receipt.messageId!)?.content).toBe("recorded reply");
       expect(
         events.some(
           (event) =>
@@ -58,7 +58,7 @@ describe("IM API recording through SDK transports", () => {
         events.some(
           (event) =>
             event.phase === "response-body" &&
-            JSON.stringify(event.detail).includes(receipt.messageId),
+            JSON.stringify(event.detail).includes(receipt.messageId!),
         ),
       ).toBe(true);
       expect(JSON.stringify(events)).not.toContain(DISCORD_TOKEN);

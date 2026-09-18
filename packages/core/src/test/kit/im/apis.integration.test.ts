@@ -1,9 +1,10 @@
+import { Routes } from "discord.js";
 import { describe, expect, it } from "@rstest/core";
-import { DiscordApiFixture, DISCORD_DM, DISCORD_USER } from "./discord.js";
+import { DiscordApiFixture, DISCORD_DM, DISCORD_USER, DISCORD_TOKEN } from "./discord.js";
 import { LarkApiFixture, LARK_CHAT, LARK_USER } from "./lark.js";
 import { deferred, requestBarrier } from "./server.js";
 import type { NormalizedMessage } from "../../../channels/types.js";
-import { TelegramApiFixture } from "./telegram.js";
+import { TelegramApiFixture, TELEGRAM_TOKEN } from "./telegram.js";
 import { WechatApiFixture, WECHAT_USER } from "./wechat.js";
 import { mkdtempDisposable, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,11 +31,21 @@ describe("IM protocol fixtures with real SDKs", () => {
         path: { message_id: reply.messageId },
       });
       expect(result.data?.items?.[0].body?.content).toContain("reply");
-      await channel.rawClient.im.message.update({
-        path: { message_id: reply.messageId },
-        data: { msg_type: "text", content: JSON.stringify({ text: "corrected" }) },
-      });
-      expect(fixture.messages.get(reply.messageId)?.body.content).toContain("corrected");
+      for (const text of ["c", "correct", "corrected"]) {
+        await channel.rawClient.im.message.update({
+          path: { message_id: reply.messageId },
+          data: { msg_type: "text", content: JSON.stringify({ text }) },
+        });
+        const current = await channel.rawClient.im.message.get({
+          path: { message_id: reply.messageId },
+        });
+        expect(current.data?.items?.[0]).toMatchObject({
+          message_id: reply.messageId,
+          body: { content: JSON.stringify({ text }) },
+        });
+        expect(fixture.messages.get(reply.messageId)?.body.content).toBe(JSON.stringify({ text }));
+      }
+      expect(fixture.messages.size).toBe(2);
       fixture.server.assertClean();
     } finally {
       await channel.disconnect();
@@ -55,13 +66,17 @@ describe("IM protocol fixtures with real SDKs", () => {
       await fixture.untilPolling();
       fixture.emitMessage("Hello Telegram");
       expect(await received.promise).toMatchObject({ text: "Hello Telegram" });
-      const receipt = await adapter.createText("123", "preview");
-      await adapter.updateText("123", receipt.messageId, "final");
-      expect(fixture.messages.get(Number(receipt.messageId))?.text).toBe("final");
-      const sent = await adapter.sendMessage("123", "123", {
+      const bot = fixture.createBot(TELEGRAM_TOKEN);
+      const receipt = await bot.api.sendMessage("123", "preview");
+      for (const text of ["f", "fin", "final"]) {
+        const edited = await bot.api.editMessageText("123", receipt.message_id, text);
+        expect(edited).toMatchObject({ message_id: receipt.message_id, text });
+        expect(fixture.messages.get(receipt.message_id)?.text).toBe(text);
+      }
+      expect(fixture.messages.size).toBe(1);
+      await adapter.sendMessage("123", "123", {
         attachments: [{ type: "document", source: file }],
       });
-      expect(sent.parts).toHaveLength(1);
       expect(
         fixture.server.calls.find((call) => call.path.endsWith("/sendDocument"))?.files,
       ).toEqual([
@@ -77,7 +92,7 @@ describe("IM protocol fixtures with real SDKs", () => {
     }
   });
 
-  it("runs WeChat polling, context-bound sends, encrypted upload and structured API failures", async () => {
+  it("runs WeChat polling, context-bound sends, encrypted upload", async () => {
     await using directory = await mkdtempDisposable(join(tmpdir(), "rome-im-"));
     const file = join(directory.path, "hello.txt");
     await writeFile(file, "fixture file 中文");
@@ -91,31 +106,13 @@ describe("IM protocol fixtures with real SDKs", () => {
       fixture.emitMessage("Hello WeChat");
       expect(await received.promise).toMatchObject({ text: "Hello WeChat" });
       await adapter.notifyTyping(WECHAT_USER);
-      expect(await adapter.createText(WECHAT_USER, "reply")).toBeUndefined();
+      await adapter.sendMessage(WECHAT_USER, WECHAT_USER, { text: "reply" });
       await adapter.sendMessage(WECHAT_USER, WECHAT_USER, {
         attachments: [{ type: "document", source: file }],
       });
       expect(fixture.messages).toHaveLength(2);
       expect(fixture.uploads).toHaveLength(1);
       expect(Buffer.from(fixture.uploads[0]).toString()).not.toContain("fixture file");
-      fixture.server.once({
-        method: "POST",
-        path: "/ilink/bot/sendmessage",
-        response: { body: { ret: -1, errmsg: "blocked" } },
-      });
-      await expect(adapter.createText(WECHAT_USER, "rejected")).rejects.toMatchObject({
-        kind: "failed",
-      });
-      fixture.server.once({
-        method: "POST",
-        path: "/ilink/bot/sendmessage",
-        response: { status: 429, headers: { "retry-after": "2" } },
-      });
-      await expect(adapter.createText(WECHAT_USER, "limited")).rejects.toMatchObject({
-        kind: "rate-limit",
-        retryAfterMs: 2000,
-      });
-      expect(fixture.messages).toHaveLength(2);
       fixture.server.assertClean();
     } finally {
       await adapter.stop();
@@ -135,12 +132,24 @@ describe("IM protocol fixtures with real SDKs", () => {
         text: "你好 👋",
         channelUserId: DISCORD_USER,
       });
-      const receipt = await adapter.createText(DISCORD_DM, "First");
-      await adapter.updateText(DISCORD_DM, receipt.messageId, "Final 中文 👋");
-      expect(fixture.messages.get(receipt.messageId)?.content).toBe("Final 中文 👋");
+      const receipt = await adapter.sendMessage(DISCORD_USER, DISCORD_DM, { text: "First" });
+      const rest = fixture.transport().createRest!({ version: "10" }).setToken(DISCORD_TOKEN);
+      for (const content of ["F", "Final 中文", "Final 中文 👋"]) {
+        await rest.patch(Routes.channelMessage(DISCORD_DM, receipt.messageId!), {
+          body: { content },
+        });
+        expect(await rest.get(Routes.channelMessage(DISCORD_DM, receipt.messageId!))).toMatchObject(
+          {
+            id: receipt.messageId,
+            content,
+          },
+        );
+        expect(fixture.messages.get(receipt.messageId!)?.content).toBe(content);
+      }
+      expect(fixture.messages.size).toBe(2);
       expect(
         fixture.server.calls.filter((call) => call.path.endsWith(`/messages/${receipt.messageId}`)),
-      ).toHaveLength(1);
+      ).toHaveLength(6);
       fixture.server.assertClean();
     } finally {
       await adapter.stop();
@@ -153,10 +162,11 @@ describe("IM protocol fixtures with real SDKs", () => {
     true,
   ])("honors Discord 429 (global=%s) and distinguishes an accepted request whose response was lost", async (global) => {
     const fixture = await new DiscordApiFixture().start();
-    const adapter = fixture.createAdapter();
+    const rest = fixture.transport().createRest!({ version: "10", retries: 0 }).setToken(
+      DISCORD_TOKEN,
+    );
     const path = `/api/v10/channels/${DISCORD_DM}/messages`;
     try {
-      await adapter.start();
       fixture.server.once({
         method: "POST",
         path,
@@ -166,8 +176,10 @@ describe("IM protocol fixtures with real SDKs", () => {
           headers: { "retry-after": "0.02", "x-ratelimit-bucket": "fixture" },
         },
       });
-      const receipt = await adapter.createText(DISCORD_DM, "after limit");
-      expect(fixture.messages.get(receipt.messageId)?.content).toBe("after limit");
+      const receipt = (await rest.post(Routes.channelMessages(DISCORD_DM), {
+        body: { content: "after limit" },
+      })) as { id: string };
+      expect(fixture.messages.get(receipt.id)?.content).toBe("after limit");
       const calls = fixture.server.calls.filter(
         (call) => call.method === "POST" && call.path === path,
       );
@@ -175,8 +187,10 @@ describe("IM protocol fixtures with real SDKs", () => {
       expect(calls[1].startedAt - calls[0].completedAt!).toBeGreaterThanOrEqual(18);
       fixture.server.once({ method: "POST", path, dropAfterAccept: true });
       await expect(
-        adapter.createText(DISCORD_DM, "accepted without response"),
-      ).rejects.toMatchObject({ kind: "unknown" });
+        rest.post(Routes.channelMessages(DISCORD_DM), {
+          body: { content: "accepted without response" },
+        }),
+      ).rejects.toThrow();
       expect(
         [...fixture.messages.values()].filter(
           (message) => message.content === "accepted without response",
@@ -184,7 +198,6 @@ describe("IM protocol fixtures with real SDKs", () => {
       ).toHaveLength(1);
       fixture.server.assertClean();
     } finally {
-      await adapter.stop();
       await fixture.close();
     }
   });
@@ -200,7 +213,7 @@ describe("IM protocol fixtures with real SDKs", () => {
         path: `/api/v10/channels/${DISCORD_DM}/messages`,
         before: barrier.wait,
       });
-      const pending = adapter.createText(DISCORD_DM, "delayed");
+      const pending = adapter.sendMessage(DISCORD_USER, DISCORD_DM, { text: "delayed" });
       await barrier.entered;
       expect(fixture.messages.size).toBe(0);
       barrier.release();

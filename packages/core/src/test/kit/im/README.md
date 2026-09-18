@@ -2,7 +2,7 @@
 
 Real-platform API capture: [IM API tracing](../../../../../../docs/observability/im-api-tracing.md). Use reviewed, synthetic captures to extend these modeled contracts.
 
-These fixtures run local HTTP and WebSocket peers behind the production SDKs. They test serialization, message identity, edits, polling, gateway events and delivery failures without platform accounts. Rome adapters, connection grants, pairing admission, scheduling and SQLite repositories remain real in the scenario tests.
+These fixtures run local HTTP and WebSocket peers behind the production SDKs. They test serialization, message identity, edits, polling, gateway events and delivery failures without platform accounts. Rome adapters and SDK clients remain real.
 
 Run from the repository root:
 
@@ -10,7 +10,7 @@ Run from the repository root:
 pnpm test:im
 ```
 
-The files use `.integration.test.ts`, so `pnpm test:integration` and its CI job include them. Fast assembler and scheduler tests remain in the unit suite.
+The files use `.integration.test.ts`, so `pnpm test:integration` and its CI job include them. Fast unit tests remain in the unit suite.
 
 ## Supported contracts
 
@@ -25,7 +25,48 @@ Payload builders live next to each route implementation. They contain synthetic 
 
 Protocol references: [Discord Gateway](https://discord.com/developers/docs/topics/gateway), [Discord messages](https://discord.com/developers/docs/resources/message), [Lark messages](https://open.larksuite.com/document/server-docs/im-v1/message/create), [Lark SDK](https://github.com/larksuite/node-sdk), and [Telegram Bot API](https://core.telegram.org/bots/api). WeChat fixtures follow the request and response shapes in `src/channels/wechat.ts`, without assuming Telegram-style message receipts.
 
+## Recorded Feishu text responses
+
+`feishu-text.capture.json` contains reviewed responses from a real Feishu bot private chat recorded on 2026-09-18 with SDK 1.68.0. The capture uses `traceLarkHttp` in the local Rome container and credentials from its connection ledger. The five operations create, read, update, read and reply to a test message. Identifiers, tenant keys, timestamps and message positions use synthetic values. Message text is a dedicated test payload. Authentication exchanges and headers are excluded.
+
+`feishu-capture.integration.test.ts` runs the sequence through the real SDK against both recorded responses and the modeled routes. It checks sender fields, message identity, edited content and reply ancestry. Times and message positions vary between runs, so the comparison checks their numeric-string shape. This capture does not cover inbound WebSocket frames, cards, reactions or failures.
+
+## Feishu conversation coverage
+
+`feishu-conversation.integration.test.ts` connects `createLarkServerStub()` to the production SDK, connection registry, pairing admission, inbox hook, action engine, agent runner and SQLite repositories. Only the remote model and Feishu endpoints are replaced. It covers final-only rich-text replies, provider message ids and reply ancestry, consecutive turns, backend continuation, chat isolation, empty/error model results and rejected sends. Tests wait for persisted action completion before asserting delivery and history.
+
+Feishu currently has no `textDelivery` feature. These tests exercise the final-send fallback and assert that drafts are not sent or edited; they do not claim streaming or active-turn input admission coverage. Pairing approval remains covered by `scenarios.integration.test.ts`.
+
 ## Script a scenario
+
+### Stateful Lark server
+
+`createLarkServerStub()` starts an isolated `LarkApiFixture` on a random loopback port. Each call owns its message store and fault queue.
+
+```ts
+import { createLarkServerStub, LARK_CHAT } from "./lark.js";
+
+const stub = await createLarkServerStub();
+const channel = stub.createChannel();
+try {
+  await channel.connect();
+  const sent = await channel.send(LARK_CHAT, { text: "preview" });
+  await channel.rawClient.im.message.update({
+    path: { message_id: sent.messageId },
+    data: { msg_type: "text", content: JSON.stringify({ text: "final" }) },
+  });
+  const stored = stub.messages.get(sent.messageId);
+  expect(stored?.body.content).toBe(JSON.stringify({ text: "final" }));
+  stub.server.assertClean();
+} finally {
+  await channel.disconnect();
+  await stub.close();
+}
+```
+
+Use `createAdapter()` for the Rome adapter, `emitMessage()` for inbound events and `server.once()` for fault injection. `server.url` exposes the HTTP address. SDK clients must use the guarded transport from `createChannel()` rather than setting that address as their domain.
+
+### Fault barriers
 
 ```ts
 const fixture = await new DiscordApiFixture().start();
@@ -38,9 +79,9 @@ try {
     path: `/api/v10/channels/${DISCORD_DM}/messages`,
     before: barrier.wait,
   });
-  const pending = adapter.createText(DISCORD_DM, "hello");
+  const pending = adapter.sendMessage(DISCORD_DM, DISCORD_DM, { text: "hello" });
   await barrier.entered;
-  // Inject additional model output, Stop, or a grant revocation here.
+  // Assert the pending request before releasing it.
   barrier.release();
   const receipt = await pending;
   expect(fixture.messages.get(receipt.messageId)?.content).toBe("hello");
@@ -72,6 +113,6 @@ Telegram's HTTP fixture exercises grammy's multipart serialization, unlike the f
 
 ## Acceptance and limits
 
-The suite covers progressive overflow parts, later commentary/final output, Stop during create, ordinary split/attachment pacing, partial receipts, SQLite recording failure, uncertain creates/edits, revocation, Discord route/global 429 handling, and Telegram/Lark pairing admission. Input queue startup, deferred/unknown steering, backend continuations, Envoy and WebChat retain their existing regression tests.
+The suite covers SDK serialization, polling, gateway input, message identity, edits, multipart uploads, fault barriers, API trace redaction and Feishu capture replay. Discord, Telegram and Lark tests apply multiple incremental edits through the real SDK and verify stable message identity and current content. The peers support streaming sends and edits independently of Rome’s delivery scheduler. `scenarios.integration.test.ts` covers Rome delivery scheduling, pairing admission and receipt persistence. `delivery-apis.integration.test.ts` checks adapter delivery outcomes through these peers.
 
 This is a protocol subset, not an emulator for every platform feature. Unknown APIs must be added explicitly. Full gateway resume replay, complete card schemas, arbitrary CDN downloads, and vendor-wide quota policies are not modeled. The fixtures do not add Lark streaming delivery. Live-account checks remain necessary to verify real permissions and platform behavior.

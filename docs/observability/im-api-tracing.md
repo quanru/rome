@@ -17,7 +17,7 @@ Records use the `im-api-trace` logger and follow the existing [observability pip
 Export records from the branch's container as JSON Lines:
 
 ```sh
-docker logs codex-im-streaming-delivery-rome-1 2>&1 |
+docker compose -f compose.dev.yml -p "$(scripts/worktree-slug.sh)" logs --no-log-prefix rome 2>&1 |
   jq -Rc 'fromjson? | select(.component == "im-api-trace") | .data.event | fromjson' > im-api-trace.jsonl
 ```
 

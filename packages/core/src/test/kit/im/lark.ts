@@ -28,6 +28,15 @@ interface LarkMessage {
   create_time: string;
   deleted: boolean;
   updated: boolean;
+  update_time?: string;
+  sender?: { id: string; id_type: string; sender_type: string; tenant_key: string };
+  parent_id?: string;
+  root_id?: string;
+}
+
+/** Starts an isolated HTTP/WebSocket peer. Disconnect its clients before calling close(). */
+export function createLarkServerStub(): Promise<LarkApiFixture> {
+  return new LarkApiFixture().start();
 }
 
 export class LarkApiFixture {
@@ -189,7 +198,7 @@ export class LarkApiFixture {
     await pending.promise;
   }
 
-  private route({ method, path, body, headers }: FixtureRequest) {
+  private route({ method, path, body, headers, query }: FixtureRequest) {
     if (method === "POST" && path === "/callback/ws/endpoint") {
       if (body.AppID !== this.appId || body.AppSecret !== this.appSecret)
         return { body: { code: 1000040343, msg: "invalid credential", data: {} } };
@@ -212,8 +221,13 @@ export class LarkApiFixture {
       return { status: 401, body: { code: 99991663, msg: "invalid token" } };
     if (method === "GET" && path === "/open-apis/bot/v3/info")
       return { body: { code: 0, bot: { open_id: "ou_fixture_bot", app_name: "Rome" } } };
-    if (method === "POST" && path === "/open-apis/im/v1/messages")
-      return this.createMessage(String(body.receive_id), body);
+    if (method === "POST" && path === "/open-apis/im/v1/messages") {
+      const chatId =
+        query.get("receive_id_type") === "open_id" && body.receive_id === LARK_USER
+          ? LARK_CHAT
+          : String(body.receive_id);
+      return this.createMessage(chatId, body);
+    }
     const match = path.match(
       /^\/open-apis\/im\/v1\/messages\/([^/]+)(?:\/(reply|reactions)(?:\/([^/]+))?)?$/,
     );
@@ -228,27 +242,50 @@ export class LarkApiFixture {
     }
     if (!message) return { status: 400, body: { code: 230011, msg: "message not found" } };
     if (operation === "reply" && method === "POST")
-      return this.createMessage(message.chat_id, body);
-    if (method === "GET") return { body: { code: 0, data: { items: [message] } } };
+      return this.createMessage(message.chat_id, body, message);
+    if (method === "GET")
+      return {
+        body: {
+          code: 0,
+          msg: "success",
+          data: {
+            items: [
+              { ...message, message_position: String([...this.messages.keys()].indexOf(id) + 1) },
+            ],
+          },
+        },
+      };
     if (method === "PATCH" || method === "PUT") {
       message.body.content = String(body.content);
       message.updated = true;
-      return { body: { code: 0, data: message }, accepted: true };
+      message.update_time = String(Date.now());
+      return { body: { code: 0, msg: "success", data: message }, accepted: true };
     }
     return undefined;
   }
 
-  private createMessage(chatId: string, body: Record<string, unknown>) {
+  private createMessage(chatId: string, body: Record<string, unknown>, parent?: LarkMessage) {
+    const now = String(Date.now());
     const message = {
       message_id: `om_${this.nextId++}`,
       chat_id: chatId,
       msg_type: String(body.msg_type),
       body: { content: String(body.content) },
-      create_time: String(Date.now()),
+      create_time: now,
+      update_time: now,
+      sender: {
+        id: this.appId,
+        id_type: "app_id",
+        sender_type: "app",
+        tenant_key: "fixture-tenant",
+      },
+      ...(parent
+        ? { parent_id: parent.message_id, root_id: parent.root_id ?? parent.message_id }
+        : {}),
       deleted: false,
       updated: false,
     };
     this.messages.set(message.message_id, message);
-    return { body: { code: 0, data: message }, accepted: true };
+    return { body: { code: 0, msg: "success", data: message }, accepted: true };
   }
 }
