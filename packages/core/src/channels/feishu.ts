@@ -1,3 +1,4 @@
+import { traceLarkHttp } from "./diagnostics/lark-trace.js";
 import {
   createLarkChannel,
   type CardActionEvent,
@@ -131,6 +132,7 @@ export class FeishuAdapter implements ProviderAdapter {
         appId: c.appId,
         appSecret: c.appSecret,
         domain: c.domain === "lark" ? Domain.Lark : Domain.Feishu,
+        httpInstance: traceLarkHttp(c.domain === "lark" ? "lark" : "feishu"),
         transport: "websocket",
         outbound: { markdownConverter: "builtin" },
         // Populate `raw` on normalized events so rawEvent carries the real

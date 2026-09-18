@@ -1,3 +1,4 @@
+import { traceLarkHttp } from "../../channels/diagnostics/lark-trace.js";
 // Feishu and Lark connection integration. Channel contract: docs/architecture/channels.md.
 //
 // Feishu is a Talker with a single `app` grant: the custom-app credentials
@@ -392,6 +393,7 @@ function defaultCreateChannel(config: FeishuConfig): LarkChannel {
     appId: config.appId,
     appSecret: config.appSecret,
     domain: config.domain === "lark" ? Domain.Lark : Domain.Feishu,
+    httpInstance: traceLarkHttp(config.domain === "lark" ? "lark" : "feishu"),
     transport: "websocket",
     outbound: { markdownConverter: "builtin" },
     includeRawEvent: true,
