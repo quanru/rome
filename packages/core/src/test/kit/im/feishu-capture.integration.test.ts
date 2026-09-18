@@ -1,10 +1,12 @@
 import { describe, expect, it } from "@rstest/core";
 import capture from "./feishu-text.capture.json" with { type: "json" };
+import postCapture from "./feishu-post.capture.json" with { type: "json" };
 import { createLarkServerStub, LARK_USER } from "./lark.js";
 
 function normalizeResponse(value: unknown): unknown {
   return JSON.parse(
     JSON.stringify(value, (key, item) => {
+      if (key === "content" && typeof item === "string") return JSON.parse(item);
       if (key === "create_time" || key === "update_time") {
         expect(item).toMatch(/^\d+$/);
         return "1700000000000";
@@ -82,4 +84,71 @@ describe("Feishu text capture", () => {
       await fixture.close();
     }
   });
+});
+
+describe("Feishu post capture", () => {
+  for (const scenario of postCapture.cases) {
+    for (const mode of ["invalid-message", "markdown"].includes(scenario.name)
+      ? ["replay"]
+      : ["replay", "model"]) {
+      it(`${scenario.name} through ${mode}`, async () => {
+        const fixture = await createLarkServerStub();
+        const channel = fixture.createChannel();
+        try {
+          const client = channel.rawClient;
+          for (const exchange of scenario.exchanges) {
+            const operation = exchange.operation as "create" | "get" | "reply" | "update";
+            const params = exchange.params;
+            const messageId = "path" in params ? params.path?.message_id : undefined;
+            const path = `/open-apis/im/v1/messages${messageId ? `/${messageId}` : ""}${operation === "reply" ? "/reply" : ""}`;
+            if (mode === "replay") {
+              fixture.server.once({
+                method: operation === "get" ? "GET" : operation === "update" ? "PUT" : "POST",
+                path,
+                response: { status: exchange.status, body: exchange.response },
+              });
+            }
+            const invoke = () => {
+              switch (operation) {
+                case "create":
+                  return client.im.message.create(
+                    params as Parameters<typeof client.im.message.create>[0],
+                  );
+                case "get":
+                  return client.im.message.get(
+                    params as Parameters<typeof client.im.message.get>[0],
+                  );
+                case "reply":
+                  return client.im.message.reply(
+                    params as Parameters<typeof client.im.message.reply>[0],
+                  );
+                case "update":
+                  return client.im.message.update(
+                    params as Parameters<typeof client.im.message.update>[0],
+                  );
+              }
+            };
+            if (exchange.status !== 200) {
+              await expect(invoke()).rejects.toMatchObject({
+                response: { status: exchange.status, data: exchange.response },
+              });
+            } else {
+              expect(normalizeResponse(await invoke())).toEqual(
+                normalizeResponse(exchange.response),
+              );
+            }
+            expect(fixture.server.calls.at(-1)).toMatchObject({
+              path,
+              body: "data" in params ? params.data : {},
+              status: exchange.status,
+            });
+          }
+          fixture.server.assertClean();
+        } finally {
+          await channel.disconnect();
+          await fixture.close();
+        }
+      });
+    }
+  }
 });

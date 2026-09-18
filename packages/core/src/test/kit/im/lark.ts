@@ -32,6 +32,7 @@ interface LarkMessage {
   sender?: { id: string; id_type: string; sender_type: string; tenant_key: string };
   parent_id?: string;
   root_id?: string;
+  thread_id?: string;
 }
 
 /** Starts an isolated HTTP/WebSocket peer. Disconnect its clients before calling close(). */
@@ -252,13 +253,25 @@ export class LarkApiFixture {
           msg: "success",
           data: {
             items: [
-              { ...message, message_position: String([...this.messages.keys()].indexOf(id) + 1) },
+              {
+                ...message,
+                message_position: String([...this.messages.keys()].indexOf(id) + 1),
+                ...(message.thread_id
+                  ? {
+                      thread_message_position: String(
+                        [...this.messages.values()]
+                          .filter((item) => item.thread_id === message.thread_id && item.parent_id)
+                          .findIndex((item) => item.message_id === id),
+                      ),
+                    }
+                  : {}),
+              },
             ],
           },
         },
       };
     if (method === "PATCH" || method === "PUT") {
-      message.body.content = String(body.content);
+      message.body.content = this.messageContent(body);
       message.updated = true;
       message.update_time = String(Date.now());
       return { body: { code: 0, msg: "success", data: message }, accepted: true };
@@ -267,12 +280,17 @@ export class LarkApiFixture {
   }
 
   private createMessage(chatId: string, body: Record<string, unknown>, parent?: LarkMessage) {
+    if (parent && body.reply_in_thread) {
+      const root = this.messages.get(parent.root_id ?? parent.message_id)!;
+      root.thread_id ??= root.message_id.replace(/^om_/, "omt_");
+      parent.thread_id = root.thread_id;
+    }
     const now = String(Date.now());
     const message = {
       message_id: `om_${this.nextId++}`,
       chat_id: chatId,
       msg_type: String(body.msg_type),
-      body: { content: String(body.content) },
+      body: { content: this.messageContent(body) },
       create_time: now,
       update_time: now,
       sender: {
@@ -282,12 +300,39 @@ export class LarkApiFixture {
         tenant_key: "fixture-tenant",
       },
       ...(parent
-        ? { parent_id: parent.message_id, root_id: parent.root_id ?? parent.message_id }
+        ? {
+            parent_id: parent.message_id,
+            root_id: parent.root_id ?? parent.message_id,
+            ...(body.reply_in_thread ? { thread_id: parent.thread_id } : {}),
+          }
         : {}),
       deleted: false,
       updated: false,
     };
     this.messages.set(message.message_id, message);
     return { body: { code: 0, msg: "success", data: message }, accepted: true };
+  }
+
+  private messageContent(body: Record<string, unknown>): string {
+    const content = String(body.content);
+    if (body.msg_type !== "post") return content;
+    const localized = JSON.parse(content);
+    const post = localized.zh_cn ?? localized.en_us;
+    if (!post) throw new Error("Unmodeled Lark post locale");
+    // Only captured text/link elements model server normalization. Other tags stay synthetic.
+    if (
+      post.content
+        .flat()
+        .some((element: Record<string, unknown>) => !["text", "a"].includes(String(element.tag)))
+    )
+      return content;
+    const rows = post.content.map((row: Record<string, unknown>[]) =>
+      row.map((element) =>
+        element.tag === "text" || element.tag === "a"
+          ? { ...element, style: element.style ?? [] }
+          : element,
+      ),
+    );
+    return JSON.stringify({ title: post.title ?? "", content: rows, content_v2: rows });
   }
 }
