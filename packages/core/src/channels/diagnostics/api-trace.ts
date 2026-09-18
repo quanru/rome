@@ -58,11 +58,14 @@ function sanitize(value: unknown, depth = 0): unknown {
   if (depth > 12) return "[depth limit]";
   if (typeof value === "string") {
     if (/^(https?|wss?):\/\//.test(value)) return safeUrl(value);
-    try {
-      return JSON.stringify(sanitize(JSON.parse(value), depth + 1));
-    } catch {
-      return value.slice(0, LIMIT);
+    if (/^\s*[\[{]/.test(value)) {
+      try {
+        return JSON.stringify(sanitize(JSON.parse(value), depth + 1));
+      } catch {
+        return value.slice(0, LIMIT);
+      }
     }
+    return value.slice(0, LIMIT);
   }
   if (value === null || typeof value === "number" || typeof value === "boolean") return value;
   if (value === undefined) return null;

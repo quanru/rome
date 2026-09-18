@@ -70,6 +70,33 @@ describe("IM API diagnostics", () => {
     expect(JSON.stringify(events)).toContain("hello");
   });
 
+  it("preserves primitive strings and identifiers while redacting encoded JSON containers", async () => {
+    const events: ImApiTraceEvent[] = [];
+    configureImApiTrace(["all"], (event) => events.push(event));
+    const strings = [
+      "100000000000000001",
+      "100000000000000100",
+      "1e3",
+      "true",
+      "null",
+      '"hello"',
+      " 123 ",
+      "[invalid",
+    ];
+    const body = {
+      strings,
+      content: JSON.stringify({ message_id: strings[0], token: "nested-secret" }),
+      items: '  [{"message_id":"100000000000000100","secret":"array-secret"}]',
+    };
+    expect(await traceImApi("discord", "http", body, async () => body)).toBe(body);
+    for (const event of events) {
+      const detail = event.detail as typeof body;
+      expect(detail.strings).toEqual(strings);
+      expect(JSON.parse(detail.content)).toEqual({ message_id: strings[0], token: "[redacted]" });
+      expect(JSON.parse(detail.items)).toEqual([{ message_id: strings[1], secret: "[redacted]" }]);
+    }
+  });
+
   it("preserves response bodies and HTTP error status for callers", async () => {
     const events: ImApiTraceEvent[] = [];
     configureImApiTrace(["wechat"], (event) => events.push(event));
