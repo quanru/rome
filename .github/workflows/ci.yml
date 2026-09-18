@@ -126,6 +126,8 @@ jobs:
 
   shadcn-lint:
     name: shadcn lint
+    # Enable after the local trial and rule compatibility review.
+    if: ${{ vars.SHADCN_LINT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -138,16 +140,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Scan design-system usage
-        id: scan
-        continue-on-error: true
-        run: |
-          pnpm --silent lint:shadcn:report > "$RUNNER_TEMP/shadcn-lint.json" 2> "$RUNNER_TEMP/shadcn-lint.stderr.txt"
-      - name: Summarize findings
-        if: ${{ !cancelled() }}
-        env:
-          SCAN_OUTCOME: ${{ steps.scan.outcome }}
-        run: node scripts/report-shadcn-lint.mjs "$RUNNER_TEMP/shadcn-lint.json" "$RUNNER_TEMP/shadcn-lint.stderr.txt" "$SCAN_OUTCOME"
+      - run: pnpm lint:shadcn --deny-warnings
 
   # ──────────────────────────────────────────
   # Job 1b: DB schema drift — committed migrations must match the schema files
