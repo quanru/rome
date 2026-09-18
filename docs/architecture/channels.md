@@ -14,15 +14,15 @@ Every channel is connected through **one server-owned setup protocol** ([decisio
 
 ## Guardian reply delivery
 
-Guardian direct messages on Telegram, Discord, and WeChat use one main-process delivery owner per provider run. Group replies and other recipients retain their approval path.
+Guardian direct messages on Telegram, Discord, Feishu, and WeChat use one main-process delivery owner per provider run. Group replies and other recipients retain their approval path.
 
-Telegram and Discord create and edit each physical text part as assistant text arrives. WeChat sends bounded text blocks at a paced interval. Completed answers do not replay as artificial frames. Reasoning and tool events never enter this text delivery path.
+Telegram, Discord, and Feishu create and edit each physical text part as assistant text arrives. WeChat sends bounded text blocks at a paced interval. Completed answers do not replay as artificial frames. Reasoning and tool events never enter this text delivery path.
 
 The shared assembler tracks source text and block identity. WebChat uses the same text assembly while keeping its own SSE, cards, and replay. New guardian inputs enter `AgentInputQueue`, which applies provider-native steering or retains the input for a later run.
 
 Each adapter supplies a text codec and a validated delivery profile. `ROME_DELIVERY_PROFILE` accepts JSON defaults. The settings row `connection_delivery:<connectionId>` accepts per-connection overrides. Unknown fields, invalid bounds, unsupported formatting, and limits above the adapter's maximum fail validation.
 
-Profiles select `edit`, `blocks`, or `final`, with a fallback mode when editing is unavailable. They also set create/update spacing, conversation spacing, account budgets, burst capacity, part size, coalescing, pending age, and queue bounds. Initial streaming codecs use plain text. Native-format overrides are rejected.
+Profiles select `edit`, `blocks`, or `final`, with a fallback mode when editing is unavailable. They also set create/update spacing, conversation spacing, account budgets, burst capacity, part size, coalescing, pending age, and queue bounds. Initial streaming codecs use plain text. Native-format overrides are rejected. Feishu streaming uses single plain-text API calls. Ordinary Feishu sends retain the SDK Markdown-post path.
 
 The scheduler rotates conversations within a shared account budget. Ordinary `send_message` calls share that scheduler for every physical split and attachment. Each call resolves after transport completion and preserves the provider receipts for accepted parts.
 

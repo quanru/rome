@@ -1,3 +1,5 @@
+import { physicalOperation } from "../connections/delivery/physical-operation.js";
+import { DeliveryFailure } from "../connections/delivery/transport.js";
 import { traceLarkHttp } from "./diagnostics/lark-trace.js";
 import {
   createLarkChannel,
@@ -101,8 +103,8 @@ export type CreateLarkChannel = (config: FeishuConfig) => LarkChannel;
  *   resolved chat type, structured mentions) — we just map onto Rome's shape;
  * - outbound `send(..., { markdown })` runs the SDK's builtin converter, which
  *   renders the text as a Feishu rich-text post so bold/lists/code/headings
- *   display correctly. Agent output is Markdown by design, so every reply takes
- *   this path — no need to sniff whether a given message "looks like" Markdown.
+ *   display correctly. Scheduled streaming uses single plain-text API operations
+ *   so Rome owns splitting and retries.
  *
  * Media attachments remain out of scope (text/post only).
  */
@@ -207,6 +209,56 @@ export class FeishuAdapter implements ProviderAdapter {
         error: err instanceof Error ? err.message : String(err),
       });
       throw err;
+    }
+  }
+
+  async createText(threadId: string, text: string, replyToMessageId?: string) {
+    try {
+      const data = { msg_type: "text", content: JSON.stringify({ text }) };
+      const replyInThread = replyToMessageId
+        ? ((await this.getChannelConfig(threadId)).autoThread ?? true)
+        : false;
+      const sent = await physicalOperation(threadId, "create", () =>
+        replyToMessageId
+          ? this.channel.rawClient.im.message.reply({
+              path: { message_id: replyToMessageId },
+              data: { ...data, reply_in_thread: replyInThread },
+            })
+          : this.channel.rawClient.im.message.create({
+              params: {
+                receive_id_type: threadId.startsWith("oc_")
+                  ? "chat_id"
+                  : threadId.startsWith("ou_")
+                    ? "open_id"
+                    : threadId.startsWith("on_")
+                      ? "union_id"
+                      : threadId.includes("@")
+                        ? "email"
+                        : "user_id",
+              },
+              data: { ...data, receive_id: threadId },
+            }),
+      );
+      if (sent.code !== 0) throw sent;
+      if (!sent.data?.message_id)
+        throw new DeliveryFailure("unknown", "Feishu did not return a message identity");
+      return { messageId: sent.data.message_id, threadId };
+    } catch (error) {
+      throw feishuDeliveryFailure(error);
+    }
+  }
+
+  async updateText(threadId: string, messageId: string, text: string): Promise<void> {
+    try {
+      const response = await physicalOperation(threadId, "update", () =>
+        this.channel.rawClient.im.message.update({
+          path: { message_id: messageId },
+          data: { msg_type: "text", content: JSON.stringify({ text }) },
+        }),
+      );
+      if (response.code !== 0) throw response;
+    } catch (error) {
+      throw feishuDeliveryFailure(error);
     }
   }
 
@@ -747,4 +799,27 @@ function extractCardActionField(
   field: string,
 ): string | null {
   return extractStringField(value, field) ?? extractStringField(raw, field);
+}
+
+function feishuDeliveryFailure(error: unknown): DeliveryFailure {
+  if (error instanceof DeliveryFailure) return error;
+  const response = (
+    error as { response?: { status?: number; headers?: Record<string, unknown> } } | null
+  )?.response;
+  const message = error instanceof Error ? error.message : "Feishu rejected the message";
+  const code = extractFeishuErrorCode(error);
+  if (response?.status === 429 || code === 230020 || code === 99991400) {
+    const delay = Number(response?.headers?.["retry-after"]);
+    return new DeliveryFailure(
+      "rate-limit",
+      message,
+      [],
+      Number.isFinite(delay) && delay > 0 ? delay * 1000 : 1000,
+    );
+  }
+  if (isFeishuAuthError(error) || response?.status === 401 || response?.status === 403)
+    return new DeliveryFailure("authorization", message);
+  if (code !== null || (response?.status && response.status < 500))
+    return new DeliveryFailure("failed", message);
+  return new DeliveryFailure("unknown", message);
 }

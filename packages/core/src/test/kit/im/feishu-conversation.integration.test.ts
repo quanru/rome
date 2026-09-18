@@ -184,12 +184,7 @@ describe("Feishu conversation through the SDK, inbox and real agent runtime", ()
   });
 
   it("delivers only the final result, persists provider ids, and reuses the conversation on the next turn", async () => {
-    const { rome, stub, router, connection } = stack;
-    expect(
-      await router.createRunDelivery(connection.id, "feishu-run", {
-        conversationId: LARK_CHAT as ConversationId,
-      }),
-    ).toBeNull();
+    const { rome, stub } = stack;
     rome.model.queueReply(thinking("private reasoning"), text("draft"), result("first answer"));
     await stack.send("first question", "first");
     const first = await rome.repos.sessions.findByChannelThreadKey(`feishu:${LARK_CHAT}`, "main");
@@ -237,7 +232,7 @@ describe("Feishu conversation through the SDK, inbox and real agent runtime", ()
     const session = await rome.repos.sessions.findByChannelThreadKey(`feishu:${LARK_CHAT}`, "main");
     expect(session).not.toBeNull();
     const before = await stack.messages();
-    rome.model.queueReply(text("unfinished continuation"), result("task completed"));
+    rome.model.queueReply({ type: "text_delta", content: "task " }, result("task completed"));
     await createBackendTurnRunner({
       agentRunner: rome.agentRunner,
       talkRouter: router,
@@ -260,7 +255,7 @@ describe("Feishu conversation through the SDK, inbox and real agent runtime", ()
     );
     expect(replies).toHaveLength(2);
     expect(JSON.parse(replies[1].body.content)).toEqual({
-      zh_cn: { title: "", content: [[{ tag: "md", text: "task completed" }]] },
+      text: "task completed",
     });
     const recorded = (await stack.messages()).filter((message) => message.role === "assistant");
     expect(recorded).toHaveLength(2);

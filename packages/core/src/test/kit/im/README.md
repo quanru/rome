@@ -35,7 +35,7 @@ Protocol references: [Discord Gateway](https://discord.com/developers/docs/topic
 
 `feishu-conversation.integration.test.ts` connects `createLarkServerStub()` to the production SDK, connection registry, pairing admission, inbox hook, action engine, agent runner and SQLite repositories. Only the remote model and Feishu endpoints are replaced. It covers final-only rich-text replies, provider message ids and reply ancestry, consecutive turns, backend continuation, chat isolation, empty/error model results and rejected sends. Tests wait for persisted action completion before asserting delivery and history.
 
-Feishu currently has no `textDelivery` feature. These tests exercise the final-send fallback and assert that drafts are not sent or edited; they do not claim streaming or active-turn input admission coverage. Pairing approval remains covered by `scenarios.integration.test.ts`.
+The inbox tests exercise the final-send fallback and assert that drafts are not sent or edited. Backend continuation uses `textDelivery`. The IPC streaming tests below cover incremental output, cancellation and model failure. Pairing approval remains covered by `scenarios.integration.test.ts`.
 
 ## Recorded Feishu rich text and threads
 
@@ -61,7 +61,7 @@ The sequence uses returned message objects from send/edit and the reply snapshot
 
 `wechat-text.capture.json` contains three HTTP exchanges from the production ilink adapter recorded on 2026-09-18: a context-bound text send, a send with a substituted context token, and a send to an invalid recipient. The first two returned HTTP 200 with a numeric `message_id`. The invalid recipient returned HTTP 200 with `ret: -3` and `errmsg: "invalid arguments"`. API acceptance does not prove recipient delivery. Context validation cannot be inferred from these samples.
 
-`wechat-capture.integration.test.ts` replays successful responses through the real adapter and the API error at the HTTP boundary. It checks serialized requests. The foundation adapter does not reject HTTP 200 business errors. Adapter rejection belongs to the stacked delivery change, which checks `ret` and `errcode`. The captures replace recipients, context tokens, client IDs and message IDs with synthetic values and exclude authentication headers. The adapter discards the returned message ID. The local model's context rejection is a synthetic fault, not a verified provider rule. This capture does not cover inbound polling, read/edit operations, media or end-user delivery receipts.
+`wechat-capture.integration.test.ts` replays each response through the real adapter and checks serialized requests. The captured HTTP 200 business error also runs through the registry, router, scheduler and SQLite delivery repository. The test requires a failed attempt with no accepted receipt and no automatic retry. The captures replace recipients, context tokens, client IDs and message IDs with synthetic values and exclude authentication headers. The adapter discards the returned message ID. The local model's context rejection is a synthetic fault, not a verified provider rule. This capture does not cover inbound polling, read/edit operations, media or end-user delivery receipts.
 
 ## Script a scenario
 
@@ -137,8 +137,14 @@ Lark uses real Feishu/Lark domains when constructing SDK requests, then rewrites
 
 Telegram's HTTP fixture exercises grammy's multipart serialization, unlike the faster existing `FakeTelegramApi` transformer fixture. Its fetch bridge adapts grammy's Node AbortSignal and streaming bodies to native fetch.
 
+## Agent streaming acceptance
+
+`streaming-conversation.integration.test.ts` drives the real AgentSession manager through the IPC bridge, connection registry, delivery scheduler, real SDKs and local Discord, Telegram and Feishu peers. Only the model and worker process boundary are scripted. Barriers hold generation open until the first provider message and its next edit complete. The tests require one stable message ID, complete final content, and an accepted settlement only after successful generation. Cancellation prevents later edits. Model failure preserves accepted partial output without recording a completed reply.
+
+Physical acceptance and generation completion are separate facts. A cancelled or failed turn can retain an accepted create/update receipt. It must not turn that receipt into a settled final reply.
+
 ## Acceptance and limits
 
 The suite covers SDK serialization, polling, gateway input, message identity, edits, multipart uploads, fault barriers, API trace redaction and Feishu capture replay. Discord, Telegram and Lark tests apply multiple incremental edits through the real SDK and verify stable message identity and current content. The peers support streaming sends and edits independently of Rome’s delivery scheduler. `scenarios.integration.test.ts` covers Rome delivery scheduling, pairing admission and receipt persistence. `delivery-apis.integration.test.ts` checks adapter delivery outcomes through these peers.
 
-This is a protocol subset, not an emulator for every platform feature. Unknown APIs must be added explicitly. Full gateway resume replay, complete card schemas, arbitrary CDN downloads, and vendor-wide quota policies are not modeled. The fixtures do not add Lark streaming delivery. Live-account checks remain necessary to verify real permissions and platform behavior.
+This is a protocol subset, not an emulator for every platform feature. Unknown APIs must be added explicitly. Full gateway resume replay, complete card schemas, arbitrary CDN downloads, and vendor-wide quota policies are not modeled. Feishu streaming uses plain-text create/reply/update calls so the scheduler owns splitting and retries; ordinary sends retain SDK-rendered Markdown posts. Live-account checks remain necessary to verify real permissions and platform behavior.

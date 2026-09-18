@@ -1,3 +1,5 @@
+import { feishuDeliveryProfile } from "./delivery-profiles.js";
+import { textDeliveryFeature } from "./text-delivery-feature.js";
 import { traceLarkHttp } from "../../channels/diagnostics/lark-trace.js";
 // Feishu and Lark connection integration. Channel contract: docs/architecture/channels.md.
 //
@@ -546,6 +548,10 @@ export function createFeishuDescriptor(deps: FeishuDescriptorDeps): ConnectionDe
                 },
               };
               const features: Partial<TalkFeatureMap> = {
+                textDelivery: textDeliveryFeature(
+                  feishuDeliveryProfile(`feishu:${app.domain ?? "feishu"}:${app.appId}`),
+                  adapter,
+                ),
                 directMessaging: addressIsConversationFeature(),
                 activity,
                 directory,

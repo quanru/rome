@@ -34,3 +34,7 @@ export function wechatDeliveryProfile(budgetKey: string): DeliveryProfile {
     coalesceMs: 1000,
   };
 }
+
+export function feishuDeliveryProfile(budgetKey: string): DeliveryProfile {
+  return { ...defaults, mode: "edit", budgetKey, maxPartSize: 3500 };
+}

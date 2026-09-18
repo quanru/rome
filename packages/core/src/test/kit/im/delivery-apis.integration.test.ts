@@ -1,3 +1,4 @@
+import { LarkApiFixture, LARK_CHAT } from "./lark.js";
 import { describe, expect, it } from "@rstest/core";
 import { DiscordApiFixture, DISCORD_DM, DISCORD_USER } from "./discord.js";
 import { deferred } from "./server.js";
@@ -9,6 +10,66 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("IM delivery adapters through local protocol peers", () => {
+  it("keeps Feishu API refusal and unknown acceptance distinct without SDK retries", async () => {
+    const fixture = await new LarkApiFixture().start();
+    const adapter = fixture.createAdapter();
+    const path = "/open-apis/im/v1/messages";
+    try {
+      await adapter.start();
+      const receipt = await adapter.createText(LARK_CHAT, "preview");
+      await adapter.updateText(LARK_CHAT, receipt.messageId, "final");
+      expect(JSON.parse(fixture.messages.get(receipt.messageId)!.body.content)).toEqual({
+        text: "final",
+      });
+      for (const [code, kind] of [
+        [230011, "failed"],
+        [230020, "rate-limit"],
+        [99991663, "authorization"],
+      ] as const) {
+        fixture.server.once({
+          method: "PUT",
+          path: `${path}/${receipt.messageId}`,
+          response: { body: { code, msg: "fixture refusal" } },
+        });
+        await expect(
+          adapter.updateText(LARK_CHAT, receipt.messageId, "rejected"),
+        ).rejects.toMatchObject({ kind });
+      }
+      fixture.server.once({
+        method: "PUT",
+        path: `${path}/${receipt.messageId}`,
+        response: { status: 429, headers: { "retry-after": "2" }, body: { code: 99991400 } },
+      });
+      await expect(
+        adapter.updateText(LARK_CHAT, receipt.messageId, "limited"),
+      ).rejects.toMatchObject({
+        kind: "rate-limit",
+        retryAfterMs: 2000,
+      });
+      fixture.server.once({
+        method: "POST",
+        path,
+        response: { body: { code: 230011, msg: "fixture refusal" } },
+      });
+      await expect(adapter.createText(LARK_CHAT, "rejected")).rejects.toMatchObject({
+        kind: "failed",
+      });
+      expect(fixture.messages.size).toBe(1);
+      fixture.server.once({ method: "POST", path, dropAfterAccept: true });
+      await expect(
+        adapter.createText(LARK_CHAT, "accepted but disconnected"),
+      ).rejects.toMatchObject({ kind: "unknown" });
+      expect(fixture.messages.size).toBe(2);
+      expect(
+        fixture.server.calls.filter((call) => call.method === "POST" && call.path === path),
+      ).toHaveLength(3);
+      fixture.server.assertClean();
+    } finally {
+      await adapter.stop();
+      await fixture.close();
+    }
+  });
+
   it("runs Telegram long polling, editing and real multipart file serialization", async () => {
     await using directory = await mkdtempDisposable(join(tmpdir(), "rome-im-"));
     const file = join(directory.path, "hello.txt");
