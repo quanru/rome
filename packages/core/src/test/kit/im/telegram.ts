@@ -101,6 +101,11 @@ export class TelegramApiFixture {
             description: "Bad Request: message to edit not found",
           },
         };
+      const text = String(body.text ?? "");
+      if (!text.length || text.length > 4096)
+        return {
+          body: { ok: false, error_code: 400, description: "Bad Request: invalid text length" },
+        };
       message.text = body.text;
       return { body: { ok: true, result: message }, accepted: true };
     }

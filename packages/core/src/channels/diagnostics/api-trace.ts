@@ -99,11 +99,27 @@ function emit(event: Omit<ImApiTraceEvent, "schemaVersion" | "timestamp">) {
   try {
     const safe = sanitize(event.detail);
     const encoded = JSON.stringify(safe);
+    const detail =
+      Buffer.byteLength(encoded) > LIMIT
+        ? {
+            ...Object.fromEntries(
+              Object.entries(safe && typeof safe === "object" ? safe : {}).flatMap(
+                ([key, value]) =>
+                  ["method", "url", "status", "code", "name"].includes(key) &&
+                  (typeof value === "string" || typeof value === "number")
+                    ? [[key, typeof value === "string" ? value.slice(0, 1024) : value]]
+                    : [],
+              ),
+            ),
+            omitted: "size limit",
+            bytes: Buffer.byteLength(encoded),
+          }
+        : safe;
     sink({
       ...event,
       schemaVersion: 1,
       timestamp: new Date().toISOString(),
-      detail: encoded.length > LIMIT ? { omitted: "size limit", characters: encoded.length } : safe,
+      detail,
     });
   } catch {
     /* Diagnostics must not change delivery outcomes. */
@@ -207,7 +223,9 @@ export function traceImFetch(platform: ImPlatform, request: typeof fetch): typeo
       {
         url: String(input instanceof Request ? input.url : input),
         method: init?.method ?? (input instanceof Request ? input.method : "GET"),
-        headers: init?.headers ?? (input instanceof Request ? input.headers : undefined),
+        headers: new Headers(
+          init?.headers ?? (input instanceof Request ? input.headers : undefined),
+        ),
         body:
           init?.body ??
           (input instanceof Request && input.body ? { omitted: "request stream" } : undefined),

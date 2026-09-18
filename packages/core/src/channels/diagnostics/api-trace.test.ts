@@ -86,6 +86,64 @@ describe("IM API diagnostics", () => {
     expect(JSON.stringify(events)).not.toContain('"secret"');
   });
 
+  it.each([
+    "object",
+    "tuples",
+    "Headers",
+  ])("redacts %s headers without changing the request", async (form) => {
+    const events: ImApiTraceEvent[] = [];
+    configureImApiTrace(["wechat"], (event) => events.push(event));
+    const values = { Authorization: "Bearer fixture-secret", Cookie: "session=fixture-cookie" };
+    const headers: HeadersInit =
+      form === "tuples"
+        ? Object.entries(values)
+        : form === "Headers"
+          ? new Headers(values)
+          : values;
+    const response = Response.json({ ok: true });
+    const request = traceImFetch("wechat", async (_input, init) => {
+      expect(init?.headers).toBe(headers);
+      return response;
+    });
+    expect(await request("https://example.com/send", { headers })).toBe(response);
+    expect(events[0].detail).toMatchObject({
+      headers: { authorization: "[redacted]", cookie: "[redacted]" },
+    });
+    expect(JSON.stringify(events)).not.toContain("fixture-secret");
+    expect(JSON.stringify(events)).not.toContain("fixture-cookie");
+  });
+
+  it("retains bounded, redacted exchange metadata when payloads exceed the limit", async () => {
+    const events: ImApiTraceEvent[] = [];
+    configureImApiTrace(["all"], (event) => events.push(event));
+    const body = { first: "中".repeat(8000), second: "文".repeat(8000), token: "fixture-secret" };
+    const result = { status: 429, code: 123, body };
+    expect(
+      await traceImApi(
+        "lark",
+        "sdk",
+        {
+          method: "POST",
+          url: "https://example.com/messages?token=fixture-secret",
+          body,
+        },
+        async () => result,
+      ),
+    ).toBe(result);
+    expect(events[0].detail).toMatchObject({
+      method: "POST",
+      url: "https://example.com/messages?token=%5Bredacted%5D",
+      omitted: "size limit",
+    });
+    expect(events[1].detail).toMatchObject({ status: 429, code: 123, omitted: "size limit" });
+    for (const event of events) {
+      expect(Buffer.byteLength(JSON.stringify(event.detail))).toBeLessThanOrEqual(32_768);
+      expect(JSON.stringify(event.detail)).not.toContain("fixture-secret");
+      expect(event.detail).not.toHaveProperty("body");
+    }
+    expect(events[0].exchangeId).toBe(events[1].exchangeId);
+  });
+
   it("preserves errors and delivery results when diagnostic sinks fail", async () => {
     configureImApiTrace(["all"], () => {
       throw new Error("sink failure");

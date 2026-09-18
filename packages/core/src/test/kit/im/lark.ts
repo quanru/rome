@@ -185,11 +185,13 @@ export class LarkApiFixture {
     [key: string]: unknown;
   }) {
     if (!this.server.ws.clients.size) throw new Error("Lark gateway has no connected SDK");
-    const id = event.header.event_id;
+    const sequence = this.nextId++;
+    // Redeliveries share an event id but each frame must own its ACK waiter.
+    const id = `${event.header.event_id}:${sequence}`;
     const pending = deferred();
     this.acknowledgements.set(id, pending);
     const payload = encodeLarkFrame({
-      sequence: this.nextId++,
+      sequence,
       method: 1,
       headers: { type: "event", message_id: id, sum: "1", seq: "0", trace_id: `trace_${id}` },
       payload: Buffer.from(JSON.stringify(event)),
