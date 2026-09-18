@@ -37,6 +37,32 @@ Protocol references: [Discord Gateway](https://discord.com/developers/docs/topic
 
 Feishu currently has no `textDelivery` feature. These tests exercise the final-send fallback and assert that drafts are not sent or edited; they do not claim streaming or active-turn input admission coverage. Pairing approval remains covered by `scenarios.integration.test.ts`.
 
+## Recorded Feishu rich text and threads
+
+`feishu-post.capture.json` contains seventeen SDK exchanges recorded on 2026-09-18: private-chat and test-group rich text create/read/thread-reply/read, two group-message updates with reads, a group Markdown create/read/thread-reply/read sequence, and an HTTP 400 invalid-message response. The source is the same test bot connection ledger. Only dedicated test content is retained. IDs, tenant keys, timestamps, positions and error trace metadata are sanitized. Successful status values describe resolved SDK calls, while the error status comes from the HTTP response.
+
+The capture suite checks recorded responses and stateful routes for successful calls, including request bodies, rich text normalization, thread ancestry and successive updates. Markdown responses and the invalid-message response are replayed through the real SDK to verify normalized content and the rejection shape. It does not replace the model's generic missing-message error or represent permission failures.
+
+The rich text model covers the captured `zh_cn` text/link payload and the SDK's `en_us` locale. Other rich text tags remain synthetic in the stateful model. Locale selection, cards, thread pagination and reconnect behavior require separate captures before claiming parity. These SDK edit tests do not establish Rome Feishu streaming delivery support.
+
+## Recorded Discord text responses
+
+`discord-text.capture.json` contains nine discord.js 14.26.2 REST exchanges recorded in a dedicated test server on 2026-09-18: create/read, two edits with reads, reply/read, and an HTTP 404 unknown-message error. IDs, bot identity and timestamps use synthetic values. Request bodies contain dedicated test content and disable mentions. Authentication data is excluded. Successful calls store the SDK response without claiming a captured HTTP status.
+
+`discord-capture.integration.test.ts` checks full recorded responses in replay mode and modeled message fields in stateful mode. Stateful comparison checks author ID and bot status, excludes cosmetic author profile fields, and normalizes timestamps after checking that they parse. Reply type, message references, referenced content and the SDK error shape remain checked. Gateway events, permissions, rate limits and uploads are not covered by this capture.
+
+## Recorded Telegram text responses
+
+`telegram-text.capture.json` contains five grammy 1.40.0 HTTP exchanges recorded on 2026-09-18: private-chat send, two edits, reply, and an invalid-message edit. IDs, profile fields and dates use synthetic values. Authentication data is excluded. Replay checks complete SDK results and errors. Stateful comparison checks bot identity, chat ID/type, edited content, edit dates and the reply snapshot, excluding recipient profile fields.
+
+The sequence uses returned message objects from send/edit and the reply snapshot. It does not claim an independent message-history read. The [Telegram Bot API](https://core.telegram.org/bots/api#editmessagetext) defines the edit result. Inbound updates, media and native draft streaming are outside this capture.
+
+## Recorded WeChat text responses
+
+`wechat-text.capture.json` contains three HTTP exchanges from the production ilink adapter recorded on 2026-09-18: a context-bound text send, a send with a substituted context token, and a send to an invalid recipient. The first two returned HTTP 200 with a numeric `message_id`. The invalid recipient returned HTTP 200 with `ret: -3` and `errmsg: "invalid arguments"`. API acceptance does not prove recipient delivery. Context validation cannot be inferred from these samples.
+
+`wechat-capture.integration.test.ts` replays successful responses through the real adapter and the API error at the HTTP boundary. It checks serialized requests. The foundation adapter does not reject HTTP 200 business errors. Adapter rejection belongs to the stacked delivery change, which checks `ret` and `errcode`. The captures replace recipients, context tokens, client IDs and message IDs with synthetic values and exclude authentication headers. The adapter discards the returned message ID. The local model's context rejection is a synthetic fault, not a verified provider rule. This capture does not cover inbound polling, read/edit operations, media or end-user delivery receipts.
+
 ## Script a scenario
 
 ### Stateful Lark server

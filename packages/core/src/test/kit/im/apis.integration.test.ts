@@ -22,8 +22,12 @@ describe("IM protocol fixtures with real SDKs", () => {
     });
     try {
       await channel.connect();
-      await fixture.emitMessage("once", "duplicate");
-      await fixture.emitMessage("once", "duplicate");
+      await Promise.all([
+        fixture.emitMessage("once", "duplicate"),
+        fixture.emitMessage("once", "duplicate"),
+      ]);
+      expect(fixture.acknowledged).toHaveLength(2);
+      expect(new Set(fixture.acknowledged).size).toBe(2);
       await delivered.promise;
       expect(received).toEqual(["once"]);
       const reply = await channel.send(LARK_CHAT, { text: "reply" }, { replyTo: "om_duplicate" });
@@ -72,6 +76,18 @@ describe("IM protocol fixtures with real SDKs", () => {
         const edited = await bot.api.editMessageText("123", receipt.message_id, text);
         expect(edited).toMatchObject({ message_id: receipt.message_id, text });
         expect(fixture.messages.get(receipt.message_id)?.text).toBe(text);
+      }
+      for (const text of ["x", "x".repeat(4096)]) {
+        await bot.api.editMessageText("123", receipt.message_id, text);
+        expect(fixture.messages.get(receipt.message_id)?.text).toBe(text);
+      }
+      for (const text of ["", "x".repeat(4097)]) {
+        await expect(
+          bot.api.editMessageText("123", receipt.message_id, text),
+        ).rejects.toMatchObject({
+          error_code: 400,
+        });
+        expect(fixture.messages.get(receipt.message_id)?.text).toBe("x".repeat(4096));
       }
       expect(fixture.messages.size).toBe(1);
       await adapter.sendMessage("123", "123", {
@@ -243,7 +259,7 @@ describe("IM protocol fixtures with real SDKs", () => {
       expect(fixture.messages.get(receipt!.messageId!)?.body.content).toContain("Hello");
       const reaction = await adapter.addProcessingReaction(receipt!.messageId!);
       await adapter.removeProcessingReaction(receipt!.messageId!, reaction!);
-      expect(fixture.acknowledged).toEqual(["event-1"]);
+      expect(fixture.acknowledged).toEqual([expect.stringMatching(/^event-1:/)]);
       expect(JSON.stringify(fixture.server.calls)).not.toContain(fixture.appSecret);
       fixture.server.assertClean();
     } finally {

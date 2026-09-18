@@ -17,6 +17,7 @@ interface WireMessage {
   edited_timestamp: string | null;
   attachments: unknown[];
   embeds: unknown[];
+  components: unknown[];
   mentions: unknown[];
   mention_roles: string[];
   mention_everyone: boolean;
@@ -24,6 +25,8 @@ interface WireMessage {
   tts: boolean;
   type: number;
   flags: number;
+  message_reference?: { type: number; channel_id: string; message_id: string; guild_id?: string };
+  referenced_message?: WireMessage;
 }
 
 function user(id: string, bot = false) {
@@ -129,6 +132,7 @@ export class DiscordApiFixture {
       edited_timestamp: null,
       attachments: [],
       embeds: [],
+      components: [],
       mentions: [],
       mention_roles: [],
       mention_everyone: false,
@@ -182,6 +186,21 @@ export class DiscordApiFixture {
       return { status: 400, body: { code: 50035, message: "Invalid Form Body" } };
     if (method === "POST" && !messageId) {
       const message = this.message(channelId, String(body.content ?? ""), true);
+      if (body.message_reference) {
+        const reference = body.message_reference as { message_id: string };
+        const parent = this.messages.get(reference.message_id);
+        if (!parent || parent.channel_id !== channelId)
+          throw new Error("Unmodeled Discord reply target");
+        const guildId = this.channels.get(channelId)?.guild_id;
+        message.type = 19;
+        message.message_reference = {
+          type: 0,
+          channel_id: channelId,
+          message_id: parent.id,
+          ...(typeof guildId === "string" ? { guild_id: guildId } : {}),
+        };
+        message.referenced_message = structuredClone(parent);
+      }
       message.attachments = request.files.map((file, index) => ({
         id: String(index),
         filename: file.name,

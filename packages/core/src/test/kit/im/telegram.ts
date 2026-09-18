@@ -3,6 +3,7 @@ import { TelegramAdapter } from "../../../channels/telegram.js";
 import { ImFixtureServer, deferred, type FixtureRequest } from "./server.js";
 
 export const TELEGRAM_TOKEN = "123456:fixture-token";
+const TELEGRAM_BOT = { id: 123456, is_bot: true, first_name: "Rome", username: "rome_fixture_bot" };
 export class TelegramApiFixture {
   readonly server: ImFixtureServer = new ImFixtureServer((request) => this.route(request));
   readonly messages = new Map<number, Record<string, unknown>>();
@@ -65,7 +66,7 @@ export class TelegramApiFixture {
       return {
         body: {
           ok: true,
-          result: { id: 123456, is_bot: true, first_name: "Rome", username: "rome_fixture_bot" },
+          result: TELEGRAM_BOT,
         },
       };
     if (
@@ -95,13 +96,20 @@ export class TelegramApiFixture {
       const message = this.messages.get(Number(body.message_id));
       if (!message || Number((message.chat as { id: number }).id) !== Number(body.chat_id))
         return {
+          status: 400,
           body: {
             ok: false,
             error_code: 400,
             description: "Bad Request: message to edit not found",
           },
         };
+      const text = String(body.text ?? "");
+      if (!text.length || text.length > 4096)
+        return {
+          body: { ok: false, error_code: 400, description: "Bad Request: invalid text length" },
+        };
       message.text = body.text;
+      message.edit_date = Math.floor(Date.now() / 1000);
       return { body: { ok: true, result: message }, accepted: true };
     }
     if (
@@ -115,11 +123,23 @@ export class TelegramApiFixture {
         };
       const message = {
         message_id: this.nextId++,
+        from: TELEGRAM_BOT,
         date: Math.floor(Date.now() / 1000),
         chat: { id: Number(body.chat_id), type: "private" },
         text: body.text,
         caption: body.caption,
-        files: files.map((file) => ({ name: file.name, size: file.bytes.length })),
+        ...(files.length
+          ? { files: files.map((file) => ({ name: file.name, size: file.bytes.length })) }
+          : {}),
+        ...(body.reply_parameters
+          ? {
+              reply_to_message: structuredClone(
+                this.messages.get(
+                  Number((body.reply_parameters as { message_id: number }).message_id),
+                ),
+              ),
+            }
+          : {}),
       };
       this.messages.set(message.message_id, message);
       return { body: { ok: true, result: message }, accepted: true };

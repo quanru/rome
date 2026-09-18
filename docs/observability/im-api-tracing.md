@@ -10,6 +10,8 @@ Supported names are `lark`, `feishu`, `discord`, `telegram`, and `wechat`. Unkno
 
 For `pnpm dev:all`, set the variable in the worktree root `.env` and rerun `pnpm dev:all`. Compose must recreate the container to load changed environment values. A container restart alone does not reload its environment.
 
+The core entrypoint initializes tracing for its own process. Independent scripts and subprocesses must call `configureImApiTrace(loadConfig().imApiTrace)` explicitly. Inheriting `ROME_IM_API_TRACE` alone does not activate tracing.
+
 ## Records and export
 
 Records use the `im-api-trace` logger and follow the existing [observability pipeline](../architecture/observability.md). They reach JSON stdout and the configured OTLP log destination. The logger stores each structured record as the JSON string `data.event`.
