@@ -30,6 +30,7 @@ import {
   snapshotWorkspaceForSend,
   useWorkspaceContextRegistry,
 } from "@/pages/free/workspace-context";
+import { useChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
 
 export type { SessionMessage };
 
@@ -46,6 +47,7 @@ export interface ChatComponentProps {
   // Pre-pins a skill chip on the draft composer without sending —
   // the structured counterpart of initialDraftText, seeded by the Skills app.
   initialSkillName?: string;
+  cacheProtected?: boolean;
 }
 
 export function ChatComponent({
@@ -57,10 +59,12 @@ export function ChatComponent({
   initialAgentMention,
   initialDraftText,
   initialSkillName,
+  cacheProtected = true,
 }: ChatComponentProps) {
   // `null` when the chat is mounted outside the workspace shell;
   // the draft-send path simply skips workspace injection in that case.
   const workspaceContextRegistry = useWorkspaceContextRegistry();
+  const transcriptCacheContext = useChatTranscriptCacheContext();
   const { t, i18n } = useTranslation("chat");
 
   const { data: settings } = useSettings();
@@ -340,12 +344,13 @@ export function ChatComponent({
   if (sessionId) {
     return (
       <Chat
-        key={sessionId}
+        key={`${transcriptCacheContext ?? "no-context"}:${sessionId}`}
         sessionId={sessionId}
         mainAgentDisplayName={mainAgentDisplayName}
         onSessionsChanged={notifySessionsChanged}
         onSessionNotFound={onSessionNotFound ? () => onSessionNotFound() : undefined}
         onSessionMessage={onSessionMessage}
+        cacheProtected={cacheProtected}
       />
     );
   }

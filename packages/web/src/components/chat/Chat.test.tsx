@@ -6,6 +6,10 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import * as chatApiModule from "@/lib/chat-api" with { rstest: "importActual" };
 import { Chat } from "./Chat";
+import type { ChatRow } from "./chat-view";
+import type { ChatMessage } from "@/lib/chat-types";
+import { ChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
+import { chatTranscriptCache } from "@/lib/chat-transcript-cache";
 import {
   deleteSession,
   interruptTurn,
@@ -83,9 +87,16 @@ rs.mock("@/pages/free/WidgetPicker", () => ({
 }));
 
 rs.mock("@/components/chat/MessageList", () => ({
-  MessageList: ({ live }: { live: { identity: { name: string } } }) => (
-    <div data-testid="message-list">{live.identity.name}</div>
-  ),
+  MessageList: ({ live, rows }: { live: { identity: { name: string } }; rows: ChatRow[] }) => {
+    const messageIds = rows.flatMap((row) =>
+      row.kind === "agent" ? row.messages.map((message) => message.id) : [row.message.id],
+    );
+    return (
+      <div data-testid="message-list" data-message-ids={messageIds.join(",")}>
+        {live.identity.name}
+      </div>
+    );
+  },
   findActiveSubmission: () => null,
   findLastSubmission: () => null,
   hasPendingApprovalConfirmation: () => false,
@@ -195,6 +206,151 @@ afterEach(() => {
   rs.clearAllMocks();
   rs.unstubAllGlobals();
   MockEventSource.instances = [];
+  chatTranscriptCache.clear();
+});
+
+function chatMessage(sessionId: string, id: string, createdAt: string): ChatMessage {
+  return {
+    id,
+    sessionId,
+    turnId: `turn-${id}`,
+    role: "assistant",
+    content: JSON.stringify([{ type: "text", content: id }]),
+    createdAt,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("Chat history cache", () => {
+  const context = "https://rome.test|guardian:guardian-1";
+  const renderCachedChat = (sessionId: string, props: { onSessionNotFound?: () => void } = {}) => (
+    <MemoryRouter>
+      <ChatTranscriptCacheContext.Provider value={context}>
+        <Chat key={sessionId} sessionId={sessionId} onSessionNotFound={props.onSessionNotFound} />
+      </ChatTranscriptCacheContext.Provider>
+    </MemoryRouter>
+  );
+
+  it("renders a revisited transcript before its refresh resolves, then reconciles it", async () => {
+    const aOld = chatMessage("session-a", "a-old", "2026-09-19T00:00:00.000Z");
+    const aNew = chatMessage("session-a", "a-new", "2026-09-19T00:01:00.000Z");
+    const b = chatMessage("session-b", "b", "2026-09-19T00:00:00.000Z");
+    const refresh = deferred<ChatMessage[] | null>();
+    let aLoads = 0;
+    rs.mocked(listSessionMessages).mockImplementation((sessionId) => {
+      if (sessionId === "session-b") return Promise.resolve([b]);
+      aLoads += 1;
+      return aLoads === 1 ? Promise.resolve([aOld]) : refresh.promise;
+    });
+
+    const view = render(renderCachedChat("session-a"));
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("a-old"),
+    );
+
+    view.rerender(renderCachedChat("session-b"));
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("b"),
+    );
+
+    view.rerender(renderCachedChat("session-a"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("a-old");
+    expect(screen.queryByText("history.loading")).toBeNull();
+    expect(screen.getByTestId("chat-composer")).toBeTruthy();
+
+    refresh.resolve([aNew, aOld]);
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe(
+        "a-old,a-new",
+      ),
+    );
+  });
+
+  it("does not let a delayed response replace the newly selected transcript", async () => {
+    const delayedA = deferred<ChatMessage[] | null>();
+    const a = chatMessage("session-a", "a", "2026-09-19T00:00:00.000Z");
+    const b = chatMessage("session-b", "b", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages).mockImplementation((sessionId) =>
+      sessionId === "session-a" ? delayedA.promise : Promise.resolve([b]),
+    );
+
+    const view = render(renderCachedChat("session-a"));
+    view.rerender(renderCachedChat("session-b"));
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("b"),
+    );
+
+    delayedA.resolve([a]);
+    await act(async () => {
+      await delayedA.promise;
+    });
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("b");
+    expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+      "a",
+    ]);
+  });
+
+  it("keeps cached history visible after a failed refresh and retries", async () => {
+    const user = userEvent.setup();
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const current = chatMessage("session-a", "current", "2026-09-19T00:01:00.000Z");
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce([old, current]);
+
+    render(renderCachedChat("session-a"));
+
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("old");
+    expect(await screen.findByText("history.refreshFailed")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "history.retry" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe(
+        "old,current",
+      ),
+    );
+    expect(screen.queryByText("history.refreshFailed")).toBeNull();
+  });
+
+  it("shows a retryable error when the first history load fails", async () => {
+    const user = userEvent.setup();
+    const loaded = chatMessage("session-a", "loaded", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce([loaded]);
+
+    render(renderCachedChat("session-a"));
+
+    expect(await screen.findByText("history.loadFailed")).toBeTruthy();
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    await user.click(screen.getByRole("button", { name: "history.retry" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded"),
+    );
+  });
+
+  it("removes a cached transcript before delegating a not-found response", async () => {
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const onSessionNotFound = rs.fn();
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages).mockResolvedValue(null);
+
+    render(renderCachedChat("session-a", { onSessionNotFound }));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("old");
+
+    await waitFor(() => expect(onSessionNotFound).toHaveBeenCalledWith("session-a"));
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+  });
 });
 
 describe("Chat agent identity", () => {

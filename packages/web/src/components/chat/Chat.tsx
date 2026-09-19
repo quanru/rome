@@ -17,6 +17,7 @@ import {
   Pin,
   PinOff,
   PanelRightOpen,
+  RefreshCw,
   Share2,
   Trash2,
 } from "lucide-react";
@@ -109,6 +110,8 @@ import {
   useWorkspaceContextRegistry,
 } from "@/pages/free/workspace-context";
 import { autoPlaceApp } from "@/pages/free/use-free-cells";
+import { chatTranscriptCache } from "@/lib/chat-transcript-cache";
+import { useChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
 
 // Leave a jumped-to question clear of the top edge — flush against it reads
 // as cut off.
@@ -249,10 +252,18 @@ export interface ChatProps {
   onSessionsChanged?: () => void;
   onSessionNotFound?: (sessionId: string) => void;
   onSessionMessage?: (message: SessionMessage) => void;
+  cacheProtected?: boolean;
 }
 
 export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
-  { sessionId, mainAgentDisplayName, onSessionsChanged, onSessionNotFound, onSessionMessage },
+  {
+    sessionId,
+    mainAgentDisplayName,
+    onSessionsChanged,
+    onSessionNotFound,
+    onSessionMessage,
+    cacheProtected = true,
+  },
   ref,
 ) {
   const { t } = useTranslation("chat");
@@ -277,7 +288,23 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
   // prop is effectively the source of truth.
   const mainSessionId = sessionId;
   const mainSessionIdRef = useRef(mainSessionId);
-  const [messages, setMessages] = useState<Map<string, ChatMessage[]>>(new Map());
+  const transcriptCacheContext = useChatTranscriptCacheContext();
+  const [messages, setMessages] = useState<Map<string, ChatMessage[]>>(() => {
+    const cached = chatTranscriptCache.get(transcriptCacheContext, mainSessionId);
+    return cached ? new Map([[mainSessionId, cached]]) : new Map();
+  });
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const [historyLoadState, setHistoryLoadState] = useState<
+    "loading" | "refreshing" | "ready" | "stale" | "error"
+  >(() => (messages.has(mainSessionId) ? "refreshing" : "loading"));
   const [subagentIconByName, setSubagentIconByName] = useState<ReadonlyMap<string, string | null>>(
     () => new Map(),
   );
@@ -346,6 +373,15 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
   // Per-session FIFO queue of in-flight turnIds; the session's
   // streaming entry is only removed when this set drains.
   const inflightTurnsRef = useRef<Map<string, Set<string>>>(new Map());
+
+  useEffect(() => {
+    if (!cacheProtected) return;
+    const owner = Symbol(mainSessionId);
+    chatTranscriptCache.protect(transcriptCacheContext, mainSessionId, owner);
+    return () => {
+      chatTranscriptCache.unprotect(transcriptCacheContext, mainSessionId, owner);
+    };
+  }, [cacheProtected, mainSessionId, transcriptCacheContext]);
 
   // Auto stick-to-bottom against the message scroller — a bounded
   // `overflow-y-auto` node, NOT the document. The chat shell is now
@@ -601,12 +637,13 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     setDeleteConfirmOpen(false);
     try {
       await deleteSession(mainSessionId);
+      chatTranscriptCache.delete(transcriptCacheContext, mainSessionId);
     } catch {
       // best-effort — the list refresh below reconciles either way
     }
     notifySessionsChanged();
     navigate("/chat");
-  }, [mainSessionId, notifySessionsChanged, navigate]);
+  }, [mainSessionId, notifySessionsChanged, navigate, transcriptCacheContext]);
 
   // Archive (read-only soft-hide) or restore the current chat. Archiving does
   // not navigate away — the transcript stays open, read-only. The override flips
@@ -651,16 +688,43 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
   const loadMessages = useCallback(
     async (id: string, options: { force?: boolean; dropLocalOptimistic?: boolean } = {}) => {
       if (!options.force && loadedSessionsRef.current.has(id)) return;
+      let hasTranscript = messagesRef.current.has(id);
+      if (!hasTranscript) {
+        const cached = chatTranscriptCache.get(transcriptCacheContext, id);
+        if (cached) {
+          hasTranscript = true;
+          setMessages((prev) => {
+            if (prev.has(id)) return prev;
+            const next = new Map(prev);
+            next.set(id, cached);
+            return next;
+          });
+          if (id === mainSessionIdRef.current) setHistoryLoadState("refreshing");
+        }
+      }
+      if (id === mainSessionIdRef.current) {
+        setHistoryLoadState(hasTranscript ? "refreshing" : "loading");
+      }
+      const request = chatTranscriptCache.beginRequest(transcriptCacheContext, id);
       // Only mark loaded once we have data in hand. Marking before the await
       // permanently suppressed retries on any failure — the user would land in
       // a silently-empty chat with no recovery short of a page refresh.
       try {
         const data = await listSessionMessages(id);
+        if (!chatTranscriptCache.isLatestRequest(request)) return;
         if (data === null) {
           // Server says this session doesn't exist (HTTP 404). Hand it back
           // to the host so they can redirect to the draft surface instead of
           // leaving the user staring at an empty active-chat shell.
-          onSessionNotFoundRef.current?.(id);
+          chatTranscriptCache.delete(transcriptCacheContext, id);
+          loadedSessionsRef.current.delete(id);
+          setMessages((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Map(prev);
+            next.delete(id);
+            return next;
+          });
+          if (mountedRef.current) onSessionNotFoundRef.current?.(id);
           return;
         }
         const fetchedMessages = orderChatMessages(data);
@@ -675,19 +739,32 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           );
           return next;
         });
+        const cachedMessages = chatTranscriptCache.get(transcriptCacheContext, id);
+        chatTranscriptCache.putComplete(
+          transcriptCacheContext,
+          id,
+          cachedMessages
+            ? mergeFetchedChatMessages(cachedMessages, fetchedMessages)
+            : fetchedMessages,
+        );
         if (options.dropLocalOptimistic) {
           localOptimisticMessageIdsRef.current.delete(id);
         }
         loadedSessionsRef.current.add(id);
+        if (id === mainSessionIdRef.current) setHistoryLoadState("ready");
         if (isReadVisibleSession(id)) {
           void markSessionRead(id);
         }
       } catch {
         // Leave the session unmarked so callers (auto-load + post-stream
         // refresh) can retry on the next trigger.
+        if (!chatTranscriptCache.isLatestRequest(request)) return;
+        if (id === mainSessionIdRef.current) {
+          setHistoryLoadState(messagesRef.current.has(id) ? "stale" : "error");
+        }
       }
     },
-    [isReadVisibleSession, markSessionRead],
+    [isReadVisibleSession, markSessionRead, transcriptCacheContext],
   );
 
   // Load messages when the main session changes (also covers initial mount).
@@ -719,10 +796,13 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         next.set(sid, mergeChatMessage(existing, message));
         return next;
       });
+      chatTranscriptCache.updateIfPresent(transcriptCacheContext, sid, (cached) =>
+        mergeChatMessage(cached, message),
+      );
       void markSessionRead(sid);
       onSessionMessageRef.current?.({ sessionId: sid, turnId: message.turnId ?? null });
     },
-    [markSessionRead],
+    [markSessionRead, transcriptCacheContext],
   );
   const handleSessionName = useCallback(
     (sid: string, event: z.infer<typeof sessionNameSchema>) => {
@@ -1711,6 +1791,47 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
               ref={attachScroller}
               className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain @min-[48rem]/transcript:pl-8"
             >
+              {historyLoadState === "stale" && (
+                <div
+                  role="alert"
+                  className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-12 border border-warning-border bg-warning-bg px-3 py-2 text-ui text-warning-fg md:mx-6"
+                >
+                  <span>{t("history.refreshFailed")}</span>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => void loadMessages(mainSessionId, { force: true })}
+                  >
+                    {t("history.retry")}
+                  </Button>
+                </div>
+              )}
+              {historyLoadState === "loading" && !messages.has(mainSessionId) && (
+                <div
+                  role="status"
+                  className="flex min-h-32 flex-1 items-center justify-center gap-2 text-ui text-muted-foreground"
+                >
+                  <RefreshCw className="size-4 animate-spin" aria-hidden />
+                  {t("history.loading")}
+                </div>
+              )}
+              {historyLoadState === "error" && !messages.has(mainSessionId) && (
+                <div
+                  role="alert"
+                  className="flex min-h-32 flex-1 flex-col items-center justify-center gap-3 px-4 text-ui text-muted-foreground"
+                >
+                  <span>{t("history.loadFailed")}</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void loadMessages(mainSessionId, { force: true })}
+                  >
+                    {t("history.retry")}
+                  </Button>
+                </div>
+              )}
               <MessageList
                 rows={rows}
                 live={{
