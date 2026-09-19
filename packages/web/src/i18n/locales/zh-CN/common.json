@@ -133,13 +133,6 @@
       "submit": "提交",
       "preparingUrl": "正在准备 Claude 登录链接",
       "submittingCode": "正在提交 Claude 登录代码"
-    },
-    "pi": {
-      "title": "管理 Pi Coding Agent",
-      "description": "使用 Pi 的终端流程登录并配置模型。Rome 不会读取或存储你的 Pi 凭据。",
-      "starting": "正在启动 Pi…",
-      "inputPlaceholder": "输入 Pi 命令或选项",
-      "send": "发送"
     }
   },
   "upgradeBanner": {

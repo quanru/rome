@@ -122,7 +122,15 @@ export function createAIToolState(options: CreateAIToolStateOptions): AIToolStat
 
   const refreshProvider = async (provider: AIToolProviderId): Promise<void> => {
     if (provider === "pi") {
-      const status = await probes.piStatus!();
+      // Match the openai/anthropic branches' isolation: a rejecting Pi probe
+      // must not poison the shared refresh (which would 500 the whole endpoint
+      // and blank Claude/Codex status).
+      const status = await probes.piStatus!().catch((error): PiDiscoveryResult => {
+        log.warn("pi status probe failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { loggedIn: false, models: [], unavailableReason: "discovery_failed" };
+      });
       value.pi.loggedIn = status.loggedIn;
       value.pi.models = status.models.map((model) => ({ ...model }));
       value.pi.error = status.error;

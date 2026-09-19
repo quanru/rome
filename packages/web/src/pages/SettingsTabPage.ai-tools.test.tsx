@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import i18n from "@/i18n";
-import { AiToolsPanel } from "@/components/ai-tools-panel";
+import { AiToolsPanel, hasConnectedAiProvider } from "@/components/ai-tools-panel";
 
 beforeAll(async () => {
   await i18n.changeLanguage("en");
@@ -21,6 +21,20 @@ afterEach(() => {
 function ok(json: unknown): Response {
   return { ok: true, status: 200, json: async () => structuredClone(json) } as Response;
 }
+
+describe("hasConnectedAiProvider", () => {
+  it("does not treat a Pi-only install as a connected provider", () => {
+    // Pi is explicit-selection-only and never satisfies Auto/tier resolution,
+    // so a Pi-only sign-in must not auto-complete the onboarding connect step
+    // (which would then leave every Auto chat failing).
+    expect(hasConnectedAiProvider({ pi: { loggedIn: true } })).toBe(false);
+  });
+
+  it("treats a signed-in Codex or Claude as connected", () => {
+    expect(hasConnectedAiProvider({ codex: { loggedIn: true } })).toBe(true);
+    expect(hasConnectedAiProvider({ claude: { loggedIn: true } })).toBe(true);
+  });
+});
 
 describe("AI Tools refresh", () => {
   it("shows Pi as an enabled terminal-managed provider with discovered models", async () => {
@@ -44,8 +58,12 @@ describe("AI Tools refresh", () => {
 
     render(<AiToolsPanel />);
     expect(await screen.findByText("Pi (Pi Coding Agent)")).toBeTruthy();
-    expect(await screen.findByText("1 Pi models available")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Manage in Terminal" })).toBeTruthy();
+    // Singular plural form (not "1 Pi models").
+    expect(await screen.findByText("1 Pi model available")).toBeTruthy();
+    // Pi setup is managed in the guardian's own terminal — Rome never spawns
+    // Pi's shell-capable CLI, so there is no in-app terminal button.
+    expect(screen.getByText("Manage in your terminal")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Manage in Terminal" })).toBeNull();
   });
 
   it("shows pending state and replaces the displayed provider state", async () => {

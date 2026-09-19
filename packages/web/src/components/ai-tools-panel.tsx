@@ -188,6 +188,9 @@ const AI_TOOL_PROVIDERS = [
     available: true,
     statusKey: "codex" as const,
     icon: "chatgpt" as const,
+    // Eligible for Auto/tier model resolution, so signing in satisfies the
+    // onboarding connect-AI step.
+    participatesInAutoResolution: true,
   },
   {
     id: "claude-login",
@@ -195,13 +198,18 @@ const AI_TOOL_PROVIDERS = [
     available: true,
     statusKey: "claude" as const,
     icon: "claude" as const,
+    participatesInAutoResolution: true,
   },
   {
-    id: "pi-login",
+    id: "pi",
     i18nKey: "pi" as const,
     available: true,
     statusKey: "pi" as const,
     icon: "pi" as const,
+    // Pi is explicit-selection-only: the model-resolver never picks it for an
+    // Auto/tier request, so a Pi-only install must NOT count as a connected
+    // provider (that would let Auto chats fail with no_model_provider_available).
+    participatesInAutoResolution: false,
   },
   {
     id: "gemini-login",
@@ -209,6 +217,7 @@ const AI_TOOL_PROVIDERS = [
     available: false,
     statusKey: "gemini" as const,
     icon: "gemini" as const,
+    participatesInAutoResolution: false,
   },
   {
     id: "grok-login",
@@ -216,6 +225,7 @@ const AI_TOOL_PROVIDERS = [
     available: false,
     statusKey: "grok" as const,
     icon: "grok" as const,
+    participatesInAutoResolution: false,
   },
 ] as const;
 
@@ -228,9 +238,10 @@ export function hasConnectedAiProvider(
   status: Partial<Record<string, { loggedIn?: boolean } | null>>,
   hiddenProviders: readonly AiToolProviderId[] = [],
 ): boolean {
-  return AI_TOOL_PROVIDERS.filter((provider) => !hiddenProviders.includes(provider.statusKey)).some(
-    (provider) => status[provider.statusKey]?.loggedIn === true,
-  );
+  return AI_TOOL_PROVIDERS.filter(
+    (provider) =>
+      provider.participatesInAutoResolution && !hiddenProviders.includes(provider.statusKey),
+  ).some((provider) => status[provider.statusKey]?.loggedIn === true);
 }
 
 const LOGOUT_PROVIDER_CONFIG = {
@@ -903,7 +914,7 @@ export function AiToolsPanel({
                         </span>
                       )}
                     </div>
-                    {provider.id === "pi-login" ? (
+                    {provider.id === "pi" ? (
                       <p
                         className={`text-aux ${status?.error ? "text-destructive" : "text-muted-foreground"}`}
                       >
@@ -965,15 +976,13 @@ export function AiToolsPanel({
                   </div>
                   {provider.available && (
                     <div className="ml-auto flex shrink-0 items-center gap-2">
-                      {provider.id === "pi-login" ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={AI_TOOL_ACTION_BUTTON_CLASS}
-                          onClick={() => setTerminalPreset(provider.id)}
-                        >
-                          {t("aiTools.pi.manage")}
-                        </Button>
+                      {provider.id === "pi" ? (
+                        // Pi setup is terminal-managed in the guardian's own
+                        // shell (Rome never runs Pi's shell-capable CLI); the row
+                        // shows discovery status and the global Refresh re-reads it.
+                        <span className="text-aux text-muted-foreground">
+                          {t("aiTools.pi.manageHint")}
+                        </span>
                       ) : provider.id === "claude-login" &&
                         usesManagedApiKey &&
                         configuredAnthropicProvider ? (

@@ -12,11 +12,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage, AgentAccounting } from "../types.js";
 import { getProfileDir } from "../paths.js";
-import { buildFacadeBundle } from "./mcp-facade.js";
+import { createLogger } from "../logger.js";
+import { createRomeMcpServerForSession, type RomeMcpGroup } from "./mcp/server.js";
 import type {
   ModelProvider,
   ModelSession,
   ModelSessionFork,
+  ModelSessionForkMode,
   ModelSessionForkOpenParams,
   ModelSessionForkParams,
   ModelSessionParams,
@@ -25,6 +27,18 @@ import type {
 } from "./agent-runner.js";
 import { parseQualifiedPiModelId } from "./pi-model.js";
 import { PiRuntimeManager } from "./pi-runtime.js";
+
+const log = createLogger("pi-provider");
+
+// The facade tool groups Rome exposes to a model session, enumerated so the Pi
+// binding advertises exactly the same catalog as Codex's dynamic tools.
+const PI_TOOL_GROUPS: readonly RomeMcpGroup[] = [
+  "actions",
+  "subagents",
+  "skills",
+  "output",
+  "ask_user",
+];
 
 const MAX_TRANSCRIPT_BYTES = 25 * 1024 * 1024;
 
@@ -99,32 +113,25 @@ class MessageSink {
   }
 }
 
-function serializeToolOutput(value: unknown): string {
+export function serializeToolOutput(value: unknown): string {
   if (typeof value === "string") return value;
   try {
-    return JSON.stringify(value);
+    // JSON.stringify(undefined) is `undefined`, not a string — fall back so the
+    // declared `: string` return type always holds.
+    return JSON.stringify(value) ?? String(value);
   } catch {
     return String(value);
   }
 }
 
-function createPiTools(params: ModelSessionParams): ToolDefinition[] {
-  const bundle = buildFacadeBundle({
-    getActionCatalog: params.getActionCatalog,
-    getSkillCatalog: params.getSkillCatalog,
-    subagentTools: params.subagentTools,
-    handback: params.handback,
-    executeAction: params.executeAction,
-    executeSubagent: params.executeSubagent,
-    executeSubmitOutput: params.executeSubmitOutput,
-    executeDefer: params.executeDefer,
-    supportsInteractiveSurface: params.supportsInteractiveSurface,
-    interactiveSurfaceDetached: params.interactiveSurfaceDetached,
-  });
-
-  return Object.values(bundle)
-    .flat()
-    .map((tool) => ({
+function createPiTools(params: ModelSessionForkOpenParams): ToolDefinition[] {
+  // Route through the single session-params → facade mapping so a new facade
+  // capability can't reach Anthropic/Codex yet silently skip Pi (the invariant
+  // documented on createRomeMcpServerForSession); this mirrors how
+  // codex/rome-dynamic-tools.ts enumerates the same groups.
+  const server = createRomeMcpServerForSession(params);
+  return PI_TOOL_GROUPS.flatMap((group) =>
+    server.listTools(group).map((tool) => ({
       name: tool.name,
       label: tool.name,
       description: tool.description,
@@ -133,14 +140,21 @@ function createPiTools(params: ModelSessionParams): ToolDefinition[] {
       // TypeBox schema so SDK callers get inference; Rome's schemas are dynamic.
       parameters: tool.inputSchema as ToolDefinition["parameters"],
       execute: async (toolCallId, input) => {
-        const result = await tool.handler(input as Record<string, unknown>, {
+        const result = await server.callTool(group, tool.name, input as Record<string, unknown>, {
           toolUseId: toolCallId,
         });
-        const text = result.content.map((part: { text: string }) => part.text).join("\n");
-        if (result.isError) throw new Error(text || `${tool.name} failed`);
-        return { content: result.content, details: {} };
+        // Return a facade error to the model as readable content — the way Codex
+        // surfaces it as success:false content — instead of throwing, so the
+        // model can read the corrective message and retry rather than having the
+        // tool call fail opaquely.
+        const content =
+          result.isError && result.content.length === 0
+            ? [{ type: "text" as const, text: `${tool.name} failed` }]
+            : result.content;
+        return { content, details: {} };
       },
-    }));
+    })),
+  );
 }
 
 function imageMimeType(path: string): string {
@@ -166,7 +180,7 @@ async function loadImages(paths: string[] | undefined) {
   );
 }
 
-type PiAssistantMessage = {
+export type PiAssistantMessage = {
   role: "assistant";
   content: Array<
     | { type: "text"; text: string }
@@ -195,7 +209,7 @@ function assistantText(message: PiAssistantMessage): string {
     .join("");
 }
 
-function turnAccounting(messages: PiAssistantMessage[], model: string): AgentAccounting {
+export function turnAccounting(messages: PiAssistantMessage[], model: string): AgentAccounting {
   return {
     provider: "pi",
     model,
@@ -211,7 +225,7 @@ function turnAccounting(messages: PiAssistantMessage[], model: string): AgentAcc
   };
 }
 
-function finalResult(
+export function finalResult(
   messages: PiAssistantMessage[],
   model: string,
   outputSchema: Record<string, unknown> | undefined,
@@ -237,6 +251,83 @@ function finalResult(
   } catch {
     return { type: "result", content, accounting };
   }
+}
+
+export interface PiEventHandlers {
+  /** Emit a Rome AgentMessage into the session stream. */
+  pushMessage: (message: AgentMessage) => void;
+  /** Record a completed Pi assistant message for turn accounting. */
+  collectAssistant: (message: PiAssistantMessage) => void;
+}
+
+/**
+ * Translate one Pi `AgentSessionEvent` into Rome `AgentMessage`s. Pure and
+ * exported so the streaming translation — the piece validated only against the
+ * SDK's `.d.ts` shapes — is unit-testable with scripted events.
+ */
+export function translatePiSessionEvent(event: AgentSessionEvent, handlers: PiEventHandlers): void {
+  if (event.type === "message_update") {
+    const update = event.assistantMessageEvent;
+    if (update.type === "text_delta") {
+      handlers.pushMessage({ type: "text_delta", content: update.delta });
+    }
+    return;
+  }
+  if (event.type === "message_end" && isAssistantMessage(event.message)) {
+    handlers.collectAssistant(event.message);
+    const hasToolCall = event.message.content.some((part) => part.type === "toolCall");
+    for (const part of event.message.content) {
+      if (part.type === "text" && part.text) {
+        handlers.pushMessage({
+          type: "text",
+          content: part.text,
+          turnPhase: hasToolCall ? "commentary" : "final",
+        });
+      } else if (part.type === "thinking" && part.thinking) {
+        handlers.pushMessage({ type: "thinking", content: part.thinking });
+      }
+    }
+    return;
+  }
+  if (event.type === "tool_execution_start") {
+    handlers.pushMessage({
+      type: "tool_use",
+      id: event.toolCallId,
+      tool: event.toolName,
+      input: event.args,
+      startedAt: new Date().toISOString(),
+    });
+    return;
+  }
+  if (event.type === "tool_execution_end") {
+    handlers.pushMessage({
+      type: "tool_result",
+      toolUseId: event.toolCallId,
+      tool: event.toolName,
+      output: serializeToolOutput(event.result?.content ?? event.result),
+      endedAt: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * Compute the transcript prefix a fork inherits. Exported and pure so the
+ * fail-closed rule is directly testable:
+ * - no checkpoint → fork the current head (all entries);
+ * - a known checkpoint → the prefix up to and including it;
+ * - an unknown checkpoint → throw, rather than silently forking the whole head
+ *   (which would leak turns written after the requested point).
+ */
+export function forkEntriesForCheckpoint(
+  allEntries: FileEntry[],
+  checkpoint: string | undefined,
+): FileEntry[] {
+  if (checkpoint === undefined) return allEntries.slice();
+  const checkpointIndex = allEntries.findIndex((entry) => entry.id === checkpoint);
+  if (checkpointIndex < 0) {
+    throw new Error("Pi fork source checkpoint is unavailable");
+  }
+  return allEntries.slice(0, checkpointIndex + 1);
 }
 
 function piSystemPrompt(params: ModelSessionParams): string {
@@ -270,6 +361,9 @@ export class PiProvider implements ModelProvider {
   private async openSessionWithEntries(
     params: ModelSessionParams,
     entries: FileEntry[],
+    // Ephemeral forks (edit-and-resubmit previews) must not leave a transcript
+    // file behind, so their execution is never persisted.
+    persist = true,
   ): Promise<ModelSession> {
     const selected = this.options.runtime.resolveAvailableModel(params.model);
     if (!selected || !parseQualifiedPiModelId(params.model)) {
@@ -317,51 +411,20 @@ export class PiProvider implements ModelProvider {
 
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       if (closed) return;
-      if (event.type === "message_update") {
-        const update = event.assistantMessageEvent;
-        if (update.type === "text_delta") sink.push({ type: "text_delta", content: update.delta });
-        return;
-      }
-      if (event.type === "message_end" && isAssistantMessage(event.message)) {
-        activeTurnMessages.push(event.message);
-        const hasToolCall = event.message.content.some((part) => part.type === "toolCall");
-        for (const part of event.message.content) {
-          if (part.type === "text" && part.text) {
-            sink.push({
-              type: "text",
-              content: part.text,
-              turnPhase: hasToolCall ? "commentary" : "final",
-            });
-          } else if (part.type === "thinking" && part.thinking) {
-            sink.push({ type: "thinking", content: part.thinking });
-          }
-        }
-        return;
-      }
-      if (event.type === "tool_execution_start") {
-        sink.push({
-          type: "tool_use",
-          id: event.toolCallId,
-          tool: event.toolName,
-          input: event.args,
-          startedAt: new Date().toISOString(),
-        });
-        return;
-      }
-      if (event.type === "tool_execution_end") {
-        sink.push({
-          type: "tool_result",
-          toolUseId: event.toolCallId,
-          tool: event.toolName,
-          output: serializeToolOutput(event.result?.content ?? event.result),
-          endedAt: new Date().toISOString(),
-        });
-      }
+      translatePiSessionEvent(event, {
+        pushMessage: (message) => sink.push(message),
+        collectAssistant: (message) => activeTurnMessages.push(message),
+      });
     });
 
     const runPrompt = async (input: ModelUserInput): Promise<void> => {
       try {
         activeTurnMessages = [];
+        // Honor a per-turn reasoning-effort override. Rome's low|high|xhigh are
+        // all valid Pi thinking levels, so no mapping is required.
+        if (input.reasoningEffort && input.reasoningEffort !== session.thinkingLevel) {
+          session.setThinkingLevel(input.reasoningEffort);
+        }
         const prompt = input.injectedToolResult
           ? `[Rome tool result for ${input.injectedToolResult.toolUseId}]\n${serializeToolOutput(input.injectedToolResult.content)}\n\n${input.text}`
           : input.text;
@@ -370,15 +433,23 @@ export class PiProvider implements ModelProvider {
           expandPromptTemplates: false,
           source: "rpc",
         });
-        await this.store.save(params.sessionId, piSessionManager.getEntries());
-        lastCompletedTurnCheckpoint = piSessionManager.getLeafId() ?? randomUUID();
+        if (persist) await this.store.save(params.sessionId, piSessionManager.getEntries());
+        // undefined (not a fake UUID) when Pi reports no leaf, so a later fork
+        // that receives it fails closed instead of matching nothing.
+        lastCompletedTurnCheckpoint = piSessionManager.getLeafId() ?? undefined;
         sink.push(finalResult(activeTurnMessages, params.model, params.outputSchema));
-      } catch {
+      } catch (error) {
+        // Log for field debugging; the SDK/provider exception can carry request
+        // metadata, so the guardian-facing message stays sanitized and retryable.
+        log.warn("pi turn failed", {
+          sessionId: params.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
         sink.push({
           type: "error",
-          // SDK/provider failures can include request metadata. Keep the
-          // guardian-facing error retryable without echoing secrets.
-          error: "Pi turn failed. Retry, or open Pi in Terminal to repair its configuration.",
+          error: "Pi turn failed. Retry, or open Pi in your terminal to repair its configuration.",
+          // Attribute the failed turn to Pi like the finalResult error path does.
+          accounting: turnAccounting(activeTurnMessages, params.model),
         });
       } finally {
         running = false;
@@ -406,28 +477,29 @@ export class PiProvider implements ModelProvider {
       async steerUserInput(input) {
         if (closed) throw new Error("ModelSession is closed");
         if (!running || input.injectedToolResult) return "deferred";
+        // A steer that changes reasoning effort must reopen the session (as
+        // Anthropic and Codex do); Pi's thinking level is session-scoped.
+        if (input.reasoningEffort && input.reasoningEffort !== session.thinkingLevel) {
+          return "deferred";
+        }
         await session.steer(input.text, await loadImages(input.images));
         return "accepted";
       },
       async fork(forkParams: ModelSessionForkParams): Promise<ModelSessionFork> {
         if (closed) throw new Error("Cannot fork a closed ModelSession");
         if (running) throw new Error("Cannot fork while source session is running");
-        const checkpoint = forkParams.sourceCheckpoint;
-        const allEntries = piSessionManager.getEntries();
-        const checkpointIndex = checkpoint
-          ? allEntries.findIndex((entry) => entry.id === checkpoint)
-          : allEntries.length - 1;
-        const forkEntries = allEntries.slice(
-          0,
-          checkpointIndex < 0 ? allEntries.length : checkpointIndex + 1,
+        const forkEntries = forkEntriesForCheckpoint(
+          piSessionManager.getEntries(),
+          forkParams.sourceCheckpoint,
         );
+        const mode: ModelSessionForkMode = forkParams.mode ?? "ephemeral";
         let opened = false;
         return {
           providerId: "pi",
           sessionId: forkParams.sessionId,
           sourceSessionId: params.sessionId,
           sourceProviderThreadId: params.sessionId,
-          mode: forkParams.mode ?? "ephemeral",
+          mode,
           providerThreadId: forkParams.sessionId,
           open: async (openParams: ModelSessionForkOpenParams) => {
             if (opened) throw new Error("ModelSession fork already opened");
@@ -440,6 +512,8 @@ export class PiProvider implements ModelProvider {
                 providerThreadId: forkParams.sessionId,
               },
               forkEntries,
+              // Ephemeral forks are throwaway previews; never persist them.
+              mode !== "ephemeral",
             );
           },
         };

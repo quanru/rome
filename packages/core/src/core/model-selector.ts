@@ -34,7 +34,13 @@ export const DEFAULT_WEBCHAT_LARGE_MODEL_SELECTION: WebchatLargeModelSelectionId
 export const DEFAULT_WEBCHAT_REASONING_EFFORT =
   DEFAULT_REASONING_EFFORT satisfies ModelReasoningEffort;
 
-export const WEBCHAT_LARGE_MODEL_SELECTIONS = {
+// Typed by StaticModelSelectionId (not the Pi-widened ModelSelectionId) so the
+// static catalog stays exhaustively checked: adding an id to
+// StaticWebchatLargeModelSelectionId without a map entry fails to compile.
+export const WEBCHAT_LARGE_MODEL_SELECTIONS: Record<
+  StaticModelSelectionId,
+  WebchatLargeModelSelection
+> = {
   "claude-opus": {
     id: "claude-opus",
     providerId: "anthropic",
@@ -85,7 +91,7 @@ export const WEBCHAT_LARGE_MODEL_SELECTIONS = {
     providerId: "openai",
     model: "gpt-5.6-luna",
   },
-} as Record<ModelSelectionId, WebchatLargeModelSelection>;
+};
 
 export function normalizeWebchatLargeModelSelectionId(
   value: unknown,
@@ -100,11 +106,6 @@ export function normalizeWebchatLargeModelSelectionId(
   return DEFAULT_WEBCHAT_LARGE_MODEL_SELECTION;
 }
 
-export function piModelSelectionId(qualifiedModelId: string): PiModelSelectionId {
-  if (!parseQualifiedPiModelId(qualifiedModelId)) throw new Error("Invalid qualified Pi model ID");
-  return `pi:${qualifiedModelId}`;
-}
-
 export function resolveWebchatLargeModelSelection(
   value: unknown,
 ): WebchatLargeModelSelection | null {
@@ -113,7 +114,9 @@ export function resolveWebchatLargeModelSelection(
   if (id.startsWith("pi:")) {
     return { id, providerId: "pi", model: id.slice(3) };
   }
-  return WEBCHAT_LARGE_MODEL_SELECTIONS[id];
+  // `id` is a non-auto, non-pi id here, i.e. a StaticModelSelectionId that the
+  // exhaustive map is guaranteed to contain.
+  return WEBCHAT_LARGE_MODEL_SELECTIONS[id as StaticModelSelectionId];
 }
 
 export function normalizeWebchatReasoningEffort(value: unknown): ModelReasoningEffort {

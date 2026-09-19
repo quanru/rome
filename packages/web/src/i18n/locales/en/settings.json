@@ -622,9 +622,10 @@
       }
     },
     "pi": {
-      "modelsAvailable": "{{count}} Pi models available",
-      "setupHint": "Open Pi in Terminal to sign in or configure models.",
-      "manage": "Manage in Terminal"
+      "modelsAvailable_one": "{{count}} Pi model available",
+      "modelsAvailable_other": "{{count}} Pi models available",
+      "setupHint": "Run Pi in your terminal to sign in or configure models, then refresh.",
+      "manageHint": "Manage in your terminal"
     }
   },
   "sentinelLog": {

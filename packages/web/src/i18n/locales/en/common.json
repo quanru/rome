@@ -133,13 +133,6 @@
       "submit": "Submit",
       "preparingUrl": "Preparing Claude sign-in URL",
       "submittingCode": "Submitting Claude login code"
-    },
-    "pi": {
-      "title": "Manage Pi Coding Agent",
-      "description": "Use Pi’s terminal flow to sign in and configure models. Rome does not read or store your Pi credentials.",
-      "starting": "Starting Pi…",
-      "inputPlaceholder": "Type a Pi command or choice",
-      "send": "Send"
     }
   },
   "upgradeBanner": {

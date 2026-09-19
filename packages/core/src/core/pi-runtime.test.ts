@@ -10,7 +10,6 @@ describe("PiRuntimeManager", () => {
     ] as never;
     const runtime: PiModelRuntime = {
       getAvailable: async () => available,
-      getModel: () => undefined,
     };
     const manager = new PiRuntimeManager(async () => runtime);
 
@@ -22,6 +21,16 @@ describe("PiRuntimeManager", () => {
       ],
     });
     expect(manager.resolveAvailableModel("openai/shared")?.runtime).toBe(runtime);
+  });
+
+  it("passes an abort signal into runtime creation so a stalled create can time out", async () => {
+    let creationSignal: AbortSignal | undefined;
+    const manager = new PiRuntimeManager(async (options) => {
+      creationSignal = options?.signal;
+      return { getAvailable: async () => [] };
+    });
+    await manager.refresh();
+    expect(creationSignal).toBeInstanceOf(AbortSignal);
   });
 
   it("fails closed without exposing a provider exception", async () => {

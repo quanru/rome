@@ -1,5 +1,8 @@
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createLogger } from "../logger.js";
 import { qualifyPiModelId } from "./pi-model.js";
+
+const log = createLogger("pi-runtime");
 
 const PI_DISCOVERY_TIMEOUT_MS = 15_000;
 
@@ -25,10 +28,9 @@ export interface PiModelRuntime {
     providerId?: string,
     options?: { signal?: AbortSignal },
   ): Promise<readonly PiSdkModel[]>;
-  getModel(providerId: string, modelId: string): PiSdkModel | undefined;
 }
 
-export type CreatePiModelRuntime = () => Promise<PiModelRuntime>;
+export type CreatePiModelRuntime = (options?: { signal?: AbortSignal }) => Promise<PiModelRuntime>;
 
 function isEligibleModel(model: PiSdkModel): boolean {
   // ModelRuntime is the Pi Coding Agent's catalog, rather than a general media
@@ -55,8 +57,8 @@ export class PiRuntimeManager {
   };
 
   constructor(
-    private readonly createRuntime: CreatePiModelRuntime = () =>
-      ModelRuntime.create({ allowModelNetwork: false }),
+    private readonly createRuntime: CreatePiModelRuntime = ({ signal } = {}) =>
+      ModelRuntime.create({ allowModelNetwork: false, signal }),
   ) {}
 
   getStatus(): PiDiscoveryResult {
@@ -67,15 +69,15 @@ export class PiRuntimeManager {
   }
 
   async refresh(): Promise<PiDiscoveryResult> {
+    // One deadline covers both runtime creation (which the SDK uses for its
+    // initial availability/auth check) and the catalog read, so a stalled Pi
+    // provider check can't hold the per-provider refresh lock indefinitely.
+    const signal = AbortSignal.timeout(PI_DISCOVERY_TIMEOUT_MS);
     try {
       // Recreate on every explicit refresh so changes to Pi's auth.json and
       // models.json are observed without Rome reading or parsing either file.
-      const runtime = await this.createRuntime();
-      const models = (
-        await runtime.getAvailable(undefined, {
-          signal: AbortSignal.timeout(PI_DISCOVERY_TIMEOUT_MS),
-        })
-      )
+      const runtime = await this.createRuntime({ signal });
+      const models = (await runtime.getAvailable(undefined, { signal }))
         .filter(isEligibleModel)
         .sort((left, right) =>
           `${left.provider}\0${left.id}`.localeCompare(`${right.provider}\0${right.id}`),
@@ -86,6 +88,10 @@ export class PiRuntimeManager {
         models.map((model) => [qualifyPiModelId(model.provider, model.id), model]),
       );
       this.snapshot = {
+        // For Pi, "logged in" means "has at least one usable model": Pi fronts
+        // many upstreams and Rome only ever cares about models it can actually
+        // run. `unavailableReason: "no_models"` distinguishes authenticated-but-
+        // empty for consumers that need the finer state.
         loggedIn: models.length > 0,
         models: models.map((model) => ({
           id: qualifyPiModelId(model.provider, model.id),
@@ -95,7 +101,12 @@ export class PiRuntimeManager {
         })),
         ...(models.length === 0 ? { unavailableReason: "no_models" as const } : {}),
       };
-    } catch {
+    } catch (error) {
+      // Log for field debugging, but keep the guardian-facing status sanitized:
+      // provider exceptions can carry request headers or proxy URLs.
+      log.warn("pi model discovery failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.runtime = undefined;
       this.available.clear();
       this.snapshot = {
