@@ -108,6 +108,12 @@ export default function AppKeysPage() {
 
   const batchMutation = useMutation({
     mutationFn: async (entries: EnvAppKey[]) => {
+      const existingKeys = await queryClient.fetchQuery({
+        queryKey: APP_KEYS_QUERY_KEY,
+        queryFn: fetchAppKeys,
+        staleTime: 0,
+        retry: false,
+      });
       const failed: EnvAppKey[] = [];
       let overridden = false;
       for (const entry of entries) {
@@ -115,7 +121,7 @@ export default function AppKeysPage() {
           const result = await saveAppKey({
             name: entry.name,
             value: entry.value,
-            label: keysQuery.data?.find((key) => key.name === entry.name)?.label ?? entry.name,
+            label: existingKeys.find((key) => key.name === entry.name)?.label ?? entry.name,
           });
           overridden ||= result.overridden;
         } catch {
@@ -135,6 +141,7 @@ export default function AppKeysPage() {
       if (overridden) toast.warning(t("appKeys.batchOverridden"));
       await queryClient.invalidateQueries({ queryKey: APP_KEYS_QUERY_KEY });
     },
+    onError: (error: Error) => setFormError(error.message),
   });
 
   const isSaving = saveMutation.isPending || batchMutation.isPending;

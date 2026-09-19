@@ -258,6 +258,65 @@ describe("App keys page", () => {
     expect(writes).toHaveLength(0);
   });
 
+  it("waits for the pending key list before saving a replacement label", async () => {
+    const { promise, resolve } = Promise.withResolvers<Response>();
+    const writes = mockAppKeysFetch(async () => (await promise).clone());
+    renderAppKeysPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Add key" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Paste .env" }));
+    await userEvent.click(screen.getByLabelText(".env content"));
+    await userEvent.paste("SHOP_DB_PASSWORD=new-secret");
+    await userEvent.click(screen.getByRole("button", { name: "Save for all apps" }));
+
+    expect(screen.getByRole("button", { name: "Saving…" }).matches(":disabled")).toBe(true);
+    expect(writes).toHaveLength(0);
+    resolve(ok({ keys: [storedKey] }));
+    await screen.findByRole("button", { name: "Add key" });
+    expect(writes).toHaveLength(1);
+    expect(writes[0].body).toEqual({ label: storedKey.label, value: "new-secret" });
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps the batch intact when fetching labels fails (cached list: %s)", async (hasCachedList) => {
+    let loadCount = 0;
+    let recovered = false;
+    const writes = mockAppKeysFetch(() => {
+      loadCount++;
+      if (recovered || (hasCachedList && loadCount === 1)) return ok({ keys: [storedKey] });
+      return new Response(JSON.stringify({ error: "Cannot load existing keys" }), { status: 503 });
+    });
+    renderAppKeysPage();
+    if (hasCachedList) await screen.findByText(storedKey.label);
+    else await screen.findByText("App keys couldn't be loaded");
+    await userEvent.click(screen.getByRole("button", { name: "Add key" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Paste .env" }));
+    await userEvent.click(screen.getByLabelText(".env content"));
+    const content = "SHOP_DB_PASSWORD=new-secret\nNEW_KEY=another-secret";
+    await userEvent.paste(content);
+    await userEvent.click(screen.getByRole("button", { name: "Save for all apps" }));
+
+    await rs.waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("alert")
+          .some((alert) => alert.textContent === "Cannot load existing keys"),
+      ).toBe(true),
+    );
+    expect(loadCount).toBe(2);
+    expect(writes).toHaveLength(0);
+    expect((screen.getByLabelText(".env content") as HTMLTextAreaElement).value).toBe(content);
+
+    recovered = true;
+    await userEvent.click(screen.getByRole("button", { name: "Save for all apps" }));
+    await screen.findByRole("button", { name: "Add key" });
+    expect(writes.map(({ body }) => body)).toEqual([
+      { label: storedKey.label, value: "new-secret" },
+      { label: "NEW_KEY", value: "another-secret" },
+    ]);
+  });
+
   it("retains only failed entries for retry and reports overridden saves", async () => {
     let fail = true;
     const writes = mockAppKeysFetch(
