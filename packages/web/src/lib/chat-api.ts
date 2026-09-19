@@ -582,6 +582,74 @@ export interface CreateRoutineResult {
   error?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+const ROUTINE_RUN_STATUSES = [
+  "success",
+  "error",
+  "running",
+  "pending_approval",
+  "cancelled",
+] as const;
+
+function isRoutineRunStatus(value: unknown): value is (typeof ROUTINE_RUN_STATUSES)[number] {
+  return (
+    typeof value === "string" &&
+    ROUTINE_RUN_STATUSES.includes(value as (typeof ROUTINE_RUN_STATUSES)[number])
+  );
+}
+
+function isRoutineTrigger(value: unknown): value is Routine["trigger"] {
+  if (!isRecord(value) || typeof value.type !== "string" || value.type.trim() === "") return false;
+  if (value.type === "schedule") {
+    return (
+      typeof value.tzid === "string" &&
+      typeof value.localTime === "string" &&
+      (value.tzMode === undefined || value.tzMode === "fixed" || value.tzMode === "floating") &&
+      (value.date === undefined || typeof value.date === "string") &&
+      (value.rrule === undefined || typeof value.rrule === "string")
+    );
+  }
+  if (value.type === "event-bus") {
+    return (
+      typeof value.eventName === "string" &&
+      (value.sourcePattern === undefined || typeof value.sourcePattern === "string")
+    );
+  }
+  return true;
+}
+
+function isRoutine(value: unknown): value is Routine {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.id !== "string" ||
+    value.id.trim() === "" ||
+    typeof value.name !== "string" ||
+    typeof value.enabled !== "boolean" ||
+    !isRoutineTrigger(value.trigger) ||
+    typeof value.actionName !== "string" ||
+    value.actionName.trim() === "" ||
+    !isRecord(value.args) ||
+    typeof value.createdAt !== "string" ||
+    !isNullableString(value.lastFiredAt) ||
+    !isNullableString(value.nextRunAt)
+  ) {
+    return false;
+  }
+  if (value.lastRun === undefined || value.lastRun === null) return true;
+  return (
+    isRecord(value.lastRun) &&
+    isRoutineRunStatus(value.lastRun.status) &&
+    typeof value.lastRun.firedAt === "string"
+  );
+}
+
 export async function createRoutine(payload: CreateRoutinePayload): Promise<CreateRoutineResult> {
   const res = await fetch("/api/routines", {
     method: "POST",
@@ -590,12 +658,13 @@ export async function createRoutine(payload: CreateRoutinePayload): Promise<Crea
     body: JSON.stringify({ ...payload, enabled: true }),
   });
   if (res.ok) {
-    const row = (await res.json().catch(() => null)) as Routine | null;
+    const row: unknown = await res.json().catch(() => null);
+    const routine = isRoutine(row) ? row : undefined;
     return {
       ok: true,
       status: res.status,
-      routineId: row?.id,
-      routine: typeof row?.id === "string" ? row : undefined,
+      routineId: routine?.id,
+      routine,
     };
   }
   const payloadErr = (await res.json().catch(() => null)) as { error?: string } | null;

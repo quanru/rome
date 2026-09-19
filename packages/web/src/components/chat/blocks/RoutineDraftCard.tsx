@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { BellRing, CalendarClock, Check, Play } from "lucide-react";
 import { Spinner } from "@rome-os/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ type CardState =
  * re-offering to create a duplicate.
  */
 export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
+  const { t } = useTranslation("routines");
   const [state, setState] = useState<CardState>({ kind: "draft" });
   const syncCreatedRoutine = useSyncCreatedRoutine();
 
@@ -117,7 +119,9 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
           </span>
           {state.routineId && (
             <Button asChild variant="outline" size="sm">
-              <Link to={`/routines/${encodeURIComponent(state.routineId)}`}>View run history</Link>
+              <Link to={`/routines/${encodeURIComponent(state.routineId)}`}>
+                {t("detail.runHistory")}
+              </Link>
             </Button>
           )}
         </div>

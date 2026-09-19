@@ -97,10 +97,11 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   rs.clearAllMocks();
   rs.restoreAllMocks();
+  await i18n.changeLanguage("en");
 });
 
 describe("RoutineDraftCard", () => {
@@ -198,10 +199,21 @@ describe("RoutineDraftCard", () => {
     });
     await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
     expect(screen.getByText(/Manage it in Routines/i)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "View run history" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Run history" }).getAttribute("href")).toBe(
       "/routines/r-1",
     );
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
+  });
+
+  it("localizes the run-history link", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const user = userEvent.setup();
+    renderCard(eventDraft, true);
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+
+    expect(await screen.findByRole("link", { name: "运行历史" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
   });
 
   it("opens the created routine when the cached routines list predates creation", async () => {
@@ -238,7 +250,7 @@ describe("RoutineDraftCard", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
-    await user.click(await screen.findByRole("link", { name: "View run history" }));
+    await user.click(await screen.findByRole("link", { name: "Run history" }));
 
     expect(await screen.findByRole("heading", { name: "Landlord emails", level: 1 })).toBeTruthy();
     expect(screen.queryByText("Routine not found.")).toBeNull();
@@ -266,13 +278,13 @@ describe("RoutineDraftCard", () => {
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
-    const link = await screen.findByRole("link", { name: "View run history" });
+    const link = await screen.findByRole("link", { name: "Run history" });
     expect(link.getAttribute("href")).toBe("/routines/r-1");
 
     await act(async () => {
       finishLookup?.(["Landlord emails"]);
     });
-    expect(screen.getByRole("link", { name: "View run history" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Run history" }).getAttribute("href")).toBe(
       "/routines/r-1",
     );
   });
@@ -291,11 +303,37 @@ describe("RoutineDraftCard", () => {
     renderCard(eventDraft, true);
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
-    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
 
     finishCreation?.({ ok: true, status: 201, routineId: "   " });
     await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
-    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
+  });
+
+  it("does not link or seed the routines cache for an incomplete successful result", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Number.POSITIVE_INFINITY } },
+    });
+    queryClient.setQueryData<Routine[]>(
+      ["routines", "list"],
+      [{ ...createdRoutine, id: "stale-routine", name: "Older routine" }],
+    );
+    // createRoutine's runtime validator maps a 201 { id: "r-1" } response to
+    // this safe result: creation completed, but no linkable/cacheable row exists.
+    mockCreate.mockResolvedValue({ ok: true, status: 201 });
+    renderWithQueryClient(
+      <MemoryRouter>
+        <RoutineDraftCard draft={eventDraft} />
+      </MemoryRouter>,
+      queryClient,
+    );
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+
+    await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
+    expect(queryClient.getQueryData(["routines", "list"])).toBeUndefined();
   });
 
   it("surfaces the server error and keeps the action when creation fails", async () => {
@@ -307,7 +345,7 @@ describe("RoutineDraftCard", () => {
 
     await waitFor(() => expect(screen.getByText("Routine name already taken")).toBeTruthy());
     expect(screen.queryByText("On")).toBeNull();
-    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
     expect(screen.getByRole("button", { name: /turn it on/i })).toBeTruthy();
   });
 
@@ -316,7 +354,7 @@ describe("RoutineDraftCard", () => {
     renderCard(eventDraft);
 
     expect(await screen.findByText("On")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Run history" })).toBeNull();
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
     expect(mockCreate).not.toHaveBeenCalled();
   });
