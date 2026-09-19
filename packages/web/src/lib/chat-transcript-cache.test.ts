@@ -82,16 +82,51 @@ describe("ChatTranscriptCache", () => {
 
     expect(cache.get("instance-b|guardian-b", "session-1")).toBeUndefined();
     expect(cache.snapshot().ids).toEqual([]);
-    expect(cache.isLatestRequest(oldRequest)).toBe(false);
+    expect(cache.isRequestContextCurrent(oldRequest, "instance-b|guardian-b")).toBe(false);
   });
 
-  it("accepts only the latest request for one session", () => {
+  it("assigns cache writes only to the latest request for one session", () => {
     const cache = new ChatTranscriptCache();
     const first = cache.beginRequest("context", "session-1");
     const second = cache.beginRequest("context", "session-1");
 
-    expect(cache.isLatestRequest(first)).toBe(false);
-    expect(cache.isLatestRequest(second)).toBe(true);
+    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
+    expect(cache.ownsLatestCacheWrite(second, "context")).toBe(true);
+    cache.finishRequest(second);
+    expect(cache.ownsLatestCacheWrite(second, "context")).toBe(false);
+  });
+
+  it("accounts for live inserts without serializing the full transcript", () => {
+    const cache = new ChatTranscriptCache();
+    const context = "context";
+    const first = message("session-1", "first");
+    const second = { ...message("session-1", "你好"), id: "second" };
+    cache.putComplete(context, "session-1", [first]);
+    const stringify = rs.spyOn(JSON, "stringify");
+
+    cache.upsertMessageIfPresent(context, "session-1", second, (messages) => [...messages, second]);
+
+    expect(stringify.mock.calls.some(([value]) => Array.isArray(value))).toBe(false);
+    expect(cache.snapshot().totalBytes).toBe(
+      new TextEncoder().encode(JSON.stringify([first, second])).byteLength,
+    );
+  });
+
+  it("drops a live-updated history as soon as it exceeds the entry budget", () => {
+    const cache = new ChatTranscriptCache();
+    const context = "context";
+    cache.putComplete(context, "session-1", [message("session-1")]);
+    const oversized = {
+      ...message("session-1", "x".repeat(MAX_TRANSCRIPT_CACHE_ENTRY_BYTES)),
+      id: "oversized",
+    };
+
+    cache.upsertMessageIfPresent(context, "session-1", oversized, (messages) => [
+      ...messages,
+      oversized,
+    ]);
+
+    expect(cache.get(context, "session-1")).toBeUndefined();
   });
 
   it("stays in one memory instance and never writes browser persistence", () => {

@@ -6,6 +6,7 @@ export const MAX_TRANSCRIPT_CACHE_ENTRY_BYTES = 10 * 1024 * 1024;
 
 interface TranscriptCacheEntry {
   messages: ChatMessage[];
+  messageSizes: Map<string, number>;
   size: number;
   lastViewed: number;
 }
@@ -14,10 +15,27 @@ export interface TranscriptRequestToken {
   readonly contextKey: string | null;
   readonly sessionId: string;
   readonly revision: number;
+  readonly contextRevision: number;
 }
 
-function estimateTranscriptSize(messages: ChatMessage[]): number {
-  return new TextEncoder().encode(JSON.stringify(messages)).byteLength;
+const textEncoder = new TextEncoder();
+
+function estimateMessageSize(message: ChatMessage): number {
+  return textEncoder.encode(JSON.stringify(message)).byteLength;
+}
+
+function measureTranscript(messages: ChatMessage[]): {
+  messageSizes: Map<string, number>;
+  size: number;
+} {
+  const messageSizes = new Map<string, number>();
+  let size = 2; // JSON array brackets.
+  for (const [index, message] of messages.entries()) {
+    const messageSize = estimateMessageSize(message);
+    messageSizes.set(message.id, messageSize);
+    size += messageSize + (index === 0 ? 0 : 1); // Array comma.
+  }
+  return { messageSizes, size };
 }
 
 export class ChatTranscriptCache {
@@ -26,10 +44,23 @@ export class ChatTranscriptCache {
   private protectedSessions = new Map<string, Set<symbol>>();
   private latestRequests = new Map<string, number>();
   private clock = 0;
+  private requestClock = 0;
+  private contextRevision = 0;
 
   activateContext(contextKey: string | null): void {
     if (contextKey === this.contextKey) return;
-    this.clear();
+    // The initial null context means dashboard identity is still resolving.
+    // Preserve in-flight ownership through that one-way activation so a cold
+    // request can populate the now-authenticated cache without being repeated.
+    // Every transition away from a concrete identity is a security boundary.
+    const resolvingInitialIdentity = this.contextKey === null && contextKey !== null;
+    if (resolvingInitialIdentity) {
+      this.entries.clear();
+      this.protectedSessions.clear();
+    } else {
+      this.clear();
+      this.contextRevision += 1;
+    }
     this.contextKey = contextKey;
   }
 
@@ -52,7 +83,7 @@ export class ChatTranscriptCache {
     if (!contextKey) return false;
     this.activateContext(contextKey);
 
-    const size = estimateTranscriptSize(messages);
+    const { messageSizes, size } = measureTranscript(messages);
     if (size > MAX_TRANSCRIPT_CACHE_ENTRY_BYTES) {
       this.entries.delete(sessionId);
       return false;
@@ -61,6 +92,7 @@ export class ChatTranscriptCache {
     const previous = this.entries.get(sessionId);
     this.entries.set(sessionId, {
       messages,
+      messageSizes,
       size,
       lastViewed: previous?.lastViewed ?? ++this.clock,
     });
@@ -73,15 +105,43 @@ export class ChatTranscriptCache {
     return true;
   }
 
-  updateIfPresent(
+  upsertMessageIfPresent(
     contextKey: string | null,
     sessionId: string,
+    message: ChatMessage,
     update: (messages: ChatMessage[]) => ChatMessage[],
   ): void {
     if (!contextKey || contextKey !== this.contextKey) return;
     const entry = this.entries.get(sessionId);
     if (!entry) return;
-    this.putComplete(contextKey, sessionId, update(entry.messages));
+
+    // Live SSE inserts are the hot path. Account for only the inserted or
+    // replaced message instead of serializing the entire transcript on every
+    // event, while retaining the exact byte size of the JSON array.
+    const previousMessageSize = entry.messageSizes.get(message.id);
+    const messageSize = estimateMessageSize(message);
+    const size =
+      previousMessageSize === undefined
+        ? entry.size + messageSize + (entry.messages.length === 0 ? 0 : 1)
+        : entry.size - previousMessageSize + messageSize;
+
+    if (size > MAX_TRANSCRIPT_CACHE_ENTRY_BYTES) {
+      this.entries.delete(sessionId);
+      return;
+    }
+
+    const messageSizes = new Map(entry.messageSizes);
+    messageSizes.set(message.id, messageSize);
+    this.entries.set(sessionId, {
+      messages: update(entry.messages),
+      messageSizes,
+      size,
+      lastViewed: entry.lastViewed,
+    });
+    // An updated transcript must not survive above either byte budget. Other
+    // inactive entries may be evicted first; if protected entries leave no
+    // room, drop this candidate rather than retaining stale accounting.
+    if (!this.enforceLimits(sessionId)) this.entries.delete(sessionId);
   }
 
   delete(contextKey: string | null, sessionId: string): void {
@@ -108,19 +168,30 @@ export class ChatTranscriptCache {
   }
 
   beginRequest(contextKey: string | null, sessionId: string): TranscriptRequestToken {
-    if (!contextKey) return { contextKey, sessionId, revision: 0 };
-    this.activateContext(contextKey);
-    const revision = (this.latestRequests.get(sessionId) ?? 0) + 1;
+    if (contextKey) this.activateContext(contextKey);
+    const revision = ++this.requestClock;
     this.latestRequests.set(sessionId, revision);
-    return { contextKey, sessionId, revision };
+    return { contextKey, sessionId, revision, contextRevision: this.contextRevision };
   }
 
-  isLatestRequest(token: TranscriptRequestToken): boolean {
-    if (!token.contextKey) return true;
+  ownsLatestCacheWrite(token: TranscriptRequestToken, contextKey: string | null): boolean {
+    if (!contextKey) return false;
+    this.activateContext(contextKey);
     return (
-      token.contextKey === this.contextKey &&
+      token.contextRevision === this.contextRevision &&
       this.latestRequests.get(token.sessionId) === token.revision
     );
+  }
+
+  isRequestContextCurrent(token: TranscriptRequestToken, contextKey: string | null): boolean {
+    if (contextKey) this.activateContext(contextKey);
+    return token.contextRevision === this.contextRevision;
+  }
+
+  finishRequest(token: TranscriptRequestToken): void {
+    if (this.latestRequests.get(token.sessionId) === token.revision) {
+      this.latestRequests.delete(token.sessionId);
+    }
   }
 
   snapshot(): { ids: string[]; totalBytes: number } {

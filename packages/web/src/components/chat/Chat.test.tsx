@@ -275,6 +275,116 @@ describe("Chat history cache", () => {
     );
   });
 
+  it("activates the cache after identity resolves without restarting Chat", async () => {
+    chatTranscriptCache.activateContext(null);
+    rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    const initialLoad = deferred<ChatMessage[] | null>();
+    const loaded = chatMessage("session-a", "loaded", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages).mockReturnValue(initialLoad.promise);
+
+    const view = render(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={null}>
+          <Chat sessionId="session-a" />
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    view.rerender(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={context}>
+          <Chat sessionId="session-a" />
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+    expect(listSessionMessages).toHaveBeenCalledOnce();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    initialLoad.resolve([loaded]);
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded"),
+    );
+    expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+      "loaded",
+    ]);
+  });
+
+  it("promotes an already loaded history when identity becomes available", async () => {
+    chatTranscriptCache.activateContext(null);
+    const loaded = chatMessage("session-a", "loaded", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages).mockResolvedValue([loaded]);
+
+    const view = render(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={null}>
+          <Chat sessionId="session-a" />
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded"),
+    );
+    expect(chatTranscriptCache.snapshot().ids).toEqual([]);
+
+    view.rerender(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={context}>
+          <Chat sessionId="session-a" />
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+        "loaded",
+      ]),
+    );
+    expect(listSessionMessages).toHaveBeenCalledOnce();
+  });
+
+  it("terminalizes both Chat instances when they load the same uncached session", async () => {
+    const firstLoad = deferred<ChatMessage[] | null>();
+    const secondLoad = deferred<ChatMessage[] | null>();
+    const firstMessage = chatMessage("session-a", "first", "2026-09-19T00:00:00.000Z");
+    const secondMessage = chatMessage("session-a", "second", "2026-09-19T00:01:00.000Z");
+    rs.mocked(listSessionMessages)
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockReturnValueOnce(secondLoad.promise);
+
+    render(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={context}>
+          <div data-testid="first-chat">
+            <Chat sessionId="session-a" />
+          </div>
+          <div data-testid="second-chat">
+            <Chat sessionId="session-a" />
+          </div>
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+
+    secondLoad.resolve([secondMessage]);
+    firstLoad.resolve([firstMessage]);
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("first-chat"))
+          .getByTestId("message-list")
+          .getAttribute("data-message-ids"),
+      ).toBe("first");
+      expect(
+        within(screen.getByTestId("second-chat"))
+          .getByTestId("message-list")
+          .getAttribute("data-message-ids"),
+      ).toBe("second");
+    });
+    expect(within(screen.getByTestId("first-chat")).queryByText("history.loading")).toBeNull();
+    expect(within(screen.getByTestId("second-chat")).queryByText("history.loading")).toBeNull();
+  });
+
   it("does not let a delayed response replace the newly selected transcript", async () => {
     const delayedA = deferred<ChatMessage[] | null>();
     const a = chatMessage("session-a", "a", "2026-09-19T00:00:00.000Z");
@@ -350,6 +460,16 @@ describe("Chat history cache", () => {
     await waitFor(() => expect(onSessionNotFound).toHaveBeenCalledWith("session-a"));
     expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
     expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+  });
+
+  it("terminalizes an uncached not-found load when the host has no callback", async () => {
+    rs.mocked(listSessionMessages).mockResolvedValue(null);
+
+    render(renderCachedChat("session-a"));
+
+    expect(await screen.findByText("history.loadFailed")).toBeTruthy();
+    expect(screen.queryByText("history.loading")).toBeNull();
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
   });
 });
 

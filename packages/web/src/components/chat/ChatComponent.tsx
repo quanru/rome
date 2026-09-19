@@ -30,7 +30,6 @@ import {
   snapshotWorkspaceForSend,
   useWorkspaceContextRegistry,
 } from "@/pages/free/workspace-context";
-import { useChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
 
 export type { SessionMessage };
 
@@ -64,7 +63,6 @@ export function ChatComponent({
   // `null` when the chat is mounted outside the workspace shell;
   // the draft-send path simply skips workspace injection in that case.
   const workspaceContextRegistry = useWorkspaceContextRegistry();
-  const transcriptCacheContext = useChatTranscriptCacheContext();
   const { t, i18n } = useTranslation("chat");
 
   const { data: settings } = useSettings();
@@ -344,7 +342,7 @@ export function ChatComponent({
   if (sessionId) {
     return (
       <Chat
-        key={`${transcriptCacheContext ?? "no-context"}:${sessionId}`}
+        key={sessionId}
         sessionId={sessionId}
         mainAgentDisplayName={mainAgentDisplayName}
         onSessionsChanged={notifySessionsChanged}
