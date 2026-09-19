@@ -337,8 +337,8 @@ describe("Routines API", () => {
     const firstRoutine = (await first.json()) as { id: string };
 
     const second = await app.request("/routines", { method: "POST", headers, body });
-    // The second request must not create a duplicate; it returns the routine
-    // recorded by the first proposal's routine_created_card.
+    // The second request must not create a duplicate; it loses the proposal's
+    // UNIQUE-key insert and returns the winning routine.
     expect(second.status).toBe(200);
     const secondRoutine = (await second.json()) as { id: string };
     expect(secondRoutine.id).toBe(firstRoutine.id);
@@ -351,6 +351,72 @@ describe("Routines API", () => {
       return parts.filter((part) => part.type === "routine_created_card");
     });
     expect(createdParts).toHaveLength(1);
+  });
+
+  it("creates only one routine for two concurrent creates of the same proposal", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    await webchatRepo.addMessage(
+      "draft-message",
+      "chat-a",
+      "assistant",
+      JSON.stringify([
+        { type: "routine_draft_card", toolUseId: "draft-tool-1", draft: { name: "Race once" } },
+      ]),
+      "turn-1",
+    );
+    const body = JSON.stringify({
+      name: "Race once",
+      trigger: { type: "schedule", tzid: "UTC", tzMode: "fixed", localTime: "09:00" },
+      actionName: "send_message",
+      args: { channel: "webchat", text: "hi" },
+      webchatContext: { sessionId: "chat-a", turnId: "turn-1", toolUseId: "draft-tool-1" },
+    });
+    const headers = { "Content-Type": "application/json" };
+
+    // Genuinely concurrent (not sequential) — the two handlers interleave their
+    // awaits and both reach the insert; the UNIQUE key must let exactly one win.
+    const [first, second] = await Promise.all([
+      app.request("/routines", { method: "POST", headers, body }),
+      app.request("/routines", { method: "POST", headers, body }),
+    ]);
+
+    // One create wins with 201, the loser returns the winning routine with 200.
+    expect([first.status, second.status].sort()).toEqual([200, 201]);
+    const firstRoutine = (await first.json()) as { id: string };
+    const secondRoutine = (await second.json()) as { id: string };
+    expect(firstRoutine.id).toBe(secondRoutine.id);
+
+    const rows = await testDb.db.select().from(routines);
+    expect(rows).toHaveLength(1);
+    // Exactly one live/activated routine — no duplicate was activated.
+    expect(scheduleProvider.activeIds()).toEqual([rows[0]?.id]);
+    const messages = await webchatRepo.getMessages("chat-a");
+    const createdParts = messages.flatMap((message) => {
+      const parts = JSON.parse(message.content) as Array<Record<string, unknown>>;
+      return parts.filter((part) => part.type === "routine_created_card");
+    });
+    expect(createdParts).toHaveLength(1);
+  });
+
+  it("does not 500 on an explicit null webchatContext", async () => {
+    const res = await app.request("/routines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "No correlation",
+        trigger: { type: "schedule", tzid: "UTC", tzMode: "fixed", localTime: "09:00" },
+        actionName: "send_message",
+        args: { channel: "webchat", text: "hi" },
+        webchatContext: null,
+      }),
+    });
+
+    // null is treated as "no correlation": the routine is created without a
+    // chat record, and the request never 500s.
+    expect(res.status).toBe(201);
+    const rows = await testDb.db.select().from(routines);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.key ?? null).toBeNull();
   });
 
   it("rejects creation without trigger", async () => {

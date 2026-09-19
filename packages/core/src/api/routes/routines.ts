@@ -142,11 +142,12 @@ interface CreateRoutineBody {
   actionName?: string;
   args?: Record<string, unknown>;
   enabled?: boolean;
+  // Nullable: a client may send an explicit `null` to mean "no correlation".
   webchatContext?: {
     sessionId?: string;
     turnId?: string;
     toolUseId?: string;
-  };
+  } | null;
 }
 
 interface UpdateRoutineBody {
@@ -166,7 +167,9 @@ interface WebchatRoutineContext {
 function parseWebchatRoutineContext(
   value: CreateRoutineBody["webchatContext"],
 ): WebchatRoutineContext | null {
-  if (value === undefined) return null;
+  // A body may legally carry `webchatContext: null`; treat it like an omitted
+  // context (no correlation) rather than dereferencing null into a 500.
+  if (value === undefined || value === null) return null;
   if (
     typeof value.sessionId !== "string" ||
     value.sessionId.trim() === "" ||
@@ -196,31 +199,6 @@ function messageHasRoutineDraft(content: string, toolUseId: string): boolean {
     );
   } catch {
     return false;
-  }
-}
-
-// The routine id recorded by an already-persisted routine_created_card that
-// completes this proposal (sourceToolUseId), or null. Used to make POST
-// /routines idempotent per proposal so a reload-and-reclick or a second tab
-// cannot create a duplicate routine from one draft.
-function messageCreatedRoutineId(content: string, toolUseId: string): string | null {
-  try {
-    const parts: unknown = JSON.parse(content);
-    if (!Array.isArray(parts)) return null;
-    for (const part of parts) {
-      if (
-        isPlainObject(part) &&
-        part.type === "routine_created_card" &&
-        part.sourceToolUseId === toolUseId &&
-        typeof part.routineId === "string" &&
-        part.routineId.trim() !== ""
-      ) {
-        return part.routineId;
-      }
-    }
-    return null;
-  } catch {
-    return null;
   }
 }
 
@@ -340,7 +318,9 @@ export function routinesRoutes(deps: ApiDeps): Hono {
     const body = await c.req.json<CreateRoutineBody>().catch(() => ({}) as CreateRoutineBody);
     const webchatContext = parseWebchatRoutineContext(body.webchatContext);
 
-    if (body.webchatContext !== undefined) {
+    // `!= null` so an explicit `webchatContext: null` (like an omitted one) is a
+    // routine with no chat correlation, not a validation error and never a 500.
+    if (body.webchatContext != null) {
       if (!webchatContext) {
         return c.json({ error: "webchatContext is invalid" }, 400);
       }
@@ -357,25 +337,11 @@ export function routinesRoutes(deps: ApiDeps): Hono {
       if (!sourceExists) {
         return c.json({ error: "Routine draft not found in the originating chat turn" }, 400);
       }
-      // Idempotent per proposal: if a routine_created_card already records a
-      // routine for this exact (session, turn, toolUseId), a duplicate request
-      // (slow POST + reload-and-reclick, or two tabs) must not create a second
-      // routine. Return the already-recorded routine instead of inserting.
-      const existingRoutineId = turnMessages
-        .map((message) => messageCreatedRoutineId(message.content, webchatContext.toolUseId))
-        .find((id): id is string => id !== null);
-      if (existingRoutineId) {
-        const [existing] = await deps.db
-          .select()
-          .from(routines)
-          .where(eq(routines.id, existingRoutineId));
-        if (existing) {
-          return c.json(existing, 200);
-        }
-        // The recorded routine was deleted after creation. The record stays the
-        // historical fact; do not silently recreate it under the same proposal.
-        return c.json({ error: "A routine was already created for this proposal" }, 409);
-      }
+      // Per-proposal idempotency is enforced atomically at the database level via
+      // the deterministic routines.key derived below — a raced or retried create
+      // for the same (session, turn, toolUseId) loses the UNIQUE-key insert and
+      // returns the winning routine instead of a duplicate. No read-then-write
+      // check here (it was a TOCTOU: two concurrent POSTs could both pass it).
     }
 
     if (!body.trigger || !body.trigger.type) {
@@ -422,9 +388,18 @@ export function routinesRoutes(deps: ApiDeps): Hono {
     }
 
     const now = new Date();
+    // A deterministic per-proposal key so concurrent or retried creates for the
+    // same (session, turn, toolUseId) collide on the routines.key UNIQUE
+    // constraint. This makes dedup atomic at the database level rather than a
+    // racy read-then-write. Non-webchat creates keep key null (SQLite treats
+    // multiple NULLs as distinct, so they never collide).
+    const idempotencyKey = webchatContext
+      ? `webchat:${webchatContext.sessionId}:${webchatContext.turnId}:${webchatContext.toolUseId}`
+      : null;
     const record = {
       id: uuid(),
       name: body.name ?? "",
+      key: idempotencyKey,
       enabled: body.enabled ?? true,
       trigger: body.trigger as unknown,
       actionName: resolvedActionName,
@@ -434,7 +409,21 @@ export function routinesRoutes(deps: ApiDeps): Hono {
       nextRunAt: null,
     };
 
-    await deps.db.insert(routines).values(record);
+    try {
+      await deps.db.insert(routines).values(record);
+    } catch (err) {
+      // Lost the race on the proposal's UNIQUE key: another concurrent/retried
+      // request already created and activated this routine. Return that winning
+      // row instead of inserting/activating a duplicate.
+      if (idempotencyKey) {
+        const [winner] = await deps.db
+          .select()
+          .from(routines)
+          .where(eq(routines.key, idempotencyKey));
+        if (winner) return c.json(winner, 200);
+      }
+      throw err;
+    }
     const [inserted] = await deps.db.select().from(routines).where(eq(routines.id, record.id));
     if (!inserted) {
       return c.json({ error: "Created routine could not be loaded" }, 500);
