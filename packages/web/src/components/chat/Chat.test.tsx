@@ -547,6 +547,52 @@ describe("Chat history cache", () => {
     expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
   });
 
+  it.each([
+    401, 403,
+  ])("fails closed when a superseded cached refresh returns HTTP %s", async (status) => {
+    rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const initialLoad = deferred<ChatMessage[] | null>();
+    const forcedRefresh = deferred<ChatMessage[] | null>();
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages)
+      .mockReturnValueOnce(initialLoad.promise)
+      .mockReturnValueOnce(forcedRefresh.promise);
+
+    render(renderCachedChat("session-a"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("old");
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+
+    act(() => {
+      const source = MockEventSource.instances[0]!;
+      source.emitLifecycle("open", MockEventSource.OPEN);
+      source.emitLifecycle("error", MockEventSource.CONNECTING);
+      source.emitLifecycle("open", MockEventSource.OPEN);
+    });
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      initialLoad.reject(new ChatApiError("authorization lost", status, null));
+      await initialLoad.promise.catch(() => undefined);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe(""),
+    );
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    await waitFor(() =>
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: AUTH_QUERY_KEY }),
+    );
+
+    await act(async () => {
+      forcedRefresh.reject(new Error("offline"));
+      await forcedRefresh.promise.catch(() => undefined);
+    });
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+  });
+
   it("does not restore a dropped optimistic row on the next cache hit", async () => {
     const durable = chatMessage("session-a", "durable", "2026-09-19T00:00:00.000Z");
     const optimistic = chatMessage("session-a", "optimistic-input", "2026-09-19T00:01:00.000Z");

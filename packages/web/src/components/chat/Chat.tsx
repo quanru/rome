@@ -840,17 +840,17 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         requestFailed = true;
         // Leave the session unmarked so callers (auto-load + post-stream
         // refresh) can retry on the next trigger.
-        if (
-          latestRequestBySessionRef.current.get(id) !== localRequest ||
-          !chatTranscriptCache.isRequestContextCurrent(request, transcriptCacheContextRef.current)
-        ) {
+        const currentContext = transcriptCacheContextRef.current;
+        if (!chatTranscriptCache.isRequestContextCurrent(request, currentContext)) {
           return;
         }
         if (error instanceof ChatApiError && (error.status === 401 || error.status === 403)) {
           // Authorization failures are not stale-data refresh failures. Fail
-          // closed before the auth gate re-evaluates the current session, and
-          // retire local ownership so an older response cannot restore access.
-          chatTranscriptCache.delete(transcriptCacheContextRef.current, id);
+          // closed before checking local response ownership: an older request
+          // can discover that cached data is no longer authorized even after a
+          // forced refresh supersedes it. Retire local ownership so no pending
+          // response can restore access while the auth gate re-evaluates.
+          chatTranscriptCache.delete(currentContext, id);
           loadedSessionsRef.current.delete(id);
           completeHistoriesRef.current.delete(id);
           latestRequestBySessionRef.current.delete(id);
@@ -864,6 +864,9 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           });
           if (id === mainSessionIdRef.current) setHistoryLoadState("error");
           void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
+          return;
+        }
+        if (latestRequestBySessionRef.current.get(id) !== localRequest) {
           return;
         }
         const fallbackRequest = Math.max(
