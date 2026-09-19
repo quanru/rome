@@ -394,54 +394,50 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
   const localOptimisticMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
   const locallyStreamingSessionIdsRef = useRef<Set<string>>(new Set());
   const turnStreamControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const authorizationRevokedSessionIdsRef = useRef<Set<string>>(new Set());
-  const [sessionAuthorizationRevision, setSessionAuthorizationRevision] = useState(0);
+  const authorizationRevokedRef = useRef(false);
+  const [contextAuthorizationRevision, setContextAuthorizationRevision] = useState(0);
   // Per-session FIFO queue of in-flight turnIds; the session's
   // streaming entry is only removed when this set drains.
   const inflightTurnsRef = useRef<Map<string, Set<string>>>(new Map());
 
-  const clearSessionForAuthorization = useCallback(
-    (id: string) => {
-      authorizationRevokedSessionIdsRef.current.add(id);
-      loadedSessionsRef.current.delete(id);
-      completeHistoriesRef.current.delete(id);
-      latestRequestBySessionRef.current.delete(id);
-      inFlightRequestsRef.current.delete(id);
-      localOptimisticMessageIdsRef.current.delete(id);
-      locallyStreamingSessionIdsRef.current.delete(id);
-      inflightTurnsRef.current.delete(id);
-      const revokedTurnId = streamingSessionsRef.current.get(id)?.turnId;
-      if (revokedTurnId) {
-        turnStreamControllersRef.current.get(revokedTurnId)?.abort();
-        turnStreamControllersRef.current.delete(revokedTurnId);
-        endSessionStream(id, revokedTurnId);
-      }
-      const next = new Map(messagesRef.current);
-      next.delete(id);
-      messagesRef.current = next;
-      setMessages(next);
-      if (id === mainSessionIdRef.current) setHistoryLoadState("error");
-      // Unmount the old EventSource. Its callback also carries the invalidated
-      // cache epoch, so an event delivered before React commits this update is
-      // rejected synchronously.
-      setSessionAuthorizationRevision((revision) => revision + 1);
-    },
-    [endSessionStream, streamingSessionsRef],
-  );
+  const clearContextForAuthorization = useCallback(() => {
+    authorizationRevokedRef.current = true;
+    loadedSessionsRef.current.clear();
+    completeHistoriesRef.current.clear();
+    latestRequestBySessionRef.current.clear();
+    inFlightRequestsRef.current.clear();
+    localOptimisticMessageIdsRef.current.clear();
+    locallyStreamingSessionIdsRef.current.clear();
+    inflightTurnsRef.current.clear();
+    for (const controller of turnStreamControllersRef.current.values()) controller.abort();
+    turnStreamControllersRef.current.clear();
+    for (const [id, stream] of streamingSessionsRef.current) {
+      endSessionStream(id, stream.turnId);
+    }
+    const next = new Map<string, ChatMessage[]>();
+    messagesRef.current = next;
+    setMessages(next);
+    setStreamError(null);
+    setHistoryLoadState("error");
+    // Unmount the old EventSource. Its callback also carries the invalidated
+    // cache epoch, so an event delivered before React commits this update is
+    // rejected synchronously.
+    setContextAuthorizationRevision((revision) => revision + 1);
+  }, [endSessionStream, streamingSessionsRef]);
 
   useEffect(
     () =>
       chatTranscriptCache.subscribeAuthorizationRevocations((revocation) => {
         if (revocation.contextKey !== transcriptCacheContextRef.current) return;
-        clearSessionForAuthorization(revocation.sessionId);
+        clearContextForAuthorization();
       }),
-    [clearSessionForAuthorization],
+    [clearContextForAuthorization],
   );
 
   useEffect(() => {
     if (messagesContext === transcriptCacheContext) return;
 
-    authorizationRevokedSessionIdsRef.current.clear();
+    authorizationRevokedRef.current = false;
 
     if (messagesContext === null && transcriptCacheContext !== null) {
       // Identity resolved after the first successful history request. Promote
@@ -786,6 +782,13 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
   // Fetch messages for a session
   const loadMessages = useCallback(
     async (id: string, options: { force?: boolean; dropLocalOptimistic?: boolean } = {}) => {
+      if (
+        authorizationRevokedRef.current ||
+        chatTranscriptCache.isAuthorizationRevoked(transcriptCacheContextRef.current)
+      ) {
+        if (id === mainSessionIdRef.current) setHistoryLoadState("error");
+        return;
+      }
       if (!options.force && loadedSessionsRef.current.has(id)) return;
       if (!options.force && (inFlightRequestsRef.current.get(id)?.size ?? 0) > 0) return;
       let hasTranscript = messagesRef.current.has(id);
@@ -846,12 +849,6 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           if (mountedRef.current) onSessionNotFoundRef.current?.(id);
           return;
         }
-        chatTranscriptCache.confirmAuthorization(request, currentContext);
-        if (authorizationRevokedSessionIdsRef.current.delete(id)) {
-          // A request started after the purge has now completed successfully,
-          // so this instance may establish a fresh session event source.
-          setSessionAuthorizationRevision((revision) => revision + 1);
-        }
         const fetchedMessages = orderChatMessages(data);
         const dropMessageIds = options.dropLocalOptimistic
           ? new Set(localOptimisticMessageIdsRef.current.get(id) ?? [])
@@ -902,8 +899,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           // can discover that cached data is no longer authorized even after a
           // forced refresh supersedes it. Retire local ownership so no pending
           // response can restore access while the auth gate re-evaluates.
-          const revoked = chatTranscriptCache.revokeAuthorization(currentContext, id);
-          if (!revoked) clearSessionForAuthorization(id);
+          const revoked = chatTranscriptCache.revokeAuthorization(currentContext);
+          if (!revoked) clearContextForAuthorization();
           void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
           return;
         }
@@ -933,7 +930,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         chatTranscriptCache.finishRequest(request, { failed: requestFailed });
       }
     },
-    [clearSessionForAuthorization, isReadVisibleSession, markSessionRead, transcriptCacheContext],
+    [clearContextForAuthorization, isReadVisibleSession, markSessionRead, transcriptCacheContext],
   );
 
   // Load messages when the main session changes (also covers initial mount).
@@ -960,8 +957,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     (authorization: TranscriptSessionToken, message: ChatMessage) => {
       const currentContext = transcriptCacheContextRef.current;
       if (
-        authorizationRevokedSessionIdsRef.current.has(authorization.sessionId) ||
-        chatTranscriptCache.isAuthorizationRevoked(currentContext, authorization.sessionId) ||
+        authorizationRevokedRef.current ||
+        chatTranscriptCache.isAuthorizationRevoked(currentContext) ||
         !chatTranscriptCache.isSessionCurrent(authorization, currentContext)
       ) {
         return;
@@ -990,8 +987,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     (authorization: TranscriptSessionToken, event: z.infer<typeof sessionNameSchema>) => {
       const currentContext = transcriptCacheContextRef.current;
       if (
-        authorizationRevokedSessionIdsRef.current.has(authorization.sessionId) ||
-        chatTranscriptCache.isAuthorizationRevoked(currentContext, authorization.sessionId) ||
+        authorizationRevokedRef.current ||
+        chatTranscriptCache.isAuthorizationRevoked(currentContext) ||
         !chatTranscriptCache.isSessionCurrent(authorization, currentContext)
       ) {
         return;
@@ -1005,8 +1002,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     (authorization: TranscriptSessionToken) => {
       const currentContext = transcriptCacheContextRef.current;
       if (
-        authorizationRevokedSessionIdsRef.current.has(authorization.sessionId) ||
-        chatTranscriptCache.isAuthorizationRevoked(currentContext, authorization.sessionId) ||
+        authorizationRevokedRef.current ||
+        chatTranscriptCache.isAuthorizationRevoked(currentContext) ||
         !chatTranscriptCache.isSessionCurrent(authorization, currentContext)
       ) {
         return;
@@ -1032,8 +1029,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       const isStreamAuthorizationCurrent = () => {
         const currentContext = transcriptCacheContextRef.current;
         return (
-          !authorizationRevokedSessionIdsRef.current.has(sessionId) &&
-          !chatTranscriptCache.isAuthorizationRevoked(currentContext, sessionId) &&
+          !authorizationRevokedRef.current &&
+          !chatTranscriptCache.isAuthorizationRevoked(currentContext) &&
           chatTranscriptCache.isSessionCurrent(streamAuthorization, currentContext)
         );
       };
@@ -1251,11 +1248,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     const reattachSessionId = floorSessionId;
     if (!reattachSessionId) return;
     const isAuthorizationRevoked = () =>
-      authorizationRevokedSessionIdsRef.current.has(reattachSessionId) ||
-      chatTranscriptCache.isAuthorizationRevoked(
-        transcriptCacheContextRef.current,
-        reattachSessionId,
-      );
+      authorizationRevokedRef.current ||
+      chatTranscriptCache.isAuthorizationRevoked(transcriptCacheContextRef.current);
     if (isAuthorizationRevoked()) return;
     if (locallyStreamingSessionIdsRef.current.has(reattachSessionId)) return;
 
@@ -1337,7 +1331,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     floorSessionId,
     consumeStream,
     streamReconnectRevision,
-    sessionAuthorizationRevision,
+    contextAuthorizationRevision,
     startSessionStream,
     endSessionStream,
     createTurnStreamController,
@@ -1361,6 +1355,19 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       postTurn: () => Promise<PostTurnResult>,
       optimisticUserContent: string,
     ): Promise<void> => {
+      const turnAuthorization = chatTranscriptCache.captureSession(
+        transcriptCacheContextRef.current,
+        sendingSessionId,
+      );
+      const isTurnAuthorizationCurrent = () => {
+        const currentContext = transcriptCacheContextRef.current;
+        return (
+          !authorizationRevokedRef.current &&
+          !chatTranscriptCache.isAuthorizationRevoked(currentContext) &&
+          chatTranscriptCache.isSessionCurrent(turnAuthorization, currentContext)
+        );
+      };
+      if (!isTurnAuthorizationCurrent()) return;
       setStreamError(null);
       // Sending re-engages stickiness so the user follows their own message and
       // the reply, even if they'd scrolled up to read history.
@@ -1376,6 +1383,10 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       // the textarea (the original bug). So a failed submit rejects here; a
       // dropped stream never does.
       const result = await postTurn().catch((err: unknown) => {
+        if (!isTurnAuthorizationCurrent()) {
+          if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
+          return null;
+        }
         // Transport failure posting the turn — a genuine failed submit.
         if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
         setStreamReconnectRevision((revision) => revision + 1);
@@ -1385,6 +1396,10 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         if (!isAbortError(err)) setStreamError(t("stream.errors.sendInvalidResponse"));
         throw err;
       });
+      if (!result || !isTurnAuthorizationCurrent()) {
+        if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
+        return;
+      }
       if (!result.ok) {
         if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
         setStreamReconnectRevision((revision) => revision + 1);
@@ -1889,15 +1904,15 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     <TooltipProvider delayDuration={150}>
       {sessionEventIds.map((sid) => {
         if (
-          authorizationRevokedSessionIdsRef.current.has(sid) ||
-          chatTranscriptCache.isAuthorizationRevoked(transcriptCacheContext, sid)
+          authorizationRevokedRef.current ||
+          chatTranscriptCache.isAuthorizationRevoked(transcriptCacheContext)
         ) {
           return null;
         }
         const authorization = chatTranscriptCache.captureSession(transcriptCacheContext, sid);
         return (
           <ChatSessionEvents
-            key={`${eventContextRevision}:${sessionAuthorizationRevision}:${authorization.contextRevision}:${authorization.sessionRevision}:${sid}`}
+            key={`${eventContextRevision}:${contextAuthorizationRevision}:${authorization.contextRevision}:${sid}`}
             authorization={authorization}
             onMessageInsert={handleMessageInsert}
             onSessionName={handleSessionName}

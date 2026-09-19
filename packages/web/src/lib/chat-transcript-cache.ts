@@ -16,21 +16,17 @@ export interface TranscriptRequestToken {
   readonly sessionId: string;
   readonly revision: number;
   readonly contextRevision: number;
-  readonly sessionRevision: number;
 }
 
 export interface TranscriptSessionToken {
   readonly contextKey: string | null;
   readonly sessionId: string;
   readonly contextRevision: number;
-  readonly sessionRevision: number;
 }
 
 export interface TranscriptAuthorizationRevocation {
   readonly contextKey: string;
-  readonly sessionId: string;
   readonly contextRevision: number;
-  readonly sessionRevision: number;
 }
 
 const textEncoder = new TextEncoder();
@@ -59,8 +55,7 @@ export class ChatTranscriptCache {
   private protectedSessions = new Map<string, Set<symbol>>();
   private latestRequests = new Map<string, number>();
   private activeRequests = new Map<string, Set<number>>();
-  private sessionRevisions = new Map<string, number>();
-  private authorizationRevokedSessions = new Set<string>();
+  private authorizationRevoked = false;
   private authorizationRevocationListeners = new Set<
     (revocation: TranscriptAuthorizationRevocation) => void
   >();
@@ -80,7 +75,6 @@ export class ChatTranscriptCache {
       this.protectedSessions.clear();
     } else {
       this.clear();
-      this.sessionRevisions.clear();
       this.contextRevision += 1;
     }
     this.contextKey = contextKey;
@@ -91,15 +85,16 @@ export class ChatTranscriptCache {
     this.protectedSessions.clear();
     this.latestRequests.clear();
     this.activeRequests.clear();
-    this.authorizationRevokedSessions.clear();
+    this.authorizationRevoked = false;
   }
 
   isContextActive(contextKey: string | null): boolean {
-    return contextKey !== null && contextKey === this.contextKey;
+    return contextKey !== null && contextKey === this.contextKey && !this.authorizationRevoked;
   }
 
   get(contextKey: string | null, sessionId: string): ChatMessage[] | undefined {
-    if (!contextKey || contextKey !== this.contextKey) return undefined;
+    if (!contextKey || contextKey !== this.contextKey || this.authorizationRevoked)
+      return undefined;
     const entry = this.entries.get(sessionId);
     if (!entry) return undefined;
     entry.lastViewed = ++this.clock;
@@ -107,7 +102,7 @@ export class ChatTranscriptCache {
   }
 
   putComplete(contextKey: string | null, sessionId: string, messages: ChatMessage[]): boolean {
-    if (!contextKey || contextKey !== this.contextKey) return false;
+    if (!contextKey || contextKey !== this.contextKey || this.authorizationRevoked) return false;
 
     const { messageSizes, size } = measureTranscript(messages);
     if (size > MAX_TRANSCRIPT_CACHE_ENTRY_BYTES) {
@@ -137,7 +132,7 @@ export class ChatTranscriptCache {
     message: ChatMessage,
     update: (messages: ChatMessage[]) => ChatMessage[],
   ): void {
-    if (!contextKey || contextKey !== this.contextKey) return;
+    if (!contextKey || contextKey !== this.contextKey || this.authorizationRevoked) return;
     const entry = this.entries.get(sessionId);
     if (!entry) return;
 
@@ -177,19 +172,17 @@ export class ChatTranscriptCache {
     this.activeRequests.delete(sessionId);
   }
 
-  revokeAuthorization(contextKey: string | null, sessionId: string): boolean {
+  revokeAuthorization(contextKey: string | null): boolean {
     if (!contextKey || contextKey !== this.contextKey) return false;
-    this.entries.delete(sessionId);
-    this.latestRequests.delete(sessionId);
-    this.activeRequests.delete(sessionId);
-    const sessionRevision = (this.sessionRevisions.get(sessionId) ?? 0) + 1;
-    this.sessionRevisions.set(sessionId, sessionRevision);
-    this.authorizationRevokedSessions.add(sessionId);
+    this.entries.clear();
+    this.protectedSessions.clear();
+    this.latestRequests.clear();
+    this.activeRequests.clear();
+    this.authorizationRevoked = true;
+    this.contextRevision += 1;
     const revocation = {
       contextKey,
-      sessionId,
       contextRevision: this.contextRevision,
-      sessionRevision,
     };
     for (const listener of [...this.authorizationRevocationListeners]) listener(revocation);
     return true;
@@ -202,29 +195,18 @@ export class ChatTranscriptCache {
     return () => this.authorizationRevocationListeners.delete(listener);
   }
 
-  isAuthorizationRevoked(contextKey: string | null, sessionId: string): boolean {
-    return (
-      contextKey !== null &&
-      contextKey === this.contextKey &&
-      this.authorizationRevokedSessions.has(sessionId)
-    );
-  }
-
-  confirmAuthorization(token: TranscriptRequestToken, contextKey: string | null): boolean {
-    if (!contextKey || contextKey !== this.contextKey) return false;
-    if (!this.isRequestContextCurrent(token, contextKey)) return false;
-    return this.authorizationRevokedSessions.delete(token.sessionId);
+  isAuthorizationRevoked(contextKey: string | null): boolean {
+    return contextKey !== null && contextKey === this.contextKey && this.authorizationRevoked;
   }
 
   captureSession(contextKey: string | null, sessionId: string): TranscriptSessionToken {
-    if (contextKey !== this.contextKey) {
-      return { contextKey, sessionId, contextRevision: -1, sessionRevision: -1 };
+    if (contextKey !== this.contextKey || (contextKey !== null && this.authorizationRevoked)) {
+      return { contextKey, sessionId, contextRevision: -1 };
     }
     return {
       contextKey,
       sessionId,
       contextRevision: this.contextRevision,
-      sessionRevision: this.sessionRevisions.get(sessionId) ?? 0,
     };
   }
 
@@ -237,11 +219,11 @@ export class ChatTranscriptCache {
       return token.contextKey === null && contextKey === null;
     }
     if (!this.isTokenContextCurrent(token, contextKey)) return false;
-    return token.sessionRevision === (this.sessionRevisions.get(token.sessionId) ?? 0);
+    return true;
   }
 
   protect(contextKey: string | null, sessionId: string, owner: symbol): void {
-    if (!contextKey || contextKey !== this.contextKey) return;
+    if (!contextKey || contextKey !== this.contextKey || this.authorizationRevoked) return;
     const owners = this.protectedSessions.get(sessionId) ?? new Set<symbol>();
     owners.add(owner);
     this.protectedSessions.set(sessionId, owners);
@@ -258,13 +240,12 @@ export class ChatTranscriptCache {
 
   beginRequest(contextKey: string | null, sessionId: string): TranscriptRequestToken {
     const revision = ++this.requestClock;
-    if (contextKey !== this.contextKey) {
+    if (contextKey !== this.contextKey || (contextKey !== null && this.authorizationRevoked)) {
       return {
         contextKey,
         sessionId,
         revision,
         contextRevision: -1,
-        sessionRevision: -1,
       };
     }
     const active = this.activeRequests.get(sessionId) ?? new Set<number>();
@@ -276,14 +257,12 @@ export class ChatTranscriptCache {
       sessionId,
       revision,
       contextRevision: this.contextRevision,
-      sessionRevision: this.sessionRevisions.get(sessionId) ?? 0,
     };
   }
 
   canWriteComplete(token: TranscriptRequestToken, contextKey: string | null): boolean {
-    if (!contextKey || contextKey !== this.contextKey) return false;
+    if (!contextKey || contextKey !== this.contextKey || this.authorizationRevoked) return false;
     if (token.contextRevision !== this.contextRevision) return false;
-    if (token.sessionRevision !== (this.sessionRevisions.get(token.sessionId) ?? 0)) return false;
     if (this.latestRequests.get(token.sessionId) === token.revision) return true;
     // A complete older response is a valid fallback while its newer
     // replacement is still pending. It may populate the cache now; a

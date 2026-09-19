@@ -114,7 +114,7 @@ describe("ChatTranscriptCache", () => {
     expect(cache.snapshot().ids).toEqual(["session-b"]);
   });
 
-  it("revokes only the active context and invalidates its pre-revocation work", () => {
+  it("revokes every session in only the active context until a fresh context activates", () => {
     const cache = new ChatTranscriptCache();
     const contextA = "instance|guardian-a";
     const contextB = "instance|guardian-b";
@@ -124,27 +124,35 @@ describe("ChatTranscriptCache", () => {
     const staleRequest = cache.beginRequest(contextA, "session-1");
     cache.activateContext(contextB);
     cache.putComplete(contextB, "session-1", [message("session-1")]);
-    const currentRequest = cache.beginRequest(contextB, "session-1");
-    const currentEvents = cache.captureSession(contextB, "session-1");
+    cache.putComplete(contextB, "session-2", [message("session-2")]);
+    const currentRequestA = cache.beginRequest(contextB, "session-1");
+    const currentRequestB = cache.beginRequest(contextB, "session-2");
+    const currentEventsB = cache.captureSession(contextB, "session-2");
 
-    expect(cache.revokeAuthorization(contextA, "session-1")).toBe(false);
+    expect(cache.revokeAuthorization(contextA)).toBe(false);
     expect(cache.get(contextB, "session-1")).toBeDefined();
+    expect(cache.get(contextB, "session-2")).toBeDefined();
     expect(listener).not.toHaveBeenCalled();
 
-    expect(cache.revokeAuthorization(contextB, "session-1")).toBe(true);
-    expect(cache.get(contextB, "session-1")).toBeUndefined();
+    expect(cache.revokeAuthorization(contextB)).toBe(true);
+    expect(cache.snapshot().ids).toEqual([]);
     expect(cache.isRequestContextCurrent(staleRequest, contextB)).toBe(false);
-    expect(cache.isRequestContextCurrent(currentRequest, contextB)).toBe(false);
-    expect(cache.isSessionCurrent(currentEvents, contextB)).toBe(false);
-    expect(cache.isAuthorizationRevoked(contextB, "session-1")).toBe(true);
-    expect(cache.confirmAuthorization(currentRequest, contextB)).toBe(false);
-    expect(listener).toHaveBeenCalledWith(
-      expect.objectContaining({ contextKey: contextB, sessionId: "session-1" }),
-    );
+    expect(cache.isRequestContextCurrent(currentRequestA, contextB)).toBe(false);
+    expect(cache.isRequestContextCurrent(currentRequestB, contextB)).toBe(false);
+    expect(cache.isSessionCurrent(currentEventsB, contextB)).toBe(false);
+    expect(cache.isAuthorizationRevoked(contextB)).toBe(true);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ contextKey: contextB }));
 
+    const blockedRequest = cache.beginRequest(contextB, "session-1");
+    expect(cache.isRequestContextCurrent(blockedRequest, contextB)).toBe(false);
+    expect(cache.putComplete(contextB, "session-1", [message("session-1")])).toBe(false);
+
+    cache.activateContext(null);
+    cache.activateContext(contextB);
     const freshRequest = cache.beginRequest(contextB, "session-1");
-    expect(cache.confirmAuthorization(freshRequest, contextB)).toBe(true);
-    expect(cache.isAuthorizationRevoked(contextB, "session-1")).toBe(false);
+    expect(cache.isAuthorizationRevoked(contextB)).toBe(false);
+    expect(cache.isRequestContextCurrent(freshRequest, contextB)).toBe(true);
+    expect(cache.putComplete(contextB, "session-1", [message("session-1")])).toBe(true);
   });
 
   it("keeps an older complete result as fallback only while a newer request is pending", () => {

@@ -595,77 +595,116 @@ describe("Chat history cache", () => {
 
   it.each([
     401, 403,
-  ])("purges every mounted view and rejects pre-purge work after HTTP %s", async (status) => {
+  ])("purges every same-context session and rejects pre-purge work after HTTP %s", async (status) => {
     rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
     mockInvalidateQueries.mockReturnValue(new Promise(() => {}));
-    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
-    const staleInsert = chatMessage("session-a", "stale-insert", "2026-09-19T00:01:00.000Z");
-    const firstLoad = deferred<ChatMessage[] | null>();
-    const secondLoad = deferred<ChatMessage[] | null>();
-    chatTranscriptCache.putComplete(context, "session-a", [old]);
-    rs.mocked(listSessionMessages)
-      .mockReturnValueOnce(firstLoad.promise)
-      .mockReturnValueOnce(secondLoad.promise);
+    const oldA = chatMessage("session-a", "old-a", "2026-09-19T00:00:00.000Z");
+    const oldB = chatMessage("session-b", "old-b", "2026-09-19T00:00:00.000Z");
+    const staleInsertB = chatMessage("session-b", "stale-insert-b", "2026-09-19T00:01:00.000Z");
+    const loadA = deferred<ChatMessage[] | null>();
+    const loadB = deferred<ChatMessage[] | null>();
+    let sessionBStream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    chatTranscriptCache.putComplete(context, "session-a", [oldA]);
+    chatTranscriptCache.putComplete(context, "session-b", [oldB]);
+    rs.mocked(listSessionMessages).mockImplementation((sessionId) =>
+      sessionId === "session-a" ? loadA.promise : loadB.promise,
+    );
+    rs.mocked(listSessionTurns)
+      .mockResolvedValueOnce([{ turnId: "turn-session-a", status: "running" }])
+      .mockResolvedValueOnce([{ turnId: "turn-session-b", status: "running" }]);
+    rs.mocked(openTurnStream)
+      .mockResolvedValueOnce(new Response(new ReadableStream()))
+      .mockImplementationOnce(() =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                // Deliberately ignore abort for B so the test can deliver a
+                // pre-revocation stream callback after the context purge.
+                sessionBStream = controller;
+              },
+            }),
+          ),
+        ),
+      );
 
     render(
       <MemoryRouter>
         <ChatTranscriptCacheContext.Provider value={context}>
-          <div data-testid="first-chat">
+          <div data-testid="chat-a">
             <Chat sessionId="session-a" />
           </div>
-          <div data-testid="second-chat">
-            <Chat sessionId="session-a" />
+          <div data-testid="chat-b">
+            <Chat sessionId="session-b" />
           </div>
         </ChatTranscriptCacheContext.Provider>
       </MemoryRouter>,
     );
     await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(MockEventSource.instances).toHaveLength(2));
-    for (const testId of ["first-chat", "second-chat"]) {
+    expect(
+      within(screen.getByTestId("chat-a"))
+        .getByTestId("message-list")
+        .getAttribute("data-message-ids"),
+    ).toBe("old-a");
+    expect(
+      within(screen.getByTestId("chat-b"))
+        .getByTestId("message-list")
+        .getAttribute("data-message-ids"),
+    ).toBe("old-b");
+    await waitFor(() =>
       expect(
-        within(screen.getByTestId(testId))
-          .getByTestId("message-list")
-          .getAttribute("data-message-ids"),
-      ).toBe("old");
-    }
-    const staleMessageListener = [
-      ...(MockEventSource.instances[1]?.listeners.get("message_insert") ?? []),
-    ][0]!;
+        within(screen.getByTestId("chat-b"))
+          .getByTestId("chat-composer")
+          .getAttribute("data-streaming"),
+      ).toBe("true"),
+    );
+    const sessionBSource = MockEventSource.instances.find((source) =>
+      source.url.toString().includes("session-b"),
+    );
+    const staleMessageListener = [...(sessionBSource?.listeners.get("message_insert") ?? [])][0]!;
 
     await act(async () => {
-      firstLoad.reject(new ChatApiError("authorization lost", status, null));
-      await firstLoad.promise.catch(() => undefined);
+      loadA.reject(new ChatApiError("authorization lost", status, null));
+      await loadA.promise.catch(() => undefined);
     });
 
-    for (const testId of ["first-chat", "second-chat"]) {
+    for (const testId of ["chat-a", "chat-b"]) {
       expect(
         within(screen.getByTestId(testId))
           .getByTestId("message-list")
           .getAttribute("data-message-ids"),
       ).toBe("");
     }
-    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    expect(chatTranscriptCache.snapshot().ids).toEqual([]);
+    expect(
+      within(screen.getByTestId("chat-b"))
+        .getByTestId("chat-composer")
+        .getAttribute("data-streaming"),
+    ).toBe("false");
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: AUTH_QUERY_KEY });
     expect(MockEventSource.instances).toHaveLength(2);
 
     act(() => {
       staleMessageListener(
-        new MessageEvent("message_insert", { data: JSON.stringify(staleInsert) }),
+        new MessageEvent("message_insert", { data: JSON.stringify(staleInsertB) }),
       );
+      sessionBStream?.enqueue(new TextEncoder().encode('event: done\ndata: {"success":true}\n\n'));
     });
-    secondLoad.resolve([old, staleInsert]);
+    loadB.resolve([oldB, staleInsertB]);
     await act(async () => {
-      await secondLoad.promise;
+      await loadB.promise;
     });
 
-    for (const testId of ["first-chat", "second-chat"]) {
+    for (const testId of ["chat-a", "chat-b"]) {
       expect(
         within(screen.getByTestId(testId))
           .getByTestId("message-list")
           .getAttribute("data-message-ids"),
       ).toBe("");
     }
-    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    expect(chatTranscriptCache.snapshot().ids).toEqual([]);
+    expect(listSessionMessages).toHaveBeenCalledTimes(2);
     expect(MockEventSource.instances).toHaveLength(2);
   });
 
