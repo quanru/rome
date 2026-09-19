@@ -124,6 +124,20 @@ describe("ChatTranscriptCache", () => {
     expect(cache.ownsLatestCacheWrite(second, "context")).toBe(true);
     cache.finishRequest(second);
     expect(cache.ownsLatestCacheWrite(second, "context")).toBe(false);
+    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
+  });
+
+  it("restores cache-write ownership to an in-flight request when a newer request fails", () => {
+    const cache = new ChatTranscriptCache();
+    cache.activateContext("context");
+    const first = cache.beginRequest("context", "session-1");
+    const second = cache.beginRequest("context", "session-1");
+
+    cache.finishRequest(second, { failed: true });
+
+    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(true);
+    cache.finishRequest(first);
+    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
   });
 
   it("keeps a pending-identity request current through initial explicit activation", () => {

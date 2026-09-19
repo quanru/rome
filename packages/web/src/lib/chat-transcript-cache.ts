@@ -43,6 +43,7 @@ export class ChatTranscriptCache {
   private entries = new Map<string, TranscriptCacheEntry>();
   private protectedSessions = new Map<string, Set<symbol>>();
   private latestRequests = new Map<string, number>();
+  private activeRequests = new Map<string, Set<number>>();
   private clock = 0;
   private requestClock = 0;
   private contextRevision = 0;
@@ -68,6 +69,11 @@ export class ChatTranscriptCache {
     this.entries.clear();
     this.protectedSessions.clear();
     this.latestRequests.clear();
+    this.activeRequests.clear();
+  }
+
+  isContextActive(contextKey: string | null): boolean {
+    return contextKey !== null && contextKey === this.contextKey;
   }
 
   get(contextKey: string | null, sessionId: string): ChatMessage[] | undefined {
@@ -146,6 +152,7 @@ export class ChatTranscriptCache {
     if (!contextKey || contextKey !== this.contextKey) return;
     this.entries.delete(sessionId);
     this.latestRequests.delete(sessionId);
+    this.activeRequests.delete(sessionId);
   }
 
   protect(contextKey: string | null, sessionId: string, owner: symbol): void {
@@ -169,6 +176,9 @@ export class ChatTranscriptCache {
     if (contextKey !== this.contextKey) {
       return { contextKey, sessionId, revision, contextRevision: -1 };
     }
+    const active = this.activeRequests.get(sessionId) ?? new Set<number>();
+    active.add(revision);
+    this.activeRequests.set(sessionId, active);
     this.latestRequests.set(sessionId, revision);
     return { contextKey, sessionId, revision, contextRevision: this.contextRevision };
   }
@@ -190,10 +200,17 @@ export class ChatTranscriptCache {
     return token.contextKey === null && contextKey === null && this.contextKey !== null;
   }
 
-  finishRequest(token: TranscriptRequestToken): void {
-    if (this.latestRequests.get(token.sessionId) === token.revision) {
-      this.latestRequests.delete(token.sessionId);
+  finishRequest(token: TranscriptRequestToken, options: { failed?: boolean } = {}): void {
+    const active = this.activeRequests.get(token.sessionId);
+    active?.delete(token.revision);
+    if (active?.size === 0) this.activeRequests.delete(token.sessionId);
+
+    if (this.latestRequests.get(token.sessionId) !== token.revision) return;
+    if (options.failed && active?.size) {
+      this.latestRequests.set(token.sessionId, Math.max(...active));
+      return;
     }
+    this.latestRequests.delete(token.sessionId);
   }
 
   snapshot(): { ids: string[]; totalBytes: number } {

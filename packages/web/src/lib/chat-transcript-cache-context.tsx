@@ -14,7 +14,9 @@ export function AuthenticatedChatTranscriptCacheBoundary({ children }: { childre
         : `visitor:${identity.accountId}:${identity.email}`;
     return `${window.location.origin}|${identityKey}`;
   }, [identity]);
-  const [activeContextKey, setActiveContextKey] = useState<string | null>(null);
+  const [activeContextKey, setActiveContextKey] = useState<string | null>(() =>
+    chatTranscriptCache.isContextActive(contextKey) ? contextKey : null,
+  );
 
   useEffect(() => {
     chatTranscriptCache.activateContext(contextKey);

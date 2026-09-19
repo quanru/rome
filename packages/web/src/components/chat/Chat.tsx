@@ -765,6 +765,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       // Only mark loaded once we have data in hand. Marking before the await
       // permanently suppressed retries on any failure — the user would land in
       // a silently-empty chat with no recovery short of a page refresh.
+      let requestFailed = false;
       try {
         const data = await listSessionMessages(id);
         const currentContext = transcriptCacheContextRef.current;
@@ -828,6 +829,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           void markSessionRead(id);
         }
       } catch {
+        requestFailed = true;
         // Leave the session unmarked so callers (auto-load + post-stream
         // refresh) can retry on the next trigger.
         if (
@@ -836,7 +838,17 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         ) {
           return;
         }
-        if (id === mainSessionIdRef.current) {
+        const fallbackRequest = Math.max(
+          ...[...(inFlightRequestsRef.current.get(id) ?? [])].filter(
+            (revision) => revision !== localRequest,
+          ),
+        );
+        if (Number.isFinite(fallbackRequest)) {
+          // A forced refresh may fail while the request it superseded is still
+          // in flight. Restore that request's response ownership so its
+          // complete result can finish the load instead of being discarded.
+          latestRequestBySessionRef.current.set(id, fallbackRequest);
+        } else if (id === mainSessionIdRef.current) {
           setHistoryLoadState(messagesRef.current.has(id) ? "stale" : "error");
         }
       } finally {
@@ -846,7 +858,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         if (latestRequestBySessionRef.current.get(id) === localRequest) {
           latestRequestBySessionRef.current.delete(id);
         }
-        chatTranscriptCache.finishRequest(request);
+        chatTranscriptCache.finishRequest(request, { failed: requestFailed });
       }
     },
     [isReadVisibleSession, markSessionRead, transcriptCacheContext],

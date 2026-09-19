@@ -9,7 +9,10 @@ import { Chat } from "./Chat";
 import type { ChatComposerSendControls, ChatComposerSnapshot } from "./ChatComposer";
 import type { ChatRow } from "./chat-view";
 import type { ChatMessage } from "@/lib/chat-types";
-import { ChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
+import {
+  AuthenticatedChatTranscriptCacheBoundary,
+  ChatTranscriptCacheContext,
+} from "@/lib/chat-transcript-cache-context";
 import { chatTranscriptCache } from "@/lib/chat-transcript-cache";
 import {
   deleteSession,
@@ -22,6 +25,7 @@ import {
 
 const t = (key: string) => key;
 const mockUseSessionIdentity = rs.hoisted(() => rs.fn());
+const mockUseDashboardIdentity = rs.hoisted(() => rs.fn());
 const appsPanel = rs.hoisted(() => ({ collapsed: true, setCollapsed: rs.fn() }));
 const composerHarness = rs.hoisted(() => ({
   onSend: null as
@@ -38,6 +42,10 @@ rs.mock("react-i18next", () => ({
 
 rs.mock("@/components/chat/use-session-identity", () => ({
   useSessionIdentity: mockUseSessionIdentity,
+}));
+
+rs.mock("@/hooks/use-dashboard-identity", () => ({
+  useDashboardIdentity: mockUseDashboardIdentity,
 }));
 
 rs.mock("@/pages/free/workspace-context", () => ({
@@ -215,6 +223,14 @@ beforeEach(() => {
   stickToBottom.isAtBottom = true;
   rs.mocked(deleteSession).mockResolvedValue(new Response(null, { status: 204 }));
   rs.mocked(listSessionMessages).mockResolvedValue([]);
+  mockUseDashboardIdentity.mockReturnValue({
+    data: {
+      kind: "guardian",
+      userId: "guardian-1",
+      displayName: "Guardian",
+      avatarUrl: null,
+    },
+  });
   mockUseSessionIdentity.mockReturnValue({
     sessionName: null,
     pinnedAgentMention: null,
@@ -299,6 +315,45 @@ describe("Chat history cache", () => {
         "a-old,a-new",
       ),
     );
+  });
+
+  it("renders cached history on the first child render after the authenticated boundary remounts", async () => {
+    const boundaryContext = `${window.location.origin}|guardian:guardian-1`;
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const current = chatMessage("session-a", "current", "2026-09-19T00:01:00.000Z");
+    chatTranscriptCache.activateContext(boundaryContext);
+
+    const previousRoute = render(
+      <AuthenticatedChatTranscriptCacheBoundary>
+        <div>full app route</div>
+      </AuthenticatedChatTranscriptCacheBoundary>,
+    );
+    previousRoute.unmount();
+    chatTranscriptCache.putComplete(boundaryContext, "session-a", [old]);
+    const refresh = deferred<ChatMessage[] | null>();
+    rs.mocked(listSessionMessages).mockReturnValue(refresh.promise);
+
+    render(
+      <MemoryRouter>
+        <AuthenticatedChatTranscriptCacheBoundary>
+          <Chat sessionId="session-a" />
+        </AuthenticatedChatTranscriptCacheBoundary>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("old");
+    expect(screen.queryByText("history.loading")).toBeNull();
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+
+    refresh.resolve([old, current]);
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe(
+        "old,current",
+      ),
+    );
+    expect(
+      chatTranscriptCache.get(boundaryContext, "session-a")?.map((message) => message.id),
+    ).toEqual(["old", "current"]);
   });
 
   it("activates the cache after identity resolves without restarting Chat", async () => {
@@ -540,6 +595,42 @@ describe("Chat history cache", () => {
     expect(await screen.findByText("history.loadFailed")).toBeTruthy();
     expect(screen.queryByText("history.loading")).toBeNull();
     expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+  });
+
+  it("uses the initial complete load after a newer reconnect refresh fails", async () => {
+    rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    const initialLoad = deferred<ChatMessage[] | null>();
+    const forcedRefresh = deferred<ChatMessage[] | null>();
+    const loaded = chatMessage("session-a", "loaded", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages)
+      .mockReturnValueOnce(initialLoad.promise)
+      .mockReturnValueOnce(forcedRefresh.promise);
+
+    render(renderCachedChat("session-a"));
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+    const source = MockEventSource.instances[0]!;
+
+    act(() => {
+      source.emitLifecycle("open", MockEventSource.OPEN);
+      source.emitLifecycle("error", MockEventSource.CONNECTING);
+      source.emitLifecycle("open", MockEventSource.OPEN);
+    });
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      forcedRefresh.reject(new Error("offline"));
+      await forcedRefresh.promise.catch(() => undefined);
+    });
+
+    initialLoad.resolve([loaded]);
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded"),
+    );
+    expect(screen.queryByText("history.loading")).toBeNull();
+    expect(screen.queryByText("history.loadFailed")).toBeNull();
+    expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+      "loaded",
+    ]);
   });
 });
 
