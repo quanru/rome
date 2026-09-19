@@ -9,6 +9,18 @@ import type { RoutineDraftSpec } from "@/lib/chat-types";
 import type { Routine } from "@/lib/routine-language";
 
 let fetchMock: ReturnType<typeof rs.fn>;
+// Names the mount-time existence guard (GET /api/routines) reports. Default is
+// empty so a fresh proposal offers its one-click action.
+let existingRoutineNames: string[];
+// Response the create POST resolves with. Overridable per test.
+let createResponse: () => Response;
+
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 const eventDraft: RoutineDraftSpec = {
   sentence: "When you get an email from Dana, Rome will summarize it and text you.",
@@ -72,13 +84,35 @@ function renderCard(draft: RoutineDraftSpec, queryClient?: QueryClient) {
   );
 }
 
-beforeEach(() => {
-  fetchMock = rs.fn().mockResolvedValue(
-    new Response(JSON.stringify(createdRoutine), {
-      status: 201,
-      headers: { "content-type": "application/json" },
-    }),
+function postCallCount(): number {
+  return fetchMock.mock.calls.filter(
+    ([, init]) => ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase() === "POST",
+  ).length;
+}
+
+function lastPostBody(): unknown {
+  const posts = fetchMock.mock.calls.filter(
+    ([, init]) => ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase() === "POST",
   );
+  const [, init] = posts[posts.length - 1] as [string, RequestInit];
+  return JSON.parse(String(init.body));
+}
+
+beforeEach(() => {
+  existingRoutineNames = [];
+  createResponse = () => jsonResponse(createdRoutine, 201);
+  // Branch by method so the mount-time existence guard (GET) and the create
+  // action (POST) can be driven independently, matching the real endpoints.
+  fetchMock = rs.fn((_input: unknown, init?: RequestInit) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (method === "POST") return Promise.resolve(createResponse());
+    return Promise.resolve(
+      jsonResponse(
+        existingRoutineNames.map((name) => ({ name })),
+        200,
+      ),
+    );
+  });
   rs.stubGlobal("fetch", fetchMock);
 });
 
@@ -126,15 +160,14 @@ describe("RoutineDraftCard", () => {
     expect(screen.queryByText(eventDraft.thenSummary)).toBeNull();
   });
 
-  it("sends the originating chat context and waits for the persisted outcome", async () => {
+  it("sends the originating chat context on the create request", async () => {
     const user = userEvent.setup();
     renderCard(eventDraft);
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(request.body))).toEqual({
+    expect(postCallCount()).toBe(1);
+    expect(lastPostBody()).toEqual({
       name: "Landlord emails",
       trigger: eventDraft.trigger,
       actionName: "summon",
@@ -146,14 +179,49 @@ describe("RoutineDraftCard", () => {
         toolUseId: "draft-tool-1",
       },
     });
-    expect(
-      screen.getByRole("button", { name: "Turning on routine" }).hasAttribute("disabled"),
-    ).toBe(true);
+  });
+
+  it("reaches a definitive success from the POST response even if no record push arrives", async () => {
+    // The test never simulates the live routine_created_card push, so a card
+    // that only settled on that push would spin forever. It must settle from
+    // the response itself — without ever sourcing the detail link locally.
+    const user = userEvent.setup();
+    renderCard(eventDraft);
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+
+    expect(await screen.findByText("On")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turning on routine" })).toBeNull();
+    // The persisted record remains the sole source of the /routines/:id link;
+    // this settled draft never renders one.
+    expect(screen.queryByRole("link", { name: /run history/i })).toBeNull();
+    expect(postCallCount()).toBe(1);
+  });
+
+  it("does not offer a clickable re-creation for a historical already-completed draft", async () => {
+    // Reopening a chat whose draft was turned on before the persisted record
+    // shipped: it has no companion routine_created_card to suppress it, so the
+    // existence guard must keep the one-click action from creating a duplicate.
+    existingRoutineNames = [eventDraft.name];
+    renderCard(eventDraft);
+
+    await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
+    expect(postCallCount()).toBe(0);
+    // No local link is invented for the historical draft.
     expect(screen.queryByRole("link", { name: /run history/i })).toBeNull();
   });
 
   it("does not render completion navigation while creation is pending", async () => {
-    fetchMock.mockImplementation(() => new Promise(() => {}));
+    createResponse = () => {
+      throw new Error("unreachable");
+    };
+    fetchMock.mockImplementation((_input: unknown, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "POST") return new Promise(() => {});
+      return Promise.resolve(jsonResponse([], 200));
+    });
     const user = userEvent.setup();
     renderCard(eventDraft);
 
@@ -165,13 +233,8 @@ describe("RoutineDraftCard", () => {
     expect(screen.queryByRole("link", { name: /run history/i })).toBeNull();
   });
 
-  it("does not render completion navigation or seed the cache for a malformed success", async () => {
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ id: "r-1" }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+  it("does not settle to success or seed the cache for a malformed success", async () => {
+    createResponse = () => jsonResponse({ id: "r-1" }, 201);
     const queryClient = testQueryClient();
     queryClient.setQueryData<Routine[]>(["routines", "list"], [createdRoutine]);
     const user = userEvent.setup();
@@ -181,16 +244,13 @@ describe("RoutineDraftCard", () => {
 
     expect(await screen.findByText("Couldn't turn it on (201).")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /run history/i })).toBeNull();
+    // Malformed success keeps the one-click action available, not a success state.
+    expect(screen.getByRole("button", { name: /turn it on/i })).toBeTruthy();
     expect(queryClient.getQueryData(["routines", "list"])).toBeUndefined();
   });
 
   it("surfaces a failed creation and keeps the one-click action available", async () => {
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ error: "Routine name already taken" }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+    createResponse = () => jsonResponse({ error: "Routine name already taken" }, 400);
     const user = userEvent.setup();
     renderCard(eventDraft);
 

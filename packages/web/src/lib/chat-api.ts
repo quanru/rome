@@ -676,6 +676,19 @@ export async function createRoutine(payload: CreateRoutinePayload): Promise<Crea
   return { ok: false, status: res.status, error: payloadErr?.error };
 }
 
+// Names of the existing routines. Used only as a client-side guard so a
+// historical routine_draft_card (turned on before the persisted
+// routine_created_card record shipped, so it has no companion record to
+// suppress it) does not re-offer a clickable "Turn it on" for an already-active
+// routine. This never sources the completed card's detail link — that comes
+// solely from the persisted record.
+export async function listRoutineNames(): Promise<string[]> {
+  const res = await fetch("/api/routines", { credentials: "include" });
+  if (!res.ok) return [];
+  const rows = (await res.json().catch(() => [])) as Array<{ name?: string }>;
+  return Array.isArray(rows) ? rows.map((r) => r.name ?? "").filter(Boolean) : [];
+}
+
 export async function loadSettings(): Promise<Record<string, unknown>> {
   const res = await fetch("/api/settings", { credentials: "include" });
   if (!res.ok) return {};

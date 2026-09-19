@@ -5,9 +5,12 @@ import { eq } from "drizzle-orm";
 import { routines } from "../../db/schema.js";
 import { toRoutine } from "../../db/repositories/routines.js";
 import { parseDateAndLocalTime } from "../../routines/schedule-trigger-provider.js";
+import { createLogger } from "../../logger.js";
 import type { ApiDeps } from "../deps.js";
 import type { MessagePart } from "../../types.js";
 import type { Trigger } from "../../routines/types.js";
+
+const log = createLogger("api:routines");
 
 // The engine merges trigger payloads into action args under this key. Forbid
 // it in user-supplied args so we never silently overwrite caller data.
@@ -196,6 +199,31 @@ function messageHasRoutineDraft(content: string, toolUseId: string): boolean {
   }
 }
 
+// The routine id recorded by an already-persisted routine_created_card that
+// completes this proposal (sourceToolUseId), or null. Used to make POST
+// /routines idempotent per proposal so a reload-and-reclick or a second tab
+// cannot create a duplicate routine from one draft.
+function messageCreatedRoutineId(content: string, toolUseId: string): string | null {
+  try {
+    const parts: unknown = JSON.parse(content);
+    if (!Array.isArray(parts)) return null;
+    for (const part of parts) {
+      if (
+        isPlainObject(part) &&
+        part.type === "routine_created_card" &&
+        part.sourceToolUseId === toolUseId &&
+        typeof part.routineId === "string" &&
+        part.routineId.trim() !== ""
+      ) {
+        return part.routineId;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Rebuilds the action-execution tree for a run from the flat `action_executions`
 // rows that share its root executionId. Two subtleties:
 //  - The root is found by `parentId == null`, NOT `id === rootExecutionId`: on
@@ -320,13 +348,33 @@ export function routinesRoutes(deps: ApiDeps): Hono {
       if (!session || (session.type !== "webchat" && session.type !== "webchat_handoff")) {
         return c.json({ error: "Webchat session not found" }, 404);
       }
-      const sourceExists = (await deps.webchatRepo.getMessages(webchatContext.sessionId)).some(
-        (message) =>
-          message.turnId === webchatContext.turnId &&
-          messageHasRoutineDraft(message.content, webchatContext.toolUseId),
+      const turnMessages = (await deps.webchatRepo.getMessages(webchatContext.sessionId)).filter(
+        (message) => message.turnId === webchatContext.turnId,
+      );
+      const sourceExists = turnMessages.some((message) =>
+        messageHasRoutineDraft(message.content, webchatContext.toolUseId),
       );
       if (!sourceExists) {
         return c.json({ error: "Routine draft not found in the originating chat turn" }, 400);
+      }
+      // Idempotent per proposal: if a routine_created_card already records a
+      // routine for this exact (session, turn, toolUseId), a duplicate request
+      // (slow POST + reload-and-reclick, or two tabs) must not create a second
+      // routine. Return the already-recorded routine instead of inserting.
+      const existingRoutineId = turnMessages
+        .map((message) => messageCreatedRoutineId(message.content, webchatContext.toolUseId))
+        .find((id): id is string => id !== null);
+      if (existingRoutineId) {
+        const [existing] = await deps.db
+          .select()
+          .from(routines)
+          .where(eq(routines.id, existingRoutineId));
+        if (existing) {
+          return c.json(existing, 200);
+        }
+        // The recorded routine was deleted after creation. The record stays the
+        // historical fact; do not silently recreate it under the same proposal.
+        return c.json({ error: "A routine was already created for this proposal" }, 409);
       }
     }
 
@@ -403,9 +451,23 @@ export function routinesRoutes(deps: ApiDeps): Hono {
         routineId: inserted.id,
         routineName: inserted.name,
       };
-      await deps.webchatRepo.addBackendMessage(webchatContext.sessionId, webchatContext.turnId, [
-        part,
-      ]);
+      // The routine is already created and activated. A failure to append the
+      // transcript record must not 500 the request (which would prompt a client
+      // retry and duplicate the routine) — log and continue, matching the other
+      // addBackendMessage call sites (persistSuspensionCard / commentary path).
+      try {
+        await deps.webchatRepo.addBackendMessage(webchatContext.sessionId, webchatContext.turnId, [
+          part,
+        ]);
+      } catch (err) {
+        log.warn("failed to persist routine_created card", {
+          sessionId: webchatContext.sessionId,
+          turnId: webchatContext.turnId,
+          toolUseId: webchatContext.toolUseId,
+          routineId: inserted.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     return c.json(inserted, 201);

@@ -83,6 +83,7 @@ describe("Routines API", () => {
   let testDb: TestDb;
   let app: Hono;
   let routineEngine: RoutineEngine;
+  let scheduleProvider: ManualTriggerProvider;
   let webchatRepo: ApiDeps["webchatRepo"];
 
   beforeEach(async () => {
@@ -98,7 +99,8 @@ describe("Routines API", () => {
       0,
       new FakeClock(),
     );
-    routineEngine.registerProvider("schedule", new ManualTriggerProvider());
+    scheduleProvider = new ManualTriggerProvider();
+    routineEngine.registerProvider("schedule", scheduleProvider);
     // CRUD tests bind routines to these stub actions; creation validates
     // actionName against the registry.
     for (const name of [
@@ -268,6 +270,87 @@ describe("Routines API", () => {
     const messages = await webchatRepo.getMessages("chat-a");
     expect(messages).toHaveLength(1);
     expect(messages[0]?.content).not.toContain("routine_created_card");
+  });
+
+  it("creates and activates the routine even when the transcript append fails", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    await webchatRepo.addMessage(
+      "draft-message",
+      "chat-a",
+      "assistant",
+      JSON.stringify([
+        { type: "routine_draft_card", toolUseId: "draft-tool-1", draft: { name: "Resilient" } },
+      ]),
+      "turn-1",
+    );
+    // The routine row is already inserted and activated before the transcript
+    // append; a failure there must not 500 the request (a client retry would
+    // create a duplicate routine).
+    const appendSpy = rs
+      .spyOn(webchatRepo, "addBackendMessage")
+      .mockRejectedValue(new Error("transcript write failed"));
+
+    const res = await app.request("/routines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Resilient",
+        trigger: { type: "schedule", tzid: "UTC", tzMode: "fixed", localTime: "09:00" },
+        actionName: "send_message",
+        args: { channel: "webchat", text: "hi" },
+        webchatContext: { sessionId: "chat-a", turnId: "turn-1", toolUseId: "draft-tool-1" },
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(appendSpy).toHaveBeenCalledTimes(1);
+    const created = (await res.json()) as { id: string };
+    const rows = await testDb.db.select().from(routines);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(created.id);
+    expect(scheduleProvider.isActive(created.id)).toBe(true);
+    appendSpy.mockRestore();
+  });
+
+  it("is idempotent per proposal: a duplicate create returns the same routine", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    await webchatRepo.addMessage(
+      "draft-message",
+      "chat-a",
+      "assistant",
+      JSON.stringify([
+        { type: "routine_draft_card", toolUseId: "draft-tool-1", draft: { name: "Once only" } },
+      ]),
+      "turn-1",
+    );
+    const body = JSON.stringify({
+      name: "Once only",
+      trigger: { type: "schedule", tzid: "UTC", tzMode: "fixed", localTime: "09:00" },
+      actionName: "send_message",
+      args: { channel: "webchat", text: "hi" },
+      webchatContext: { sessionId: "chat-a", turnId: "turn-1", toolUseId: "draft-tool-1" },
+    });
+    const headers = { "Content-Type": "application/json" };
+
+    const first = await app.request("/routines", { method: "POST", headers, body });
+    expect(first.status).toBe(201);
+    const firstRoutine = (await first.json()) as { id: string };
+
+    const second = await app.request("/routines", { method: "POST", headers, body });
+    // The second request must not create a duplicate; it returns the routine
+    // recorded by the first proposal's routine_created_card.
+    expect(second.status).toBe(200);
+    const secondRoutine = (await second.json()) as { id: string };
+    expect(secondRoutine.id).toBe(firstRoutine.id);
+
+    const rows = await testDb.db.select().from(routines);
+    expect(rows).toHaveLength(1);
+    const messages = await webchatRepo.getMessages("chat-a");
+    const createdParts = messages.flatMap((message) => {
+      const parts = JSON.parse(message.content) as Array<Record<string, unknown>>;
+      return parts.filter((part) => part.type === "routine_created_card");
+    });
+    expect(createdParts).toHaveLength(1);
   });
 
   it("rejects creation without trigger", async () => {
