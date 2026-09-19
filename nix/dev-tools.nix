@@ -103,7 +103,9 @@ let
       url = "https://github.com/vale-cli/vale/releases/download/v3.19.0/vale_3.19.0_${platform.valeAsset}.tar.gz";
       hash = platform.valeHash;
     };
-    nativeBuildInputs = [ pkgs.gnutar pkgs.gzip ];
+    nativeBuildInputs = [ pkgs.gnutar pkgs.gzip ]
+      ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.autoPatchelfHook;
+    buildInputs = pkgs.lib.optional pkgs.stdenv.isLinux pkgs.stdenv.cc.cc.lib;
     dontUnpack = true;
     installPhase = ''
       runHook preInstall
