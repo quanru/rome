@@ -22,6 +22,7 @@ describe("ChatTranscriptCache", () => {
   it("keeps five complete histories and evicts the least recently viewed inactive one", () => {
     const cache = new ChatTranscriptCache();
     const context = "instance-a|guardian-a";
+    cache.activateContext(context);
     for (let index = 1; index <= MAX_TRANSCRIPT_CACHE_ENTRIES; index += 1) {
       expect(cache.putComplete(context, `session-${index}`, [message(`session-${index}`)])).toBe(
         true,
@@ -43,6 +44,7 @@ describe("ChatTranscriptCache", () => {
   it("does not evict a visible history", () => {
     const cache = new ChatTranscriptCache();
     const context = "instance-a|guardian-a";
+    cache.activateContext(context);
     const owner = Symbol("visible-chat");
     cache.putComplete(context, "session-1", [message("session-1")]);
     cache.protect(context, "session-1", owner);
@@ -57,6 +59,7 @@ describe("ChatTranscriptCache", () => {
   it("rejects a history over the entry budget", () => {
     const cache = new ChatTranscriptCache();
     const context = "instance-a|guardian-a";
+    cache.activateContext(context);
     const oversized = "x".repeat(MAX_TRANSCRIPT_CACHE_ENTRY_BYTES + 1);
 
     expect(cache.putComplete(context, "large", [message("large", oversized)])).toBe(false);
@@ -66,6 +69,7 @@ describe("ChatTranscriptCache", () => {
   it("enforces the total byte budget", () => {
     const cache = new ChatTranscriptCache();
     const context = "instance-a|guardian-a";
+    cache.activateContext(context);
     const content = "x".repeat(9 * 1024 * 1024);
     cache.putComplete(context, "session-1", [message("session-1", content)]);
     cache.putComplete(context, "session-2", [message("session-2", content)]);
@@ -77,16 +81,42 @@ describe("ChatTranscriptCache", () => {
 
   it("clears histories and request ownership when the authenticated context changes", () => {
     const cache = new ChatTranscriptCache();
+    cache.activateContext("instance-a|guardian-a");
     cache.putComplete("instance-a|guardian-a", "session-1", [message("session-1")]);
     const oldRequest = cache.beginRequest("instance-a|guardian-a", "session-1");
+    cache.activateContext("instance-b|guardian-b");
 
     expect(cache.get("instance-b|guardian-b", "session-1")).toBeUndefined();
     expect(cache.snapshot().ids).toEqual([]);
     expect(cache.isRequestContextCurrent(oldRequest, "instance-b|guardian-b")).toBe(false);
   });
 
+  it("rejects stale context activity without disturbing the active context", () => {
+    const cache = new ChatTranscriptCache();
+    const contextA = "instance|guardian-a";
+    const contextB = "instance|guardian-b";
+    cache.activateContext(contextA);
+    cache.putComplete(contextA, "session-a", [message("session-a")]);
+    cache.activateContext(contextB);
+    cache.putComplete(contextB, "session-b", [message("session-b")]);
+    const currentRequest = cache.beginRequest(contextB, "session-b");
+
+    expect(cache.get(contextA, "session-a")).toBeUndefined();
+    expect(cache.putComplete(contextA, "stale-write", [message("stale-write")])).toBe(false);
+    cache.protect(contextA, "session-a", Symbol("stale-owner"));
+    const staleRequest = cache.beginRequest(contextA, "session-b");
+
+    expect(cache.isRequestContextCurrent(staleRequest, contextB)).toBe(false);
+    expect(cache.ownsLatestCacheWrite(currentRequest, contextB)).toBe(true);
+    expect(cache.get(contextB, "session-b")?.map((entry) => entry.id)).toEqual([
+      "session-b-message",
+    ]);
+    expect(cache.snapshot().ids).toEqual(["session-b"]);
+  });
+
   it("assigns cache writes only to the latest request for one session", () => {
     const cache = new ChatTranscriptCache();
+    cache.activateContext("context");
     const first = cache.beginRequest("context", "session-1");
     const second = cache.beginRequest("context", "session-1");
 
@@ -96,9 +126,20 @@ describe("ChatTranscriptCache", () => {
     expect(cache.ownsLatestCacheWrite(second, "context")).toBe(false);
   });
 
+  it("keeps a pending-identity request current through initial explicit activation", () => {
+    const cache = new ChatTranscriptCache();
+    const request = cache.beginRequest(null, "session-1");
+
+    cache.activateContext("context");
+
+    expect(cache.isRequestContextCurrent(request, null)).toBe(true);
+    expect(cache.ownsLatestCacheWrite(request, "context")).toBe(true);
+  });
+
   it("accounts for live inserts without serializing the full transcript", () => {
     const cache = new ChatTranscriptCache();
     const context = "context";
+    cache.activateContext(context);
     const first = message("session-1", "first");
     const second = { ...message("session-1", "你好"), id: "second" };
     cache.putComplete(context, "session-1", [first]);
@@ -115,6 +156,7 @@ describe("ChatTranscriptCache", () => {
   it("drops a live-updated history as soon as it exceeds the entry budget", () => {
     const cache = new ChatTranscriptCache();
     const context = "context";
+    cache.activateContext(context);
     cache.putComplete(context, "session-1", [message("session-1")]);
     const oversized = {
       ...message("session-1", "x".repeat(MAX_TRANSCRIPT_CACHE_ENTRY_BYTES)),
@@ -132,6 +174,7 @@ describe("ChatTranscriptCache", () => {
   it("stays in one memory instance and never writes browser persistence", () => {
     const setItem = rs.spyOn(Storage.prototype, "setItem");
     const cache = new ChatTranscriptCache();
+    cache.activateContext("context");
     cache.putComplete("context", "session-1", [message("session-1")]);
 
     expect(new ChatTranscriptCache().get("context", "session-1")).toBeUndefined();

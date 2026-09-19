@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDashboardIdentity } from "@/hooks/use-dashboard-identity";
 import { chatTranscriptCache } from "./chat-transcript-cache";
 
@@ -14,13 +14,15 @@ export function AuthenticatedChatTranscriptCacheBoundary({ children }: { childre
         : `visitor:${identity.accountId}:${identity.email}`;
     return `${window.location.origin}|${identityKey}`;
   }, [identity]);
+  const [activeContextKey, setActiveContextKey] = useState<string | null>(null);
 
   useEffect(() => {
     chatTranscriptCache.activateContext(contextKey);
+    setActiveContextKey(contextKey);
   }, [contextKey]);
 
   return (
-    <ChatTranscriptCacheContext.Provider value={contextKey}>
+    <ChatTranscriptCacheContext.Provider value={activeContextKey}>
       {children}
     </ChatTranscriptCacheContext.Provider>
   );

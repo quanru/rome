@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import * as chatApiModule from "@/lib/chat-api" with { rstest: "importActual" };
 import { Chat } from "./Chat";
+import type { ChatComposerSendControls, ChatComposerSnapshot } from "./ChatComposer";
 import type { ChatRow } from "./chat-view";
 import type { ChatMessage } from "@/lib/chat-types";
 import { ChatTranscriptCacheContext } from "@/lib/chat-transcript-cache-context";
@@ -16,11 +17,20 @@ import {
   listSessionMessages,
   listSessionTurns,
   openTurnStream,
+  postSessionTurn,
 } from "@/lib/chat-api";
 
 const t = (key: string) => key;
 const mockUseSessionIdentity = rs.hoisted(() => rs.fn());
 const appsPanel = rs.hoisted(() => ({ collapsed: true, setCollapsed: rs.fn() }));
+const composerHarness = rs.hoisted(() => ({
+  onSend: null as
+    | null
+    | ((
+        snapshot: ChatComposerSnapshot,
+        controls: ChatComposerSendControls,
+      ) => void | Promise<void>),
+}));
 
 rs.mock("react-i18next", () => ({
   useTranslation: () => ({ t }),
@@ -105,13 +115,23 @@ rs.mock("@/components/chat/MessageList", () => ({
 rs.mock("@/components/chat/ChatComposer", () => ({
   // Expose the streaming state + Stop wiring so tests can drive stopMessage
   // the way the real composer's Stop button does.
-  ChatComposer: (props: { isStreaming?: boolean; onStop?: () => void }) => (
-    <div data-testid="chat-composer" data-streaming={props.isStreaming ? "true" : "false"}>
-      {props.isStreaming && props.onStop ? (
-        <button type="button" data-testid="stop-button" onClick={props.onStop} />
-      ) : null}
-    </div>
-  ),
+  ChatComposer: (props: {
+    isStreaming?: boolean;
+    onStop?: () => void;
+    onSend: (
+      snapshot: ChatComposerSnapshot,
+      controls: ChatComposerSendControls,
+    ) => void | Promise<void>;
+  }) => {
+    composerHarness.onSend = props.onSend;
+    return (
+      <div data-testid="chat-composer" data-streaming={props.isStreaming ? "true" : "false"}>
+        {props.isStreaming && props.onStop ? (
+          <button type="button" data-testid="stop-button" onClick={props.onStop} />
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 rs.mock("@/components/chat/blocks", () => ({
@@ -198,6 +218,7 @@ beforeEach(() => {
     pinnedAgentMention: null,
     archivedAt: null,
   });
+  composerHarness.onSend = null;
 });
 
 afterEach(() => {
@@ -232,6 +253,9 @@ function deferred<T>() {
 
 describe("Chat history cache", () => {
   const context = "https://rome.test|guardian:guardian-1";
+  beforeEach(() => {
+    chatTranscriptCache.activateContext(context);
+  });
   const renderCachedChat = (sessionId: string, props: { onSessionNotFound?: () => void } = {}) => (
     <MemoryRouter>
       <ChatTranscriptCacheContext.Provider value={context}>
@@ -292,6 +316,7 @@ describe("Chat history cache", () => {
     await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
     await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
 
+    chatTranscriptCache.activateContext(context);
     view.rerender(
       <MemoryRouter>
         <ChatTranscriptCacheContext.Provider value={context}>
@@ -328,6 +353,7 @@ describe("Chat history cache", () => {
     );
     expect(chatTranscriptCache.snapshot().ids).toEqual([]);
 
+    chatTranscriptCache.activateContext(context);
     view.rerender(
       <MemoryRouter>
         <ChatTranscriptCacheContext.Provider value={context}>
@@ -429,6 +455,48 @@ describe("Chat history cache", () => {
       ),
     );
     expect(screen.queryByText("history.refreshFailed")).toBeNull();
+  });
+
+  it("does not restore a dropped optimistic row on the next cache hit", async () => {
+    const durable = chatMessage("session-a", "durable", "2026-09-19T00:00:00.000Z");
+    const optimistic = chatMessage("session-a", "optimistic-input", "2026-09-19T00:01:00.000Z");
+    chatTranscriptCache.putComplete(context, "session-a", [durable, optimistic]);
+    rs.mocked(listSessionTurns).mockResolvedValueOnce([]);
+    rs.mocked(listSessionMessages).mockResolvedValue([durable]);
+    rs.mocked(postSessionTurn).mockResolvedValueOnce({
+      ok: true,
+      data: { turnId: "turn-new", inputId: "optimistic-input" },
+    });
+    rs.mocked(openTurnStream).mockResolvedValueOnce(new Response(""));
+
+    const view = render(renderCachedChat("session-a"));
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe(
+      "durable,optimistic-input",
+    );
+
+    await act(async () => {
+      await composerHarness.onSend?.(
+        {
+          text: "replacement",
+          uploads: [],
+          reasoningEffort: "medium",
+          projectPath: "",
+        },
+        { onUploadProgress: () => {}, signal: new AbortController().signal },
+      );
+    });
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+        "durable",
+      ]),
+    );
+
+    view.unmount();
+    rs.mocked(listSessionMessages).mockReturnValue(new Promise(() => {}));
+    render(renderCachedChat("session-a"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("durable");
   });
 
   it("shows a retryable error when the first history load fails", async () => {

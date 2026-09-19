@@ -71,8 +71,7 @@ export class ChatTranscriptCache {
   }
 
   get(contextKey: string | null, sessionId: string): ChatMessage[] | undefined {
-    if (!contextKey) return undefined;
-    this.activateContext(contextKey);
+    if (!contextKey || contextKey !== this.contextKey) return undefined;
     const entry = this.entries.get(sessionId);
     if (!entry) return undefined;
     entry.lastViewed = ++this.clock;
@@ -80,8 +79,7 @@ export class ChatTranscriptCache {
   }
 
   putComplete(contextKey: string | null, sessionId: string, messages: ChatMessage[]): boolean {
-    if (!contextKey) return false;
-    this.activateContext(contextKey);
+    if (!contextKey || contextKey !== this.contextKey) return false;
 
     const { messageSizes, size } = measureTranscript(messages);
     if (size > MAX_TRANSCRIPT_CACHE_ENTRY_BYTES) {
@@ -151,8 +149,7 @@ export class ChatTranscriptCache {
   }
 
   protect(contextKey: string | null, sessionId: string, owner: symbol): void {
-    if (!contextKey) return;
-    this.activateContext(contextKey);
+    if (!contextKey || contextKey !== this.contextKey) return;
     const owners = this.protectedSessions.get(sessionId) ?? new Set<symbol>();
     owners.add(owner);
     this.protectedSessions.set(sessionId, owners);
@@ -168,15 +165,16 @@ export class ChatTranscriptCache {
   }
 
   beginRequest(contextKey: string | null, sessionId: string): TranscriptRequestToken {
-    if (contextKey) this.activateContext(contextKey);
     const revision = ++this.requestClock;
+    if (contextKey !== this.contextKey) {
+      return { contextKey, sessionId, revision, contextRevision: -1 };
+    }
     this.latestRequests.set(sessionId, revision);
     return { contextKey, sessionId, revision, contextRevision: this.contextRevision };
   }
 
   ownsLatestCacheWrite(token: TranscriptRequestToken, contextKey: string | null): boolean {
-    if (!contextKey) return false;
-    this.activateContext(contextKey);
+    if (!contextKey || contextKey !== this.contextKey) return false;
     return (
       token.contextRevision === this.contextRevision &&
       this.latestRequests.get(token.sessionId) === token.revision
@@ -184,8 +182,12 @@ export class ChatTranscriptCache {
   }
 
   isRequestContextCurrent(token: TranscriptRequestToken, contextKey: string | null): boolean {
-    if (contextKey) this.activateContext(contextKey);
-    return token.contextRevision === this.contextRevision;
+    if (token.contextRevision !== this.contextRevision) return false;
+    if (contextKey === this.contextKey) return true;
+    // The boundary activates the first authenticated context before publishing
+    // it to children. A request started while identity was pending may finish
+    // in that narrow interval; it still belongs to this unchanged revision.
+    return token.contextKey === null && contextKey === null && this.contextKey !== null;
   }
 
   finishRequest(token: TranscriptRequestToken): void {

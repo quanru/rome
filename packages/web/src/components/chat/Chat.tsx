@@ -815,7 +815,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
             currentContext,
             id,
             cachedMessages
-              ? mergeFetchedChatMessages(cachedMessages, fetchedMessages)
+              ? mergeFetchedChatMessages(cachedMessages, fetchedMessages, { dropMessageIds })
               : reconciledMessages,
           );
         }
