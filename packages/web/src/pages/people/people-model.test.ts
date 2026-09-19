@@ -6,6 +6,7 @@ import type {
   StreamAccount,
 } from "@rome/api-types/people";
 import {
+  buildLinkTargetIndex,
   directoryGroups,
   levelCounts,
   parsePeopleFilter,
@@ -360,9 +361,15 @@ describe("recommendedLinkTargets", () => {
     return row;
   }
 
+  // The production path: the page folds the eligible people into an index once,
+  // then looks each unplaced row up in it. Wrapping the build here keeps every
+  // case exercising the same lookup the page does.
+  const recommend = (row: PeopleRow, targets: LinkTarget[]) =>
+    recommendedLinkTargets(row, buildLinkTargetIndex(targets));
+
   it("recommends the person whose name is the account's, exactly", () => {
     const alicia = target();
-    expect(recommendedLinkTargets(unknownRow("Alicia Chen"), [alicia])).toEqual([alicia]);
+    expect(recommend(unknownRow("Alicia Chen"), [alicia])).toEqual([alicia]);
   });
 
   it("matches through trim, case, and Unicode composition", () => {
@@ -370,7 +377,7 @@ describe("recommendedLinkTargets", () => {
     // the decomposed form ("e" + a combining acute), padded and lower-cased.
     // Trim + NFC + case-fold makes them one name.
     const jose = target({ id: "jose", displayName: "José River" });
-    expect(recommendedLinkTargets(unknownRow("  josé river  "), [jose])).toEqual([jose]);
+    expect(recommend(unknownRow("  josé river  "), [jose])).toEqual([jose]);
   });
 
   it("offers every exact match and ranks none", () => {
@@ -379,7 +386,7 @@ describe("recommendedLinkTargets", () => {
     const a = target({ id: "a", displayName: "Sam Rivera", bondLevel: "inner-circle" });
     const b = target({ id: "b", displayName: "sam rivera", bondLevel: "other" });
     const c = target({ id: "c", displayName: "Someone Else" });
-    expect(recommendedLinkTargets(unknownRow("Sam Rivera"), [a, b, c])).toEqual([a, b]);
+    expect(recommend(unknownRow("Sam Rivera"), [a, b, c])).toEqual([a, b]);
   });
 
   it("recommends nobody for a name that only looks close", () => {
@@ -387,7 +394,7 @@ describe("recommendedLinkTargets", () => {
     // A first name alone, an added mark, an internal spacing difference, and a
     // similar-but-different name are each not the same name.
     for (const near of ["Alicia", "Alicia Chen!", "Alicia  Chen", "Alicia Chan"]) {
-      expect(recommendedLinkTargets(unknownRow(near), [alicia])).toEqual([]);
+      expect(recommend(unknownRow(near), [alicia])).toEqual([]);
     }
   });
 
@@ -395,7 +402,7 @@ describe("recommendedLinkTargets", () => {
     // The account is named by its handle, which no person's name is. A matching
     // address is not a matching name, and only names are compared.
     const alicia = target();
-    expect(recommendedLinkTargets(unknownRow("883104221"), [alicia])).toEqual([]);
+    expect(recommend(unknownRow("883104221"), [alicia])).toEqual([]);
   });
 
   it("never recommends for a dismissed (Stranger) account", () => {
@@ -406,7 +413,7 @@ describe("recommendedLinkTargets", () => {
     )[0];
     if (!dismissed) throw new Error("expected an account row");
     expect(dismissed.level).toBe("stranger");
-    expect(recommendedLinkTargets(dismissed, [alicia])).toEqual([]);
+    expect(recommend(dismissed, [alicia])).toEqual([]);
   });
 
   it("never recommends for a person's own row", () => {
@@ -414,13 +421,13 @@ describe("recommendedLinkTargets", () => {
     const alicia = target();
     const personRow = peopleRows([person({ id: "p1", displayName: "Alicia Chen" })], [])[0];
     if (!personRow) throw new Error("expected a person row");
-    expect(recommendedLinkTargets(personRow, [alicia])).toEqual([]);
+    expect(recommend(personRow, [alicia])).toEqual([]);
   });
 
   it("treats a blank account name as no name to match", () => {
     // A name that folds to nothing matches nobody, rather than every other
     // nameless row.
     const nameless = target({ id: "blank", displayName: "   " });
-    expect(recommendedLinkTargets(unknownRow("   "), [nameless])).toEqual([]);
+    expect(recommend(unknownRow("   "), [nameless])).toEqual([]);
   });
 });

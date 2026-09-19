@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import i18n from "@/i18n";
 import { UnknownEntry } from "./triage";
@@ -108,6 +108,28 @@ describe("UnknownEntry recommendations", () => {
     // Both are offered, each with its own bond, and Rome has picked neither.
     expect(screen.getByRole("button", { name: /Alicia Chen · Acquaintance/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /alicia chen · Inner circle/ })).toBeTruthy();
+  });
+
+  it("links the recommended person the guardian actually clicks, not the first match", async () => {
+    // With several matches, the write has to carry the id of the one clicked. A
+    // regression that always linked the first match would pass every test above
+    // this one, so this pins the id on the wire itself.
+    const user = userEvent.setup();
+    const fetchSpy = rs
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((async () => Response.json({}, { status: 200 })) as typeof fetch);
+    renderEntry({ recommendations: [alicia, aliciaToo], people: [alicia, aliciaToo, bob] });
+
+    await user.click(screen.getByRole("button", { name: "Link — 2 suggested" }));
+    // The SECOND match, whose id differs from the first.
+    await user.click(await screen.findByRole("button", { name: /alicia chen · Inner circle/ }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const [url, init] = fetchSpy.mock.calls[0];
+    // POST /api/people/:id/accounts, carrying the clicked person's id — not the
+    // first match's ("alicia").
+    expect(String(url)).toBe("/api/people/alicia-2/accounts");
+    expect((init as RequestInit).method).toBe("POST");
   });
 
   it("names the recommended person in the Directory row menu", async () => {
