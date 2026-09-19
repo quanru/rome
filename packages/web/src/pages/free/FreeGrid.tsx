@@ -302,8 +302,8 @@ export function FreeGrid() {
   const handleDeleteSession = useCallback(async () => {
     if (!chatSessionId) return;
     try {
-      await deleteSession(chatSessionId);
-      chatTranscriptCache.delete(transcriptCacheContext, chatSessionId);
+      const response = await deleteSession(chatSessionId);
+      if (response.ok) chatTranscriptCache.delete(transcriptCacheContext, chatSessionId);
     } catch {
       // best-effort — the list refresh below reconciles either way
     }

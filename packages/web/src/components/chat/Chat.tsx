@@ -686,8 +686,8 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
     if (!mainSessionId) return;
     setDeleteConfirmOpen(false);
     try {
-      await deleteSession(mainSessionId);
-      chatTranscriptCache.delete(transcriptCacheContext, mainSessionId);
+      const response = await deleteSession(mainSessionId);
+      if (response.ok) chatTranscriptCache.delete(transcriptCacheContext, mainSessionId);
     } catch {
       // best-effort — the list refresh below reconciles either way
     }

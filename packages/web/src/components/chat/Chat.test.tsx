@@ -213,6 +213,8 @@ class MockEventSource {
 beforeEach(() => {
   appsPanel.collapsed = true;
   stickToBottom.isAtBottom = true;
+  rs.mocked(deleteSession).mockResolvedValue(new Response(null, { status: 204 }));
+  rs.mocked(listSessionMessages).mockResolvedValue([]);
   mockUseSessionIdentity.mockReturnValue({
     sessionName: null,
     pinnedAgentMention: null,
@@ -666,9 +668,27 @@ describe("Chat session events", () => {
 });
 
 describe("Chat turn stream lifecycle", () => {
-  it("deletes a chat only after the app confirmation dialog is confirmed", async () => {
+  const context = "https://rome.test|guardian:guardian-1";
+
+  function renderDeletableChat() {
+    return renderChat(
+      <ChatTranscriptCacheContext.Provider value={context}>
+        <Chat sessionId="session-1" />
+      </ChatTranscriptCacheContext.Provider>,
+    );
+  }
+
+  function seedDeletedSessionCache() {
+    chatTranscriptCache.activateContext(context);
+    chatTranscriptCache.putComplete(context, "session-1", [
+      chatMessage("session-1", "cached-message", "2026-09-19T00:00:00.000Z"),
+    ]);
+  }
+
+  it("evicts a chat only after a confirmed successful deletion", async () => {
+    seedDeletedSessionCache();
     const user = userEvent.setup();
-    renderChat(<Chat sessionId="session-1" />);
+    renderDeletableChat();
 
     await user.click(screen.getByRole("button", { name: "navbar.more" }));
     await user.click(screen.getByRole("menuitem", { name: "navbar.delete" }));
@@ -678,6 +698,27 @@ describe("Chat turn stream lifecycle", () => {
     await user.click(within(dialog).getByRole("button", { name: "navbar.delete" }));
 
     await waitFor(() => expect(deleteSession).toHaveBeenCalledWith("session-1"));
+    await waitFor(() => expect(chatTranscriptCache.get(context, "session-1")).toBeUndefined());
+  });
+
+  it("keeps the cached chat when deletion returns a non-2xx response", async () => {
+    seedDeletedSessionCache();
+    const deletion = deferred<Response>();
+    rs.mocked(deleteSession).mockReturnValue(deletion.promise);
+    const user = userEvent.setup();
+    renderDeletableChat();
+
+    await user.click(screen.getByRole("button", { name: "navbar.more" }));
+    await user.click(screen.getByRole("menuitem", { name: "navbar.delete" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: "navbar.delete" })).getByRole("button", {
+        name: "navbar.delete",
+      }),
+    );
+
+    await waitFor(() => expect(deleteSession).toHaveBeenCalledWith("session-1"));
+    await act(async () => deletion.resolve(new Response(null, { status: 500 })));
+    expect(chatTranscriptCache.get(context, "session-1")).toBeDefined();
   });
 
   it("aborts an attached turn stream when the chat unmounts", async () => {

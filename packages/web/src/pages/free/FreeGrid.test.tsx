@@ -1,6 +1,6 @@
 // @rstest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -14,7 +14,7 @@ import { FreeGrid } from "./FreeGrid";
 const transcriptCacheContext = "https://rome.test|guardian:guardian-1";
 
 rs.mock("@/lib/chat-api", () => ({
-  deleteSession: rs.fn().mockResolvedValue(undefined),
+  deleteSession: rs.fn(),
 }));
 
 rs.mock("@/hooks/use-apps", () => ({
@@ -67,6 +67,10 @@ beforeAll(async () => {
   await i18n.changeLanguage("en");
 });
 
+beforeEach(() => {
+  rs.mocked(deleteSession).mockResolvedValue(new Response(null, { status: 204 }));
+});
+
 afterEach(() => {
   cleanup();
   chatTranscriptCache.clear();
@@ -74,7 +78,15 @@ afterEach(() => {
 });
 
 describe("FreeGrid mobile chat deletion", () => {
-  it("evicts the deleted session from the active transcript cache", async () => {
+  function deferredResponse() {
+    let resolve!: (response: Response) => void;
+    const promise = new Promise<Response>((promiseResolve) => {
+      resolve = promiseResolve;
+    });
+    return { promise, resolve };
+  }
+
+  function seedSessionCache() {
     const cachedMessage: ChatMessage = {
       id: "cached-message",
       sessionId: "session-a",
@@ -84,9 +96,10 @@ describe("FreeGrid mobile chat deletion", () => {
     };
     chatTranscriptCache.activateContext(transcriptCacheContext);
     chatTranscriptCache.putComplete(transcriptCacheContext, "session-a", [cachedMessage]);
-    const user = userEvent.setup();
+  }
 
-    render(
+  function renderGrid() {
+    return render(
       <MemoryRouter initialEntries={["/chat/session-a"]}>
         <ChatTranscriptCacheContext.Provider value={transcriptCacheContext}>
           <Routes>
@@ -95,11 +108,35 @@ describe("FreeGrid mobile chat deletion", () => {
         </ChatTranscriptCacheContext.Provider>
       </MemoryRouter>,
     );
+  }
 
+  async function deleteActiveChat() {
+    const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-
     await waitFor(() => expect(deleteSession).toHaveBeenCalledWith("session-a"));
-    expect(chatTranscriptCache.get(transcriptCacheContext, "session-a")).toBeUndefined();
+  }
+
+  it("evicts the deleted session from the active transcript cache after a 2xx response", async () => {
+    seedSessionCache();
+    renderGrid();
+
+    await deleteActiveChat();
+
+    await waitFor(() =>
+      expect(chatTranscriptCache.get(transcriptCacheContext, "session-a")).toBeUndefined(),
+    );
+  });
+
+  it("keeps the cached session when deletion returns a non-2xx response", async () => {
+    seedSessionCache();
+    const deletion = deferredResponse();
+    rs.mocked(deleteSession).mockReturnValue(deletion.promise);
+    renderGrid();
+
+    await deleteActiveChat();
+
+    await act(async () => deletion.resolve(new Response(null, { status: 500 })));
+    expect(chatTranscriptCache.get(transcriptCacheContext, "session-a")).toBeDefined();
   });
 });
