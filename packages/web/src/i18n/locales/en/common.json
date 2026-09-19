@@ -27,9 +27,13 @@
     "addSection": "Add",
     "remove": "Remove",
     "add": "Add",
-    "newApps": "New apps available",
-    "new": "New",
-    "appDisabled": "Disabled"
+    "appDisabled": "Disabled",
+    "recent": "Recent",
+    "recentApps": "Recent apps",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "moreRecentApps": "More recent apps",
+    "notOpened": "Not opened on this device"
   },
   "recentChats": {
     "title": "Chats",

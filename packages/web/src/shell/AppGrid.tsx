@@ -16,6 +16,7 @@ import {
   MessagesSquare,
   PanelRightOpen,
   Pencil,
+  Pin,
   PinOff,
   Plus,
   Search,
@@ -23,11 +24,11 @@ import {
   X,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { InstalledAppCard } from "@rome/api-types/apps";
+import type { AppOrigin, InstalledAppCard } from "@rome/api-types/apps";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -48,8 +49,10 @@ import { AppStoreSheet } from "@/components/AppStoreSheet";
 import { APP_STORE_BROWSE_URL } from "@/lib/app-store-url";
 import { isElectronShell } from "@/lib/electron-shell";
 import { saveSetting } from "@/lib/chat-api";
+import { useAppCatalogChanges } from "@/hooks/use-app-catalog-events";
+import { hasSession, useAuthStateSnapshot } from "@/lib/auth-state";
 import { useApps, useInvalidateApps } from "@/hooks/use-apps";
-import { useNewApps } from "@/hooks/use-new-apps";
+import { useRecentApps } from "@/hooks/use-recent-apps";
 import { useInvalidateSettings, useSettings } from "@/hooks/use-settings";
 import {
   Sortable,
@@ -59,6 +62,14 @@ import {
   SortableOverlay,
 } from "@/components/ui/sortable";
 import { chatSearchShortcutForPlatform } from "./ChatSearchDialog";
+import { RecentAppsRail, RecentAppsZone } from "./RecentAppsZone";
+import {
+  ACTIVE_CLASS,
+  IDLE_CLASS,
+  LINK_CLASS,
+  RAIL_LINK_CLASS,
+  isEntryActive,
+} from "./sidebar-shared";
 
 interface BuiltinNavEntry {
   id: string;
@@ -123,6 +134,8 @@ interface CachedApp {
   href: string | null;
   hasFrontend: boolean;
   status: string;
+  origin?: AppOrigin;
+  installedAt?: string | null;
 }
 
 function parsePins(raw: unknown): PinnedEntry[] | null {
@@ -180,28 +193,12 @@ function writeLocalApps(apps: InstalledAppCard[]): void {
       href: a.href,
       hasFrontend: a.hasFrontend,
       status: a.status,
+      origin: a.origin,
+      installedAt: a.installedAt ?? null,
     }));
     localStorage.setItem(APPS_CACHE_KEY, JSON.stringify(cached));
   } catch {}
 }
-
-function isEntryActive(pathname: string, href: string): boolean {
-  if (href === "/apps" || href === "/chat") {
-    return pathname === href;
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-const LINK_CLASS =
-  "rome-sidebar-link group flex h-8 w-full items-center gap-2 rounded-8 border border-transparent px-2 text-left text-ui text-foreground transition outline-none outline-1 outline-offset-0 outline-transparent focus-visible:outline-solid focus-visible:outline-ring/50";
-
-// The rail counterpart of LINK_CLASS: a square tile whose tooltip carries the
-// label. `relative` anchors the status dots that the wide rows render inline.
-const RAIL_LINK_CLASS =
-  "rome-sidebar-link relative flex size-10 items-center justify-center rounded-8 border border-transparent text-foreground transition outline-none outline-1 outline-offset-0 outline-transparent focus-visible:outline-solid focus-visible:outline-ring/50";
-
-const RAIL_ACTIVE_CLASS = "bg-surface shadow-1 dark:bg-surface-hover";
-const RAIL_IDLE_CLASS = "hover:bg-surface-hover dark:hover:bg-surface";
 
 function renderBuiltinIcon(entry: BuiltinNavEntry): React.ReactNode {
   return (
@@ -236,18 +233,24 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
   const [installedApps, setInstalledApps] =
     useState<(InstalledAppCard | CachedApp)[]>(readLocalApps);
   const [editing, setEditing] = useState(false);
-  // Snapshot of the unacknowledged apps taken when the editor opens. Entering
-  // edit mode also persists "seen" (clearing the dot), which would otherwise
-  // empty `newAppIds` before the "Add section" renders — so the "New" badges
-  // read from this frozen set, kept stable for the whole edit session.
-  const [newlyShownIds, setNewlyShownIds] = useState<Set<string>>(new Set());
   const [storeOpen, setStoreOpen] = useState(false);
   const invalidateSettings = useInvalidateSettings();
   const invalidateApps = useInvalidateApps();
+  // The list query only revalidates on mount and window focus, but the shell
+  // stays mounted while the agent builds an app in the chat beside it. Listen
+  // to the catalog stream so that app reaches the sidebar as it installs.
+  const { bootstrap } = useAuthStateSnapshot();
+  useAppCatalogChanges(hasSession(bootstrap), () => {
+    void invalidateApps.list();
+  });
 
   const { data: settings } = useSettings();
   const { apps: appsFromQuery } = useApps();
-  const { newAppIds, markAppsSeen } = useNewApps();
+  const pinnedAppIds = useMemo(
+    () => new Set(pins.filter((pin) => pin.type === "app").map((pin) => pin.id)),
+    [pins],
+  );
+  const { recent: recentApps, unopenedIds } = useRecentApps(installedApps, pinnedAppIds);
 
   useEffect(() => {
     if (!appsFromQuery) return;
@@ -301,6 +304,7 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
   const withAppContextMenu = (
     app: InstalledAppCard | CachedApp,
     trigger: React.ReactNode,
+    pinned = true,
   ): React.ReactNode => {
     if (!app.href) return trigger;
     return (
@@ -318,14 +322,21 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
             {tApps("installed.openSplitTitle")}
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() =>
-              persistPins(pins.filter((pin) => !(pin.type === "app" && pin.id === app.id)))
-            }
-          >
-            <PinOff aria-hidden />
-            {tApps("installed.unpin")}
-          </ContextMenuItem>
+          {pinned ? (
+            <ContextMenuItem
+              onSelect={() =>
+                persistPins(pins.filter((pin) => !(pin.type === "app" && pin.id === app.id)))
+              }
+            >
+              <PinOff aria-hidden />
+              {tApps("installed.unpin")}
+            </ContextMenuItem>
+          ) : (
+            <ContextMenuItem onSelect={() => persistPins([...pins, { type: "app", id: app.id }])}>
+              <Pin aria-hidden />
+              {tApps("installed.pin")}
+            </ContextMenuItem>
+          )}
         </ContextMenuContent>
       </ContextMenu>
     );
@@ -342,13 +353,6 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
       !pins.some((p) => p.type === "builtin" && p.id === b.id),
   );
   const hasUnpinned = hiddenBuiltins.length > 0 || unpinnedApps.length > 0;
-
-  // A "new" app only deserves a hint while it's actually hidden: once it's
-  // pinned the user can see it, so an already-pinned app never lights the dot.
-  // The dot rides the always-present "Apps" entry, whose page clears the ledger.
-  const hasNewApps = [...newAppIds].some(
-    (id) => !pins.some((p) => p.type === "app" && p.id === id),
-  );
 
   const resolveLabel = (pin: PinnedEntry): string => {
     if (pin.type === "builtin") {
@@ -423,7 +427,7 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                           type="button"
                           onClick={() => setStoreOpen(true)}
                           aria-label={label}
-                          className={`${RAIL_LINK_CLASS} ${RAIL_IDLE_CLASS}`}
+                          className={`${RAIL_LINK_CLASS} ${IDLE_CLASS}`}
                         >
                           {renderBuiltinIcon(entry)}
                         </button>
@@ -433,7 +437,7 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label={label}
-                          className={`${RAIL_LINK_CLASS} ${RAIL_IDLE_CLASS}`}
+                          className={`${RAIL_LINK_CLASS} ${IDLE_CLASS}`}
                         >
                           {renderBuiltinIcon(entry)}
                         </a>
@@ -450,18 +454,9 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                     <Link
                       to={entry.href}
                       aria-label={label}
-                      className={`${RAIL_LINK_CLASS} ${active ? RAIL_ACTIVE_CLASS : RAIL_IDLE_CLASS}`}
+                      className={`${RAIL_LINK_CLASS} ${active ? ACTIVE_CLASS : IDLE_CLASS}`}
                     >
                       {renderBuiltinIcon(entry)}
-                      {/* The expanded sidebar hangs this dot on the edit menu,
-                          which the rail hides — so here it rides the Apps tile,
-                          whose page is still what clears the ledger. */}
-                      {entry.id === "apps" && hasNewApps ? (
-                        <span
-                          className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary"
-                          aria-label={t("sidebar.newApps")}
-                        />
-                      ) : null}
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right">{label}</TooltipContent>
@@ -480,7 +475,7 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                     <Link
                       to={app.href}
                       aria-label={app.displayName}
-                      className={`${RAIL_LINK_CLASS} ${active ? RAIL_ACTIVE_CLASS : RAIL_IDLE_CLASS}`}
+                      className={`${RAIL_LINK_CLASS} ${active ? ACTIVE_CLASS : IDLE_CLASS}`}
                     >
                       {resolveIcon(pin)}
                       {app.status === "disabled" ? (
@@ -497,6 +492,12 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
               </Tooltip>
             );
           })}
+          <RecentAppsRail
+            apps={recentApps}
+            unopenedIds={unopenedIds}
+            pathname={location.pathname}
+            wrapWithContextMenu={(app, trigger) => withAppContextMenu(app, trigger, false)}
+          />
           {onSearch ? (
             <>
               <Separator className="my-1 w-6" />
@@ -506,7 +507,7 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                     type="button"
                     onClick={onSearch}
                     aria-label={t("recentChats.search")}
-                    className={`${RAIL_LINK_CLASS} ${RAIL_IDLE_CLASS} text-subtle-foreground hover:text-foreground`}
+                    className={`${RAIL_LINK_CLASS} ${IDLE_CLASS} text-subtle-foreground hover:text-foreground`}
                   >
                     <Search className="h-4 w-4" aria-hidden />
                   </button>
@@ -541,30 +542,13 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
         <button
           type="button"
           aria-label={t("sidebar.edit")}
-          className="relative rounded-4 p-1 text-subtle-foreground transition hover:bg-surface-hover hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
+          className="rounded-4 p-1 text-subtle-foreground transition hover:bg-surface-hover hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-foreground/30"
         >
           <Ellipsis className="h-4 w-4" aria-hidden />
-          {hasNewApps ? (
-            <span
-              className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary"
-              aria-label={t("sidebar.newApps")}
-            />
-          ) : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end">
-        <DropdownMenuItem
-          onSelect={() => {
-            // Freeze which apps are "new" before persisting "seen", so the
-            // badges survive the acknowledgement for this edit session.
-            setNewlyShownIds(new Set(newAppIds));
-            setEditing(true);
-            // Opening the editor surfaces the new apps in "Add section",
-            // so treat entering edit mode as the acknowledgement that
-            // clears the dot.
-            markAppsSeen();
-          }}
-        >
+        <DropdownMenuItem onSelect={() => setEditing(true)}>
           <Pencil className="h-3.5 w-3.5 text-subtle-foreground" aria-hidden />
           {t("sidebar.edit")}
         </DropdownMenuItem>
@@ -676,11 +660,6 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
                       </span>
                     )}
                     <span className="flex-1 truncate">{app.displayName}</span>
-                    {newlyShownIds.has(app.id) ? (
-                      <span className="shrink-0 rounded-4 bg-primary/15 px-2 py-1 text-aux text-primary">
-                        {t("sidebar.new")}
-                      </span>
-                    ) : null}
                     <Button
                       type="button"
                       variant="ghost"
@@ -699,91 +678,100 @@ export function AppGrid({ headerControlsHost, collapsed, onSearch }: AppGridProp
           ) : null}
         </div>
       ) : (
-        <nav className="flex flex-col gap-1 px-3">
-          {pins.map((pin) => {
-            if (pin.type === "builtin") {
-              const entry = builtinMap.get(pin.id);
-              if (!entry) return null;
-              if (entry.id === "store") {
-                return inDesktopApp ? (
-                  <button
+        <>
+          <nav className="flex flex-col gap-1 px-3">
+            {pins.map((pin) => {
+              if (pin.type === "builtin") {
+                const entry = builtinMap.get(pin.id);
+                if (!entry) return null;
+                if (entry.id === "store") {
+                  return inDesktopApp ? (
+                    <button
+                      key={`builtin-${pin.id}`}
+                      type="button"
+                      onClick={() => setStoreOpen(true)}
+                      title={t(entry.labelKey)}
+                      className={`${LINK_CLASS} hover:bg-surface-hover`}
+                    >
+                      {renderBuiltinIcon(entry)}
+                      <span className="flex-1 truncate">{t(entry.labelKey)}</span>
+                    </button>
+                  ) : (
+                    <a
+                      key={`builtin-${pin.id}`}
+                      href={APP_STORE_BROWSE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t(entry.labelKey)}
+                      className={`${LINK_CLASS} hover:bg-surface-hover`}
+                    >
+                      {renderBuiltinIcon(entry)}
+                      <span className="flex-1 truncate">{t(entry.labelKey)}</span>
+                    </a>
+                  );
+                }
+                const active = isEntryActive(location.pathname, entry.href);
+                return (
+                  <Link
                     key={`builtin-${pin.id}`}
-                    type="button"
-                    onClick={() => setStoreOpen(true)}
+                    to={entry.href}
                     title={t(entry.labelKey)}
-                    className={`${LINK_CLASS} hover:bg-surface-hover`}
+                    className={`${LINK_CLASS} ${active ? ACTIVE_CLASS : IDLE_CLASS}`}
                   >
                     {renderBuiltinIcon(entry)}
                     <span className="flex-1 truncate">{t(entry.labelKey)}</span>
-                  </button>
-                ) : (
-                  <a
-                    key={`builtin-${pin.id}`}
-                    href={APP_STORE_BROWSE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t(entry.labelKey)}
-                    className={`${LINK_CLASS} hover:bg-surface-hover`}
-                  >
-                    {renderBuiltinIcon(entry)}
-                    <span className="flex-1 truncate">{t(entry.labelKey)}</span>
-                  </a>
+                  </Link>
                 );
               }
-              const active = isEntryActive(location.pathname, entry.href);
-              return (
-                <Link
-                  key={`builtin-${pin.id}`}
-                  to={entry.href}
-                  title={t(entry.labelKey)}
-                  className={`${LINK_CLASS} ${active ? "bg-surface shadow-1 dark:bg-surface-hover" : "hover:bg-surface-hover dark:hover:bg-surface"}`}
-                >
-                  {renderBuiltinIcon(entry)}
-                  <span className="flex-1 truncate">{t(entry.labelKey)}</span>
-                </Link>
-              );
-            }
 
-            const app = installedApps.find((a) => a.id === pin.id);
-            if (!app || !app.hasFrontend || !app.href) return null;
-            const active = isEntryActive(location.pathname, app.href);
-            return (
-              <Fragment key={`app-${pin.id}`}>
-                {withAppContextMenu(
-                  app,
-                  <Link
-                    to={app.href}
-                    title={app.displayName}
-                    className={`${LINK_CLASS} ${active ? "bg-surface shadow-1 dark:bg-surface-hover" : "hover:bg-surface-hover dark:hover:bg-surface"}`}
-                  >
-                    {app.iconUrl ? (
-                      <img
-                        src={app.iconUrl}
-                        alt=""
-                        className="h-4 w-4 shrink-0 rounded-4"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-4 bg-surface-muted text-aux text-muted-foreground">
-                        {app.displayName.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    <span className="flex-1 truncate">{app.displayName}</span>
-                    {app.status === "disabled" ? (
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-border-strong"
-                        role="img"
-                        aria-label={t("sidebar.appDisabled")}
-                      />
-                    ) : null}
-                  </Link>,
-                )}
-              </Fragment>
-            );
-          })}
-        </nav>
+              const app = installedApps.find((a) => a.id === pin.id);
+              if (!app || !app.hasFrontend || !app.href) return null;
+              const active = isEntryActive(location.pathname, app.href);
+              return (
+                <Fragment key={`app-${pin.id}`}>
+                  {withAppContextMenu(
+                    app,
+                    <Link
+                      to={app.href}
+                      title={app.displayName}
+                      className={`${LINK_CLASS} ${active ? ACTIVE_CLASS : IDLE_CLASS}`}
+                    >
+                      {app.iconUrl ? (
+                        <img
+                          src={app.iconUrl}
+                          alt=""
+                          className="h-4 w-4 shrink-0 rounded-4"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-4 bg-surface-muted text-aux text-muted-foreground">
+                          {app.displayName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="flex-1 truncate">{app.displayName}</span>
+                      {app.status === "disabled" ? (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-border-strong"
+                          role="img"
+                          aria-label={t("sidebar.appDisabled")}
+                        />
+                      ) : null}
+                    </Link>,
+                  )}
+                </Fragment>
+              );
+            })}
+          </nav>
+          <RecentAppsZone
+            apps={recentApps}
+            unopenedIds={unopenedIds}
+            pathname={location.pathname}
+            onPin={(appId) => persistPins([...pins, { type: "app", id: appId }])}
+            wrapWithContextMenu={(app, trigger) => withAppContextMenu(app, trigger, false)}
+          />
+        </>
       )}
       {storeSheet}
     </div>
