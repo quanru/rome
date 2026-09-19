@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { RoutineDraftCard } from "./RoutineDraftCard";
 import { createRoutine, listRoutineNames } from "@/lib/chat-api";
 import type { RoutineDraftSpec } from "@/lib/chat-types";
@@ -138,9 +139,13 @@ describe("RoutineDraftCard", () => {
     await waitFor(() => expect(mockList).toHaveBeenCalled());
   });
 
-  it("turning it on posts the create payload and shows the On state", async () => {
+  it("turning it on links the created routine to its exact run history", async () => {
     const user = userEvent.setup();
-    render(<RoutineDraftCard draft={eventDraft} />);
+    render(
+      <MemoryRouter>
+        <RoutineDraftCard draft={eventDraft} />
+      </MemoryRouter>,
+    );
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
 
@@ -152,7 +157,35 @@ describe("RoutineDraftCard", () => {
     });
     await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
     expect(screen.getByText(/Manage it in Routines/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View run history" }).getAttribute("href")).toBe(
+      "/routines/r-1",
+    );
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
+  });
+
+  it("does not link while creation is pending or when its result has no routine id", async () => {
+    const user = userEvent.setup();
+    let finishCreation:
+      | ((result: { ok: true; status: number; routineId?: string }) => void)
+      | undefined;
+    mockCreate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCreation = resolve;
+        }),
+    );
+    render(
+      <MemoryRouter>
+        <RoutineDraftCard draft={eventDraft} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
+
+    finishCreation?.({ ok: true, status: 201, routineId: "   " });
+    await waitFor(() => expect(screen.getByText("On")).toBeTruthy());
+    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
   });
 
   it("surfaces the server error and keeps the action when creation fails", async () => {
@@ -164,6 +197,7 @@ describe("RoutineDraftCard", () => {
 
     await waitFor(() => expect(screen.getByText("Routine name already taken")).toBeTruthy());
     expect(screen.queryByText("On")).toBeNull();
+    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
     expect(screen.getByRole("button", { name: /turn it on/i })).toBeTruthy();
   });
 
@@ -172,6 +206,7 @@ describe("RoutineDraftCard", () => {
     render(<RoutineDraftCard draft={eventDraft} />);
 
     expect(await screen.findByText("On")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
     expect(mockCreate).not.toHaveBeenCalled();
   });

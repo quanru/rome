@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { BellRing, CalendarClock, Check, Play } from "lucide-react";
 import { Spinner } from "@rome-os/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,7 @@ import type { PreviewPayload, RoutineDraftSpec } from "@/lib/chat-types";
 type CardState =
   | { kind: "draft" }
   | { kind: "creating" }
-  | { kind: "on" }
+  | { kind: "on"; routineId?: string }
   | { kind: "error"; message: string };
 
 /**
@@ -41,7 +42,11 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
       args: draft.args,
     });
     if (result.ok) {
-      setState({ kind: "on" });
+      const routineId =
+        typeof result.routineId === "string" && result.routineId.trim() !== ""
+          ? result.routineId.trim()
+          : undefined;
+      setState({ kind: "on", routineId });
     } else {
       setState({
         kind: "error",
@@ -97,10 +102,17 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
       )}
 
       {isOn ? (
-        <div className="border-t border-border bg-surface-muted/50 px-4 py-2 text-aux text-muted-foreground">
-          {isManual
-            ? 'Saved. It won’t run on its own — use "Run now" in Routines whenever you want it.'
-            : "Saved. Next time it matches, Rome will run it within a minute. Manage it in Routines."}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-muted/50 px-4 py-2">
+          <span className="min-w-0 flex-1 text-aux text-muted-foreground">
+            {isManual
+              ? 'Saved. It won’t run on its own — use "Run now" in Routines whenever you want it.'
+              : "Saved. Next time it matches, Rome will run it within a minute. Manage it in Routines."}
+          </span>
+          {state.routineId && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/routines/${encodeURIComponent(state.routineId)}`}>View run history</Link>
+            </Button>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-end border-t border-border bg-surface-muted/60 px-4 py-2">
