@@ -18,6 +18,7 @@ import {
   useWorkspaceContextRegistry,
   type WorkspaceContextBuiltin,
 } from "@/pages/free/workspace-context";
+import { useFreeCells } from "@/pages/free/use-free-cells";
 import { ComposerChip } from "./ComposerChip";
 
 const NO_OP = () => () => {};
@@ -114,6 +115,7 @@ function appChip(
 export function WorkspaceContextChips() {
   const { t } = useTranslation("common");
   const registry = useWorkspaceContextRegistry();
+  const { placements, toolView } = useFreeCells();
   const catalog = useAppsCatalog();
   const [expanded, setExpanded] = useState(false);
 
@@ -125,11 +127,21 @@ export function WorkspaceContextChips() {
 
   if (!registry) return null;
 
+  // The active app is already visible beside the composer. Keep chips for
+  // background app tabs, and restore this one if the tools sidebar is hidden.
+  const visibleAppId = toolView.collapsed
+    ? null
+    : (placements.find(
+        (placement) => placement.id === toolView.activeId && placement.type === "app",
+      )?.targetId ?? null);
   const chips: ChipModel[] = [
     ...registry
       .getBuiltins()
       .map((b) => (b.kind === "projects" ? projectsChip(b, t) : desktopChip(b, t))),
-    ...registry.listApps().map(({ placementId, appId }) => appChip(appId, placementId, catalog)),
+    ...registry
+      .listApps()
+      .filter(({ appId }) => appId !== visibleAppId)
+      .map(({ placementId, appId }) => appChip(appId, placementId, catalog)),
   ];
 
   if (chips.length === 0) return null;
