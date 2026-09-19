@@ -23,6 +23,31 @@ function ok(json: unknown): Response {
 }
 
 describe("AI Tools refresh", () => {
+  it("shows Pi as an enabled terminal-managed provider with discovered models", async () => {
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (input) => {
+      const url = String(input);
+      if (url === "/api/ai-tools/status") {
+        return ok({
+          claude: { loggedIn: false },
+          codex: { loggedIn: false },
+          pi: {
+            loggedIn: true,
+            models: [{ id: "openai/gpt", upstreamProvider: "openai", modelId: "gpt", name: "GPT" }],
+          },
+        });
+      }
+      if (url === "/api/ai-tools/anthropic-compatible-providers") {
+        return ok({ providers: [], configured: null });
+      }
+      return ok({});
+    }) as typeof fetch);
+
+    render(<AiToolsPanel />);
+    expect(await screen.findByText("Pi (Pi Coding Agent)")).toBeTruthy();
+    expect(await screen.findByText("1 Pi models available")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Manage in Terminal" })).toBeTruthy();
+  });
+
   it("shows pending state and replaces the displayed provider state", async () => {
     let resolveRefresh!: (response: Response) => void;
     const refreshResponse = new Promise<Response>((resolve) => {

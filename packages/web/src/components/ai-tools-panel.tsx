@@ -76,6 +76,9 @@ export interface AIToolStatus {
    * re-login" rather than a plain "not connected".
    */
   needsReauth?: boolean;
+  models?: Array<{ id: string; upstreamProvider: string; modelId: string; name: string }>;
+  error?: string;
+  unavailableReason?: "runtime" | "no_credentials" | "no_models" | "discovery_failed";
 }
 
 interface UsageWindowStatus {
@@ -192,6 +195,13 @@ const AI_TOOL_PROVIDERS = [
     available: true,
     statusKey: "claude" as const,
     icon: "claude" as const,
+  },
+  {
+    id: "pi-login",
+    i18nKey: "pi" as const,
+    available: true,
+    statusKey: "pi" as const,
+    icon: "pi" as const,
   },
   {
     id: "gemini-login",
@@ -511,11 +521,13 @@ export function AiToolsPanel({
       const data = (await res.json()) as {
         claude?: AIToolStatus;
         codex?: AIToolStatus;
+        pi?: AIToolStatus;
         anthropicCompatible?: AnthropicCompatibleConfiguredSummary | null;
       };
       setToolStatus({
         ...(data.claude ? { claude: data.claude } : {}),
         ...(data.codex ? { codex: data.codex } : {}),
+        ...(data.pi ? { pi: data.pi } : {}),
       });
       setConfiguredAnthropicProvider((current) => {
         const next = data.anthropicCompatible ?? null;
@@ -652,12 +664,14 @@ export function AiToolsPanel({
       const data = (await res.json().catch(() => ({}))) as {
         claude?: AIToolStatus;
         codex?: AIToolStatus;
+        pi?: AIToolStatus;
         error?: string;
       };
       if (!res.ok) throw new Error(data.error || t("aiTools.refreshFailed"));
       setToolStatus({
         ...(data.claude ? { claude: data.claude } : {}),
         ...(data.codex ? { codex: data.codex } : {}),
+        ...(data.pi ? { pi: data.pi } : {}),
       });
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : t("aiTools.refreshFailed"));
@@ -889,7 +903,16 @@ export function AiToolsPanel({
                         </span>
                       )}
                     </div>
-                    {usesApiKey ? (
+                    {provider.id === "pi-login" ? (
+                      <p
+                        className={`text-aux ${status?.error ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {status?.error ??
+                          (isLoggedIn
+                            ? t("aiTools.pi.modelsAvailable", { count: status.models?.length ?? 0 })
+                            : t("aiTools.pi.setupHint"))}
+                      </p>
+                    ) : usesApiKey ? (
                       usesManagedApiKey && configuredAnthropicProvider ? (
                         <p className="flex items-center gap-2 text-aux text-muted-foreground">
                           <AnthropicCompatibleProviderLogo
@@ -942,9 +965,18 @@ export function AiToolsPanel({
                   </div>
                   {provider.available && (
                     <div className="ml-auto flex shrink-0 items-center gap-2">
-                      {provider.id === "claude-login" &&
-                      usesManagedApiKey &&
-                      configuredAnthropicProvider ? (
+                      {provider.id === "pi-login" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={AI_TOOL_ACTION_BUTTON_CLASS}
+                          onClick={() => setTerminalPreset(provider.id)}
+                        >
+                          {t("aiTools.pi.manage")}
+                        </Button>
+                      ) : provider.id === "claude-login" &&
+                        usesManagedApiKey &&
+                        configuredAnthropicProvider ? (
                         <ButtonGroup>
                           <Button
                             variant="outline"

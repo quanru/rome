@@ -9,11 +9,15 @@ describe("TERMINAL_COMMAND_PRESETS", () => {
     });
   });
 
-  it("exposes only the login preset — logout (Claude + Codex) is non-PTY", () => {
+  it("exposes the official Pi terminal and no logout presets", () => {
     // Logout runs via HTTP endpoints (`claude auth logout` / the app-server
     // `account/logout` RPC), and Codex login uses the device-code flow. None of
     // them is a PTY preset.
-    expect(Object.keys(TERMINAL_COMMAND_PRESETS)).toEqual(["claude-login"]);
+    expect(Object.keys(TERMINAL_COMMAND_PRESETS)).toEqual(["claude-login", "pi-login"]);
+    expect(TERMINAL_COMMAND_PRESETS["pi-login"]?.cmd).toBe(process.execPath);
+    expect(TERMINAL_COMMAND_PRESETS["pi-login"]?.args[0]).toMatch(
+      /pi-coding-agent.*bundle\/cli\.js$/,
+    );
     expect(TERMINAL_COMMAND_PRESETS["claude-logout"]).toBeUndefined();
     expect(TERMINAL_COMMAND_PRESETS["codex-login"]).toBeUndefined();
   });

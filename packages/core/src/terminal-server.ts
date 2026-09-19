@@ -5,8 +5,12 @@ import * as pty from "node-pty";
 import { createLogger } from "./logger.js";
 import { ClaudeLoginCodeValidationError, formatClaudeLoginCodeInput } from "./claude-login-code.js";
 import { createClaudeLoginWatcher } from "./claude-login-watch.js";
+import { fileURLToPath } from "node:url";
 
 const log = createLogger("terminal-server");
+const piCliPath = fileURLToPath(
+  new URL("../node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js", import.meta.url),
+);
 
 interface TerminalCommandPreset {
   cmd: string;
@@ -19,9 +23,12 @@ export const TERMINAL_COMMAND_PRESETS: Record<string, TerminalCommandPreset> = {
   // from stdin. The login watcher accepts the first-run theme/login defaults,
   // then surfaces the OAuth URL to the native UI.
   "claude-login": { cmd: "claude", args: ["/login"] },
+  // Pi owns its credentials and models. Launch its official terminal UI rather
+  // than reading auth.json/models.json or collecting credentials in Rome.
+  "pi-login": { cmd: process.execPath, args: [piCliPath] },
   // Logout (Claude and Codex) is non-interactive and runs via an HTTP endpoint
   // (ai-tools.ts: `claude auth logout` / the app-server `account/logout` RPC),
-  // not a PTY — so login is the only terminal preset.
+  // not a PTY.
 };
 
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;

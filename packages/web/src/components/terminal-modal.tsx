@@ -54,7 +54,10 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
   const [codeInput, setCodeInput] = useState("");
   const [codeSubmitted, setCodeSubmitted] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [terminalOutput, setTerminalOutput] = useState("");
+  const [terminalInput, setTerminalInput] = useState("");
 
+  const isPi = preset === "pi-login";
   const isLogin = preset.endsWith("-login");
   const providerKey = preset.replace(/-login$/, "");
 
@@ -71,7 +74,8 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
   const checkAuthOnce = useCallback(
     async (signal?: AbortSignal) => {
       try {
-        const refreshProvider = providerKey === "claude" ? "anthropic" : "openai";
+        const refreshProvider =
+          providerKey === "claude" ? "anthropic" : providerKey === "pi" ? "pi" : "openai";
         const res = await fetch(`/api/ai-tools/refresh?provider=${refreshProvider}`, {
           method: "POST",
           signal,
@@ -116,13 +120,13 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
   // Fail-open: if the sign-in URL never arrives, show an error rather than
   // spinning forever (CLI reword, an unexpected prompt the watcher can't parse).
   useEffect(() => {
-    if (status !== "connected" || !isLogin || authUrl || authComplete) return;
+    if (status !== "connected" || !isLogin || isPi || authUrl || authComplete) return;
     const timer = setTimeout(() => {
       setStatus("error");
       setErrorMsg(t("terminal.errors.prepareTimeout"));
     }, PREPARE_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [status, isLogin, authUrl, authComplete, t]);
+  }, [status, isLogin, isPi, authUrl, authComplete, t]);
 
   // WebSocket that runs the PTY command. We never render its raw output — only
   // the structured events the login watcher emits.
@@ -151,7 +155,7 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
 
     ws.onmessage = (event) => {
       if (disposed) return;
-      let msg: { type?: string; url?: string; message?: string };
+      let msg: { type?: string; url?: string; message?: string; data?: string };
       try {
         msg = JSON.parse(event.data);
       } catch {
@@ -165,6 +169,8 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
         // CLI rejected the pasted code; re-open the box with the error shown.
         setCodeError(msg.message);
         setCodeSubmitted(false);
+      } else if (msg.type === "output" && typeof msg.data === "string" && isPi) {
+        setTerminalOutput((current) => `${current}${msg.data}`.slice(-20_000));
       } else if (msg.type === "exit") {
         settled = true;
         // The process can exit the instant login persists; re-check now so a
@@ -215,6 +221,8 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
     setCodeInput("");
     setCodeSubmitted(false);
     setCodeError(null);
+    setTerminalOutput("");
+    setTerminalInput("");
     setSessionKey((k) => k + 1);
   }, []);
 
@@ -229,7 +237,16 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
     }
   }, []);
 
-  const title = t("terminal.claudeLogin.title");
+  const title = isPi ? t("terminal.pi.title") : t("terminal.claudeLogin.title");
+
+  const submitTerminalInput = useCallback(() => {
+    if (!terminalInput) return;
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "input", data: `${terminalInput}\r` }));
+      setTerminalInput("");
+    }
+  }, [terminalInput]);
 
   return (
     <Dialog open onClose={onClose} size="md" ariaLabel={title}>
@@ -245,6 +262,30 @@ export default function TerminalModal({ preset, onClose }: TerminalModalProps) {
               {t("terminal.reconnect")}
             </Button>
           </div>
+        ) : isPi ? (
+          <>
+            <p className="text-ui text-muted-foreground">{t("terminal.pi.description")}</p>
+            <pre className="max-h-72 min-h-40 overflow-auto whitespace-pre-wrap rounded-8 bg-foreground p-3 font-mono text-xs text-background">
+              {terminalOutput || t("terminal.pi.starting")}
+            </pre>
+            <div className="flex gap-2">
+              <Input
+                value={terminalInput}
+                onChange={(event) => setTerminalInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    submitTerminalInput();
+                  }
+                }}
+                placeholder={t("terminal.pi.inputPlaceholder")}
+                autoFocus
+              />
+              <Button onClick={submitTerminalInput} disabled={!terminalInput}>
+                {t("terminal.pi.send")}
+              </Button>
+            </div>
+          </>
         ) : isLogin ? (
           <>
             <ol className="flex list-decimal flex-col gap-1 pl-5 text-ui text-muted-foreground">

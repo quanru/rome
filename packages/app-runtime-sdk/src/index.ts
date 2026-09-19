@@ -753,7 +753,7 @@ export type AgentErrorCode =
   | "model_unavailable"
   | "no_model_provider_available";
 
-export type AgentErrorProvider = "openai" | "anthropic";
+export type AgentErrorProvider = "openai" | "anthropic" | "pi";
 
 export type AgentErrorReason =
   | "not_logged_in"
