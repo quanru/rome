@@ -114,6 +114,39 @@ describe("ChatTranscriptCache", () => {
     expect(cache.snapshot().ids).toEqual(["session-b"]);
   });
 
+  it("revokes only the active context and invalidates its pre-revocation work", () => {
+    const cache = new ChatTranscriptCache();
+    const contextA = "instance|guardian-a";
+    const contextB = "instance|guardian-b";
+    const listener = rs.fn();
+    cache.subscribeAuthorizationRevocations(listener);
+    cache.activateContext(contextA);
+    const staleRequest = cache.beginRequest(contextA, "session-1");
+    cache.activateContext(contextB);
+    cache.putComplete(contextB, "session-1", [message("session-1")]);
+    const currentRequest = cache.beginRequest(contextB, "session-1");
+    const currentEvents = cache.captureSession(contextB, "session-1");
+
+    expect(cache.revokeAuthorization(contextA, "session-1")).toBe(false);
+    expect(cache.get(contextB, "session-1")).toBeDefined();
+    expect(listener).not.toHaveBeenCalled();
+
+    expect(cache.revokeAuthorization(contextB, "session-1")).toBe(true);
+    expect(cache.get(contextB, "session-1")).toBeUndefined();
+    expect(cache.isRequestContextCurrent(staleRequest, contextB)).toBe(false);
+    expect(cache.isRequestContextCurrent(currentRequest, contextB)).toBe(false);
+    expect(cache.isSessionCurrent(currentEvents, contextB)).toBe(false);
+    expect(cache.isAuthorizationRevoked(contextB, "session-1")).toBe(true);
+    expect(cache.confirmAuthorization(currentRequest, contextB)).toBe(false);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ contextKey: contextB, sessionId: "session-1" }),
+    );
+
+    const freshRequest = cache.beginRequest(contextB, "session-1");
+    expect(cache.confirmAuthorization(freshRequest, contextB)).toBe(true);
+    expect(cache.isAuthorizationRevoked(contextB, "session-1")).toBe(false);
+  });
+
   it("keeps an older complete result as fallback only while a newer request is pending", () => {
     const cache = new ChatTranscriptCache();
     cache.activateContext("context");

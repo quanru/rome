@@ -593,6 +593,82 @@ describe("Chat history cache", () => {
     expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
   });
 
+  it.each([
+    401, 403,
+  ])("purges every mounted view and rejects pre-purge work after HTTP %s", async (status) => {
+    rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    mockInvalidateQueries.mockReturnValue(new Promise(() => {}));
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const staleInsert = chatMessage("session-a", "stale-insert", "2026-09-19T00:01:00.000Z");
+    const firstLoad = deferred<ChatMessage[] | null>();
+    const secondLoad = deferred<ChatMessage[] | null>();
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages)
+      .mockReturnValueOnce(firstLoad.promise)
+      .mockReturnValueOnce(secondLoad.promise);
+
+    render(
+      <MemoryRouter>
+        <ChatTranscriptCacheContext.Provider value={context}>
+          <div data-testid="first-chat">
+            <Chat sessionId="session-a" />
+          </div>
+          <div data-testid="second-chat">
+            <Chat sessionId="session-a" />
+          </div>
+        </ChatTranscriptCacheContext.Provider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(2));
+    for (const testId of ["first-chat", "second-chat"]) {
+      expect(
+        within(screen.getByTestId(testId))
+          .getByTestId("message-list")
+          .getAttribute("data-message-ids"),
+      ).toBe("old");
+    }
+    const staleMessageListener = [
+      ...(MockEventSource.instances[1]?.listeners.get("message_insert") ?? []),
+    ][0]!;
+
+    await act(async () => {
+      firstLoad.reject(new ChatApiError("authorization lost", status, null));
+      await firstLoad.promise.catch(() => undefined);
+    });
+
+    for (const testId of ["first-chat", "second-chat"]) {
+      expect(
+        within(screen.getByTestId(testId))
+          .getByTestId("message-list")
+          .getAttribute("data-message-ids"),
+      ).toBe("");
+    }
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: AUTH_QUERY_KEY });
+    expect(MockEventSource.instances).toHaveLength(2);
+
+    act(() => {
+      staleMessageListener(
+        new MessageEvent("message_insert", { data: JSON.stringify(staleInsert) }),
+      );
+    });
+    secondLoad.resolve([old, staleInsert]);
+    await act(async () => {
+      await secondLoad.promise;
+    });
+
+    for (const testId of ["first-chat", "second-chat"]) {
+      expect(
+        within(screen.getByTestId(testId))
+          .getByTestId("message-list")
+          .getAttribute("data-message-ids"),
+      ).toBe("");
+    }
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    expect(MockEventSource.instances).toHaveLength(2);
+  });
+
   it("does not restore a dropped optimistic row on the next cache hit", async () => {
     const durable = chatMessage("session-a", "durable", "2026-09-19T00:00:00.000Z");
     const optimistic = chatMessage("session-a", "optimistic-input", "2026-09-19T00:01:00.000Z");
