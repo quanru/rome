@@ -33,6 +33,7 @@ describe("createRoutine", () => {
       trigger: routine.trigger,
       actionName: routine.actionName,
       args: routine.args,
+      webchatContext: { sessionId: "chat-a", turnId: "turn-1", toolUseId: "draft-tool-1" },
     });
 
     expect(result).toEqual({ ok: true, status: 201, routineId: "r-1", routine });
@@ -54,6 +55,7 @@ describe("createRoutine", () => {
       trigger: { type: "manual" },
       actionName: "summon",
       args: {},
+      webchatContext: { sessionId: "chat-a", turnId: "turn-1", toolUseId: "draft-tool-1" },
     });
 
     expect(result.ok).toBe(true);

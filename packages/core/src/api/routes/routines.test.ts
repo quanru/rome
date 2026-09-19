@@ -83,10 +83,12 @@ describe("Routines API", () => {
   let testDb: TestDb;
   let app: Hono;
   let routineEngine: RoutineEngine;
+  let webchatRepo: ApiDeps["webchatRepo"];
 
   beforeEach(async () => {
     testDb = createTestDb();
     const baseDeps = await buildTestDeps(testDb.db);
+    webchatRepo = baseDeps.webchatRepo;
     // Wire a minimal RoutineEngine so route-level trigger validation
     // (hasProvider) succeeds for "schedule". CRUD tests don't fire routines.
     routineEngine = new RoutineEngine(
@@ -141,6 +143,131 @@ describe("Routines API", () => {
     const body = (await res.json()) as { id: string; name: string; trigger: Trigger };
     expect(body.name).toBe("daily-standup");
     expect(body.trigger).toEqual(trigger);
+  });
+
+  it("persists a created-routine record in the originating chat", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    await webchatRepo.addMessage(
+      "draft-message",
+      "chat-a",
+      "assistant",
+      JSON.stringify([
+        {
+          type: "routine_draft_card",
+          toolUseId: "draft-tool-1",
+          draft: { name: "Weekly update reminder" },
+        },
+      ]),
+      "turn-1",
+    );
+
+    const res = await app.request("/routines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Weekly update reminder",
+        trigger: {
+          type: "schedule",
+          tzid: "UTC",
+          tzMode: "fixed",
+          localTime: "09:00",
+          rrule: "FREQ=WEEKLY;BYDAY=FR",
+        },
+        actionName: "send_message",
+        args: { channel: "webchat", text: "Send the update" },
+        webchatContext: {
+          sessionId: "chat-a",
+          turnId: "turn-1",
+          toolUseId: "draft-tool-1",
+        },
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string; name: string };
+    const messages = await webchatRepo.getMessages("chat-a");
+    const createdParts = messages.flatMap((message) => {
+      const parts = JSON.parse(message.content) as Array<Record<string, unknown>>;
+      return parts.filter((part) => part.type === "routine_created_card");
+    });
+    expect(createdParts).toEqual([
+      {
+        type: "routine_created_card",
+        sourceToolUseId: "draft-tool-1",
+        routineId: created.id,
+        routineName: created.name,
+      },
+    ]);
+  });
+
+  it("does not create or record a routine for malformed webchat context", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    const res = await app.request("/routines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Unlinked routine",
+        trigger: {
+          type: "schedule",
+          tzid: "UTC",
+          tzMode: "fixed",
+          localTime: "09:00",
+        },
+        actionName: "send_message",
+        webchatContext: {
+          sessionId: "chat-a",
+          turnId: "turn-missing",
+          toolUseId: "draft-missing",
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await testDb.db.select().from(routines)).toEqual([]);
+    expect(await webchatRepo.getMessages("chat-a")).toEqual([]);
+  });
+
+  it("does not record a created routine when creation fails", async () => {
+    await webchatRepo.createSession("chat-a", "Chat A");
+    await webchatRepo.addMessage(
+      "draft-message",
+      "chat-a",
+      "assistant",
+      JSON.stringify([
+        {
+          type: "routine_draft_card",
+          toolUseId: "draft-tool-1",
+          draft: { name: "Broken routine" },
+        },
+      ]),
+      "turn-1",
+    );
+
+    const res = await app.request("/routines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Broken routine",
+        trigger: {
+          type: "schedule",
+          tzid: "UTC",
+          tzMode: "fixed",
+          localTime: "09:00",
+        },
+        actionName: "missing_action",
+        webchatContext: {
+          sessionId: "chat-a",
+          turnId: "turn-1",
+          toolUseId: "draft-tool-1",
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await testDb.db.select().from(routines)).toEqual([]);
+    const messages = await webchatRepo.getMessages("chat-a");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).not.toContain("routine_created_card");
   });
 
   it("rejects creation without trigger", async () => {

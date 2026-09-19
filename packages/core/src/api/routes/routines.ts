@@ -6,6 +6,7 @@ import { routines } from "../../db/schema.js";
 import { toRoutine } from "../../db/repositories/routines.js";
 import { parseDateAndLocalTime } from "../../routines/schedule-trigger-provider.js";
 import type { ApiDeps } from "../deps.js";
+import type { MessagePart } from "../../types.js";
 import type { Trigger } from "../../routines/types.js";
 
 // The engine merges trigger payloads into action args under this key. Forbid
@@ -138,6 +139,11 @@ interface CreateRoutineBody {
   actionName?: string;
   args?: Record<string, unknown>;
   enabled?: boolean;
+  webchatContext?: {
+    sessionId?: string;
+    turnId?: string;
+    toolUseId?: string;
+  };
 }
 
 interface UpdateRoutineBody {
@@ -146,6 +152,48 @@ interface UpdateRoutineBody {
   trigger?: Trigger;
   actionName?: string;
   args?: Record<string, unknown>;
+}
+
+interface WebchatRoutineContext {
+  sessionId: string;
+  turnId: string;
+  toolUseId: string;
+}
+
+function parseWebchatRoutineContext(
+  value: CreateRoutineBody["webchatContext"],
+): WebchatRoutineContext | null {
+  if (value === undefined) return null;
+  if (
+    typeof value.sessionId !== "string" ||
+    value.sessionId.trim() === "" ||
+    typeof value.turnId !== "string" ||
+    value.turnId.trim() === "" ||
+    typeof value.toolUseId !== "string" ||
+    value.toolUseId.trim() === ""
+  ) {
+    return null;
+  }
+  return {
+    sessionId: value.sessionId,
+    turnId: value.turnId,
+    toolUseId: value.toolUseId,
+  };
+}
+
+function messageHasRoutineDraft(content: string, toolUseId: string): boolean {
+  try {
+    const parts: unknown = JSON.parse(content);
+    return (
+      Array.isArray(parts) &&
+      parts.some(
+        (part) =>
+          isPlainObject(part) && part.type === "routine_draft_card" && part.toolUseId === toolUseId,
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 // Rebuilds the action-execution tree for a run from the flat `action_executions`
@@ -262,6 +310,25 @@ export function routinesRoutes(deps: ApiDeps): Hono {
 
   app.post("/routines", async (c) => {
     const body = await c.req.json<CreateRoutineBody>().catch(() => ({}) as CreateRoutineBody);
+    const webchatContext = parseWebchatRoutineContext(body.webchatContext);
+
+    if (body.webchatContext !== undefined) {
+      if (!webchatContext) {
+        return c.json({ error: "webchatContext is invalid" }, 400);
+      }
+      const session = await deps.webchatRepo.getSession(webchatContext.sessionId);
+      if (!session || (session.type !== "webchat" && session.type !== "webchat_handoff")) {
+        return c.json({ error: "Webchat session not found" }, 404);
+      }
+      const sourceExists = (await deps.webchatRepo.getMessages(webchatContext.sessionId)).some(
+        (message) =>
+          message.turnId === webchatContext.turnId &&
+          messageHasRoutineDraft(message.content, webchatContext.toolUseId),
+      );
+      if (!sourceExists) {
+        return c.json({ error: "Routine draft not found in the originating chat turn" }, 400);
+      }
+    }
 
     if (!body.trigger || !body.trigger.type) {
       return c.json({ error: "trigger is required" }, 400);
@@ -321,9 +388,24 @@ export function routinesRoutes(deps: ApiDeps): Hono {
 
     await deps.db.insert(routines).values(record);
     const [inserted] = await deps.db.select().from(routines).where(eq(routines.id, record.id));
+    if (!inserted) {
+      return c.json({ error: "Created routine could not be loaded" }, 500);
+    }
 
-    if (inserted?.enabled) {
+    if (inserted.enabled) {
       await deps.routineEngine.activate(toRoutine(inserted));
+    }
+
+    if (webchatContext) {
+      const part: Extract<MessagePart, { type: "routine_created_card" }> = {
+        type: "routine_created_card",
+        sourceToolUseId: webchatContext.toolUseId,
+        routineId: inserted.id,
+        routineName: inserted.name,
+      };
+      await deps.webchatRepo.addBackendMessage(webchatContext.sessionId, webchatContext.turnId, [
+        part,
+      ]);
     }
 
     return c.json(inserted, 201);

@@ -572,6 +572,11 @@ export interface CreateRoutinePayload {
   trigger: unknown;
   actionName: string;
   args: Record<string, unknown>;
+  webchatContext: {
+    sessionId: string;
+    turnId: string;
+    toolUseId: string;
+  };
 }
 
 export interface CreateRoutineResult {
@@ -669,15 +674,6 @@ export async function createRoutine(payload: CreateRoutinePayload): Promise<Crea
   }
   const payloadErr = (await res.json().catch(() => null)) as { error?: string } | null;
   return { ok: false, status: res.status, error: payloadErr?.error };
-}
-
-/** Names of existing routines, used by the draft card to detect a routine it
- * already created (so a reload doesn't offer to create a duplicate). */
-export async function listRoutineNames(): Promise<string[]> {
-  const res = await fetch("/api/routines", { credentials: "include" });
-  if (!res.ok) return [];
-  const rows = (await res.json().catch(() => [])) as Array<{ name?: string }>;
-  return rows.map((r) => r.name ?? "").filter(Boolean);
 }
 
 export async function loadSettings(): Promise<Record<string, unknown>> {

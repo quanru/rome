@@ -1,45 +1,30 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { BellRing, CalendarClock, Check, Play } from "lucide-react";
+import { useState } from "react";
+import { BellRing, CalendarClock, Play } from "lucide-react";
 import { Spinner } from "@rome-os/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { createRoutine, listRoutineNames } from "@/lib/chat-api";
+import { createRoutine } from "@/lib/chat-api";
 import type { PreviewPayload, RoutineDraftSpec } from "@/lib/chat-types";
 import { useSyncCreatedRoutine } from "@/hooks/use-routines";
 
-type CardState =
-  | { kind: "draft" }
-  | { kind: "creating" }
-  | { kind: "on"; routineId?: string }
-  | { kind: "error"; message: string };
+type CardState = { kind: "draft" } | { kind: "creating" } | { kind: "error"; message: string };
+
+interface RoutineDraftCardProps {
+  draft: RoutineDraftSpec;
+  sessionId: string;
+  turnId: string;
+  toolUseId: string;
+}
 
 /**
  * The confirm card for a routine the agent proposed via `propose_routine`.
- * Turning it on creates the routine through POST /api/routines (which also
- * activates it), so confirmation needs no second agent turn. On mount we check
- * existing routine names so a reload after creation shows "On" instead of
- * re-offering to create a duplicate.
+ * Turning it on creates the routine and asks the server to append a durable
+ * routine_created_card to this chat. That persisted part replaces this draft
+ * in the transcript; this component never owns the completed presentation.
  */
-export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
-  const { t } = useTranslation("routines");
+export function RoutineDraftCard({ draft, sessionId, turnId, toolUseId }: RoutineDraftCardProps) {
   const [state, setState] = useState<CardState>({ kind: "draft" });
   const syncCreatedRoutine = useSyncCreatedRoutine();
-
-  useEffect(() => {
-    let cancelled = false;
-    void listRoutineNames().then((names) => {
-      if (!cancelled && names.includes(draft.name)) {
-        setState((current) =>
-          current.kind === "on" && current.routineId ? current : { kind: "on" },
-        );
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [draft.name]);
 
   const turnOn = async () => {
     setState({ kind: "creating" });
@@ -48,23 +33,21 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
       trigger: draft.trigger,
       actionName: draft.actionName,
       args: draft.args,
+      webchatContext: { sessionId, turnId, toolUseId },
     });
-    if (result.ok) {
-      const routineId =
-        typeof result.routineId === "string" && result.routineId.trim() !== ""
-          ? result.routineId.trim()
-          : undefined;
-      syncCreatedRoutine(result.routine?.id === routineId ? result.routine : undefined);
-      setState({ kind: "on", routineId });
-    } else {
-      setState({
-        kind: "error",
-        message: result.error ?? `Couldn't turn it on (${result.status}).`,
-      });
+    if (result.ok && result.routine && result.routineId) {
+      syncCreatedRoutine(result.routine);
+      // The server has already persisted and pushed the routine_created_card.
+      // Stay pending until that record arrives and replaces this proposal.
+      return;
     }
+    syncCreatedRoutine(undefined);
+    setState({
+      kind: "error",
+      message: result.error ?? `Couldn't turn it on (${result.status}).`,
+    });
   };
 
-  const isOn = state.kind === "on";
   const isSchedule = draft.trigger.type === "schedule";
   const isManual = draft.trigger.type === "manual";
   const TriggerIcon = isManual ? Play : isSchedule ? CalendarClock : BellRing;
@@ -82,12 +65,6 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
           <TriggerIcon aria-hidden />
           {badgeLabel}
         </Badge>
-        {isOn && (
-          <Badge variant="success">
-            <Check aria-hidden />
-            On
-          </Badge>
-        )}
       </div>
 
       <div className="space-y-3 px-4 py-3">
@@ -110,34 +87,17 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
         </div>
       )}
 
-      {isOn ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface-muted/50 px-4 py-2">
-          <span className="min-w-0 flex-1 text-aux text-muted-foreground">
-            {isManual
-              ? 'Saved. It won’t run on its own — use "Run now" in Routines whenever you want it.'
-              : "Saved. Next time it matches, Rome will run it within a minute. Manage it in Routines."}
-          </span>
-          {state.routineId && (
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/routines/${encodeURIComponent(state.routineId)}`}>
-                {t("detail.runHistory")}
-              </Link>
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center justify-end border-t border-border bg-surface-muted/60 px-4 py-2">
-          <Button
-            size="sm"
-            onClick={turnOn}
-            disabled={state.kind === "creating"}
-            aria-label={state.kind === "creating" ? "Turning on routine" : undefined}
-          >
-            {state.kind === "creating" && <Spinner size="sm" label="Turning on routine" />}
-            {state.kind === "creating" ? <span aria-hidden>Turning it on…</span> : "Turn it on"}
-          </Button>
-        </div>
-      )}
+      <div className="flex items-center justify-end border-t border-border bg-surface-muted/60 px-4 py-2">
+        <Button
+          size="sm"
+          onClick={turnOn}
+          disabled={state.kind === "creating"}
+          aria-label={state.kind === "creating" ? "Turning on routine" : undefined}
+        >
+          {state.kind === "creating" && <Spinner size="sm" label="Turning on routine" />}
+          {state.kind === "creating" ? <span aria-hidden>Turning it on…</span> : "Turn it on"}
+        </Button>
+      </div>
     </div>
   );
 }

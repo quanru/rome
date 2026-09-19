@@ -111,6 +111,14 @@ export function useSyncCreatedRoutine(): (routine: Routine | undefined) => void 
   };
 }
 
+/** A persisted chat record can outlive an older routines-list cache. Clear that
+ * cache immediately before following its detail link so the detail route waits
+ * for server truth instead of briefly treating the old list as authoritative. */
+export function usePrepareRoutineDetailNavigation(): () => void {
+  const queryClient = useQueryClient();
+  return () => queryClient.removeQueries({ queryKey: LIST_QUERY_KEY, exact: true });
+}
+
 /** Outcome of a manual "run now": the action ran for real, so `status` may be a
  * run-level failure even though the HTTP call succeeded. */
 export interface RunNowResult {
