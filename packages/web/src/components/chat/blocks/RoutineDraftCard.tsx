@@ -26,7 +26,11 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
   useEffect(() => {
     let cancelled = false;
     void listRoutineNames().then((names) => {
-      if (!cancelled && names.includes(draft.name)) setState({ kind: "on" });
+      if (!cancelled && names.includes(draft.name)) {
+        setState((current) =>
+          current.kind === "on" && current.routineId ? current : { kind: "on" },
+        );
+      }
     });
     return () => {
       cancelled = true;

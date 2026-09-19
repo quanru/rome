@@ -1,6 +1,6 @@
 // @rstest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { RoutineDraftCard } from "./RoutineDraftCard";
@@ -161,6 +161,34 @@ describe("RoutineDraftCard", () => {
       "/routines/r-1",
     );
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
+  });
+
+  it("keeps the created routine link when the mount lookup resolves afterward", async () => {
+    const user = userEvent.setup();
+    let finishLookup: ((names: string[]) => void) | undefined;
+    mockList.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishLookup = resolve;
+        }),
+    );
+    render(
+      <MemoryRouter>
+        <RoutineDraftCard draft={eventDraft} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+    const link = await screen.findByRole("link", { name: "View run history" });
+    expect(link.getAttribute("href")).toBe("/routines/r-1");
+
+    await act(async () => {
+      finishLookup?.(["Landlord emails"]);
+    });
+    expect(screen.getByRole("link", { name: "View run history" }).getAttribute("href")).toBe(
+      "/routines/r-1",
+    );
   });
 
   it("does not link while creation is pending or when its result has no routine id", async () => {
