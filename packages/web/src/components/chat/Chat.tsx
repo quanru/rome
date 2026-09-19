@@ -1367,7 +1367,11 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           chatTranscriptCache.isSessionCurrent(turnAuthorization, currentContext)
         );
       };
-      if (!isTurnAuthorizationCurrent()) return;
+      const authorizationRevokedError = () => new Error("Chat authorization was revoked");
+      // ChatComposer restores its optimistically-cleared draft only when
+      // onSend rejects. A revoked context must therefore reject rather than
+      // silently treating a suppressed POST as a successful send.
+      if (!isTurnAuthorizationCurrent()) throw authorizationRevokedError();
       setStreamError(null);
       // Sending re-engages stickiness so the user follows their own message and
       // the reply, even if they'd scrolled up to read history.
@@ -1385,7 +1389,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       const result = await postTurn().catch((err: unknown) => {
         if (!isTurnAuthorizationCurrent()) {
           if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
-          return null;
+          throw authorizationRevokedError();
         }
         // Transport failure posting the turn — a genuine failed submit.
         if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
@@ -1396,9 +1400,9 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         if (!isAbortError(err)) setStreamError(t("stream.errors.sendInvalidResponse"));
         throw err;
       });
-      if (!result || !isTurnAuthorizationCurrent()) {
+      if (!isTurnAuthorizationCurrent()) {
         if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);
-        return;
+        throw authorizationRevokedError();
       }
       if (!result.ok) {
         if (!wasLocallyStreaming) locallyStreamingSessionIdsRef.current.delete(sendingSessionId);

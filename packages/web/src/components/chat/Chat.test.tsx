@@ -1,11 +1,13 @@
 // @rstest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import * as chatApiModule from "@/lib/chat-api" with { rstest: "importActual" };
 import { Chat } from "./Chat";
+import { ChatComposer as ActualChatComposer } from "./ChatComposer" with { rstest: "importActual" };
 import type { ChatComposerSendControls, ChatComposerSnapshot } from "./ChatComposer";
 import type { ChatRow } from "./chat-view";
 import type { ChatMessage } from "@/lib/chat-types";
@@ -31,6 +33,7 @@ const mockUseDashboardIdentity = rs.hoisted(() => rs.fn());
 const mockInvalidateQueries = rs.hoisted(() => rs.fn());
 const appsPanel = rs.hoisted(() => ({ collapsed: true, setCollapsed: rs.fn() }));
 const composerHarness = rs.hoisted(() => ({
+  useActual: false,
   onSend: null as
     | null
     | ((
@@ -139,6 +142,7 @@ rs.mock("@/components/chat/ChatComposer", () => ({
     ) => void | Promise<void>;
   }) => {
     composerHarness.onSend = props.onSend;
+    if (composerHarness.useActual) return <ActualChatComposer {...props} />;
     return (
       <div data-testid="chat-composer" data-streaming={props.isStreaming ? "true" : "false"}>
         {props.isStreaming && props.onStop ? (
@@ -245,6 +249,7 @@ beforeEach(() => {
     archivedAt: null,
   });
   composerHarness.onSend = null;
+  composerHarness.useActual = false;
 });
 
 afterEach(() => {
@@ -288,6 +293,11 @@ describe("Chat history cache", () => {
         <Chat key={sessionId} sessionId={sessionId} onSessionNotFound={props.onSessionNotFound} />
       </ChatTranscriptCacheContext.Provider>
     </MemoryRouter>
+  );
+  const renderCachedChatWithRealComposer = (sessionId: string) => (
+    <QueryClientProvider client={new QueryClient()}>
+      {renderCachedChat(sessionId)}
+    </QueryClientProvider>
   );
 
   it("renders a revisited transcript before its refresh resolves, then reconciles it", async () => {
@@ -706,6 +716,65 @@ describe("Chat history cache", () => {
     expect(chatTranscriptCache.snapshot().ids).toEqual([]);
     expect(listSessionMessages).toHaveBeenCalledTimes(2);
     expect(MockEventSource.instances).toHaveLength(2);
+  });
+
+  it("rejects a send after authorization revocation so the real composer restores its draft", async () => {
+    composerHarness.useActual = true;
+    mockInvalidateQueries.mockReturnValue(new Promise(() => {}));
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    const refresh = deferred<ChatMessage[] | null>();
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages).mockReturnValue(refresh.promise);
+    rs.mocked(listSessionTurns).mockResolvedValueOnce([]);
+
+    render(renderCachedChatWithRealComposer("session-a"));
+    const textbox = await screen.findByRole("textbox");
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+
+    await act(async () => {
+      refresh.reject(new ChatApiError("authorization lost", 401, null));
+      await refresh.promise.catch(() => undefined);
+    });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: AUTH_QUERY_KEY });
+
+    fireEvent.input(textbox, { target: { value: "keep this draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "composer.sendTitle" }));
+
+    await waitFor(() => expect((textbox as HTMLTextAreaElement).value).toBe("keep this draft"));
+    expect(postSessionTurn).not.toHaveBeenCalled();
+    expect(chatTranscriptCache.snapshot().ids).toEqual([]);
+  });
+
+  it("rejects an in-flight post invalidated by revocation without reviving chat state", async () => {
+    composerHarness.useActual = true;
+    const pendingPost = deferred<Awaited<ReturnType<typeof postSessionTurn>>>();
+    rs.mocked(listSessionMessages).mockResolvedValue([]);
+    rs.mocked(listSessionTurns).mockResolvedValueOnce([]);
+    rs.mocked(postSessionTurn).mockReturnValueOnce(pendingPost.promise);
+
+    render(renderCachedChatWithRealComposer("session-a"));
+    const textbox = await screen.findByRole("textbox");
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    fireEvent.input(textbox, { target: { value: "pending draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "composer.sendTitle" }));
+    await waitFor(() => expect(postSessionTurn).toHaveBeenCalledOnce());
+    expect((textbox as HTMLTextAreaElement).value).toBe("");
+
+    act(() => {
+      expect(chatTranscriptCache.revokeAuthorization(context)).toBe(true);
+    });
+    await act(async () => {
+      pendingPost.resolve({
+        ok: true,
+        data: { turnId: "revoked-turn", inputId: "revoked-input" },
+      });
+      await pendingPost.promise;
+    });
+
+    await waitFor(() => expect((textbox as HTMLTextAreaElement).value).toBe("pending draft"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+    expect(openTurnStream).not.toHaveBeenCalled();
+    expect(chatTranscriptCache.snapshot().ids).toEqual([]);
   });
 
   it("does not restore a dropped optimistic row on the next cache hit", async () => {
