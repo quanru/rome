@@ -4425,20 +4425,33 @@ describe("AgentRunner", () => {
 
       const runner = createRunner(provider);
 
-      await collectMessages(
-        runner.run({
-          agentName: "test-all-actions",
-          prompt: "Use action",
-          channelThreadKey: "sentinel:telegram:thread-1",
-          threadContext: {
-            channel: "telegram",
-            threadId: "thread-1",
-            channelUserId: "user-1",
-            threadName: "Dev Chat",
-            threadType: "group",
-            projectName: "alpha",
-          },
-        }),
+      const originRoute = {
+        connectionId: "connection:telegram",
+        service: "telegram",
+        conversationId: "thread-1",
+      };
+      const runParams = {
+        agentName: "test-all-actions",
+        prompt: "Use action",
+        channelThreadKey: "sentinel:telegram:thread-1",
+        threadContext: {
+          channel: "telegram",
+          connectionId: "connection:telegram",
+          threadId: "thread-1",
+          channelUserId: "user-1",
+          threadName: "Dev Chat",
+          threadType: "group" as const,
+          projectName: "alpha",
+        },
+      };
+      await actionExecutionContext.run(
+        {
+          executionId: "inbound-action",
+          rootExecutionId: "inbound-action",
+          initiator: "connection:telegram",
+          originRoute,
+        },
+        () => collectMessages(runner.run(runParams)),
       );
 
       expect(actionRun).toHaveBeenCalledWith(
@@ -4447,12 +4460,14 @@ describe("AgentRunner", () => {
         expect.objectContaining({
           channelContext: {
             channel: "telegram",
+            connectionId: "connection:telegram",
             threadId: "thread-1",
             channelUserId: "user-1",
             threadName: "Dev Chat",
             threadType: "group",
             projectName: "alpha",
           },
+          originRoute,
           channelThreadKey: "sentinel:telegram:thread-1",
         }),
       );

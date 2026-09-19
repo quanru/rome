@@ -6,6 +6,7 @@ import { type ForkRunParams, type RunParams } from "./types.js";
 import type { AgentSessionManager } from "./agent-session.js";
 import type { AgentLoader } from "./agent-loader.js";
 import { createLogger } from "../logger.js";
+import { actionExecutionContext } from "../actions/context.js";
 import type { WebChatRepository } from "../db/repositories/webchat.js";
 import type { AgentTurnStreamRegistry } from "./agent-turn-stream-registry.js";
 import {
@@ -478,6 +479,7 @@ export class AgentRunner {
       promptPreview: params.prompt.slice(0, 200),
     });
 
+    const originRoute = actionExecutionContext.getStore()?.originRoute;
     const init = {
       workingDir: params.workingDir,
       threadContext: params.threadContext,
@@ -485,6 +487,7 @@ export class AgentRunner {
       sharedContext: params.sharedContext,
       contextSuffix: params.contextSuffix,
       platformMessageId: params.platformMessageId,
+      originRoute,
     };
     const session = explicitSessionId
       ? await this.acquireExplicitSession(explicitSessionId, params.agentName, init)
@@ -515,6 +518,7 @@ export class AgentRunner {
       {
         threadContext: params.threadContext,
         sharedContext: params.sharedContext,
+        originRoute,
         romeSessionId,
         romeSessionType,
         replyTo: params.replyTo,

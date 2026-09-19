@@ -5,7 +5,11 @@ import type { Action, ActionConfig } from "./types.js";
 import type { ChannelMessageHook } from "../hooks/types.js";
 import type { DrizzleDb } from "../db/index.js";
 import type { RoutinesRepository } from "../db/repositories/routines.js";
-import type { ActionExecutionContext, AppRuntimeRepositories } from "@rome-os/app-runtime";
+import type {
+  ActionExecutionContext,
+  AppRuntimeRepositories,
+  OriginMessenger,
+} from "@rome-os/app-runtime";
 import type { AppCatalog } from "../apps/catalog.js";
 import type { CatalogEvent, ResolvedApp, SubscriberHandler } from "../apps/state.js";
 import type { ArtifactMetadata } from "../apps/types.js";
@@ -87,6 +91,7 @@ interface AppActionServices {
   repositories: AppRuntimeRepositories;
   favorService?: FavorService;
   hostExecution?: HostExecutionService;
+  originMessengerFactory?: (appId: string) => OriginMessenger;
 }
 
 interface AppLookup {
@@ -125,6 +130,7 @@ function createAppActionRuntimeDeps(
       routinesRepo: services.routinesRepo,
       repositories: services.repositories,
       favorService: services.favorService,
+      originMessengerFactory: services.originMessengerFactory,
     }),
   } satisfies AppActionRuntimeDeps<Record<string, unknown>>;
 }

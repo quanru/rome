@@ -33,7 +33,7 @@ import {
   type ActionWorkerCoordinator,
   registerActionSubprocessHost,
 } from "../actions/action-subprocess.js";
-import { actionExecutionContext } from "../actions/context.js";
+import { actionExecutionContext, type ActionExecutionStore } from "../actions/context.js";
 import { replayContext } from "../actions/replay.js";
 import type { AgentTurnStreamRegistry } from "./agent-turn-stream-registry.js";
 
@@ -48,6 +48,7 @@ export interface RunTurnRequest {
   sessionId?: string;
   hookInvocationContext?: HookInvocationContext;
   actionContext?: CurrentActionContext;
+  originRoute?: ActionExecutionStore["originRoute"];
 }
 
 export interface RunTurnResponse {
@@ -112,6 +113,7 @@ export class AgentSessionBridge implements AgentSessionChildBridge {
           ...req.init,
           isSubagent: true,
           platformMessageId: req.platformMessageId,
+          originRoute: req.originRoute,
         };
         const acquireStartedAt = Date.now();
         log.info("agent.session.manager.acquire started", baseLogFields);
@@ -158,6 +160,7 @@ export class AgentSessionBridge implements AgentSessionChildBridge {
         const handle = session.sendTurn(req.input, {
           threadContext: req.init?.threadContext,
           sharedContext: req.init?.sharedContext,
+          originRoute: req.originRoute,
           romeSessionId,
           romeSessionType,
           replyTo: req.replyTo,
