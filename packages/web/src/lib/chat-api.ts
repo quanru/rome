@@ -15,6 +15,7 @@ import type {
   SkillSummary,
   TurnInfo,
 } from "./chat-types";
+import type { Routine } from "./routine-language";
 import type {
   RomeSessionDetail,
   RomeSessionType,
@@ -577,6 +578,7 @@ export interface CreateRoutineResult {
   ok: boolean;
   status: number;
   routineId?: string;
+  routine?: Routine;
   error?: string;
 }
 
@@ -588,8 +590,13 @@ export async function createRoutine(payload: CreateRoutinePayload): Promise<Crea
     body: JSON.stringify({ ...payload, enabled: true }),
   });
   if (res.ok) {
-    const row = (await res.json().catch(() => null)) as { id?: string } | null;
-    return { ok: true, status: res.status, routineId: row?.id };
+    const row = (await res.json().catch(() => null)) as Routine | null;
+    return {
+      ok: true,
+      status: res.status,
+      routineId: row?.id,
+      routine: typeof row?.id === "string" ? row : undefined,
+    };
   }
   const payloadErr = (await res.json().catch(() => null)) as { error?: string } | null;
   return { ok: false, status: res.status, error: payloadErr?.error };

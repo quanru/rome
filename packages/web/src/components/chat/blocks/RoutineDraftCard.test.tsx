@@ -1,11 +1,16 @@
 // @rstest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import type { ReactNode } from "react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RoutineDraftCard } from "./RoutineDraftCard";
 import { createRoutine, listRoutineNames } from "@/lib/chat-api";
 import type { RoutineDraftSpec } from "@/lib/chat-types";
+import type { Routine } from "@/lib/routine-language";
+import RoutineDetailPage from "@/pages/RoutineDetailPage";
+import i18n from "@/i18n";
 
 // The card reaches the backend through exactly these two calls; stub them so
 // the component renders from fixture data alone — no agent, no server.
@@ -32,6 +37,21 @@ const eventDraft: RoutineDraftSpec = {
   args: { agentName: "main", prompt: "Summarize the email." },
 };
 
+const createdRoutine: Routine = {
+  id: "r-1",
+  name: eventDraft.name,
+  enabled: true,
+  trigger: {
+    type: "event-bus",
+    eventName: "provider:event:gmail.gmail_new_gmail_message",
+  },
+  actionName: eventDraft.actionName,
+  args: eventDraft.args,
+  createdAt: "2026-09-19T07:00:00.000Z",
+  lastFiredAt: null,
+  nextRunAt: null,
+};
+
 const scheduleDraft: RoutineDraftSpec = {
   sentence: "Every Friday at 9:00 AM, Rome will remind you to send your weekly update.",
   name: "Weekly update reminder",
@@ -47,20 +67,45 @@ const scheduleDraft: RoutineDraftSpec = {
   args: { agentName: "main", prompt: "Remind the guardian to send their weekly update." },
 };
 
+function testQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+}
+
+function renderWithQueryClient(children: ReactNode, queryClient = testQueryClient()) {
+  return render(<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>);
+}
+
+function renderCard(draft: RoutineDraftSpec, withRouter = false) {
+  const card = <RoutineDraftCard draft={draft} />;
+  return renderWithQueryClient(withRouter ? <MemoryRouter>{card}</MemoryRouter> : card);
+}
+
+beforeAll(async () => {
+  await i18n.changeLanguage("en");
+});
+
 beforeEach(() => {
   // Default: this routine doesn't exist yet, and creating it succeeds.
   mockList.mockResolvedValue([]);
-  mockCreate.mockResolvedValue({ ok: true, status: 201, routineId: "r-1" });
+  mockCreate.mockResolvedValue({
+    ok: true,
+    status: 201,
+    routineId: createdRoutine.id,
+    routine: createdRoutine,
+  });
 });
 
 afterEach(() => {
   cleanup();
   rs.clearAllMocks();
+  rs.restoreAllMocks();
 });
 
 describe("RoutineDraftCard", () => {
   it("renders an event draft as an Event routine with watch / filter / then rows", async () => {
-    render(<RoutineDraftCard draft={eventDraft} />);
+    renderCard(eventDraft);
 
     expect(screen.getByText("Event routine")).toBeTruthy();
     expect(screen.getByText(eventDraft.sentence)).toBeTruthy();
@@ -76,7 +121,7 @@ describe("RoutineDraftCard", () => {
   });
 
   it("renders a schedule draft as a Scheduled routine with a Runs row and no filter", async () => {
-    render(<RoutineDraftCard draft={scheduleDraft} />);
+    renderCard(scheduleDraft);
 
     expect(screen.getByText("Scheduled routine")).toBeTruthy();
     expect(screen.getByText("Runs")).toBeTruthy();
@@ -97,7 +142,7 @@ describe("RoutineDraftCard", () => {
         summary: "Summarize the email and notify the guardian.",
       },
     };
-    render(<RoutineDraftCard draft={draft} />);
+    renderCard(draft);
 
     // The authoritative render shows; the agent's drift-prone prose does not.
     expect(screen.getByText("Run agent “main”")).toBeTruthy();
@@ -119,7 +164,7 @@ describe("RoutineDraftCard", () => {
         fields: [{ label: "Channel", value: "Telegram" }],
       },
     };
-    render(<RoutineDraftCard draft={draft} />);
+    renderCard(draft);
 
     expect(screen.getByText("Send a message")).toBeTruthy();
     expect(screen.getByText("Channel")).toBeTruthy();
@@ -130,7 +175,7 @@ describe("RoutineDraftCard", () => {
   });
 
   it("falls back to the prose summary when the action provides no preview", async () => {
-    render(<RoutineDraftCard draft={eventDraft} />);
+    renderCard(eventDraft);
 
     // eventDraft has no `preview`, so the Then row uses thenSummary.
     expect(screen.getByText("Then")).toBeTruthy();
@@ -141,11 +186,7 @@ describe("RoutineDraftCard", () => {
 
   it("turning it on links the created routine to its exact run history", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <RoutineDraftCard draft={eventDraft} />
-      </MemoryRouter>,
-    );
+    renderCard(eventDraft, true);
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
 
@@ -163,6 +204,55 @@ describe("RoutineDraftCard", () => {
     expect(screen.queryByRole("button", { name: /turn it on/i })).toBeNull();
   });
 
+  it("opens the created routine when the cached routines list predates creation", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Number.POSITIVE_INFINITY } },
+    });
+    queryClient.setQueryData<Routine[]>(
+      ["routines", "list"],
+      [{ ...createdRoutine, id: "stale-routine", name: "Older routine" }],
+    );
+
+    let finishListRequest: ((response: Response) => void) | undefined;
+    const listResponse = new Promise<Response>((resolve) => {
+      finishListRequest = resolve;
+    });
+    const jsonResponse = (value: unknown): Response =>
+      ({ ok: true, status: 200, json: async () => structuredClone(value) }) as Response;
+    const fetchSpy = rs.spyOn(globalThis, "fetch").mockImplementation((async (input) => {
+      const url = String(input);
+      if (url === "/api/routines") return listResponse;
+      if (url === "/api/routines/r-1/runs?limit=25") return jsonResponse([]);
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch);
+
+    renderWithQueryClient(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <Routes>
+          <Route path="/chat" element={<RoutineDraftCard draft={eventDraft} />} />
+          <Route path="/routines/:id" element={<RoutineDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+      queryClient,
+    );
+
+    await user.click(screen.getByRole("button", { name: /turn it on/i }));
+    await user.click(await screen.findByRole("link", { name: "View run history" }));
+
+    expect(await screen.findByRole("heading", { name: "Landlord emails", level: 1 })).toBeTruthy();
+    expect(screen.queryByText("Routine not found.")).toBeNull();
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.some(([input]) => String(input) === "/api/routines")).toBe(true),
+    );
+
+    await act(async () => {
+      finishListRequest?.(jsonResponse([createdRoutine]));
+    });
+    expect(screen.getByRole("heading", { name: "Landlord emails", level: 1 })).toBeTruthy();
+    expect(screen.queryByText("Routine not found.")).toBeNull();
+  });
+
   it("keeps the created routine link when the mount lookup resolves afterward", async () => {
     const user = userEvent.setup();
     let finishLookup: ((names: string[]) => void) | undefined;
@@ -172,11 +262,7 @@ describe("RoutineDraftCard", () => {
           finishLookup = resolve;
         }),
     );
-    render(
-      <MemoryRouter>
-        <RoutineDraftCard draft={eventDraft} />
-      </MemoryRouter>,
-    );
+    renderCard(eventDraft, true);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
@@ -202,11 +288,7 @@ describe("RoutineDraftCard", () => {
           finishCreation = resolve;
         }),
     );
-    render(
-      <MemoryRouter>
-        <RoutineDraftCard draft={eventDraft} />
-      </MemoryRouter>,
-    );
+    renderCard(eventDraft, true);
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
     expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();
@@ -219,7 +301,7 @@ describe("RoutineDraftCard", () => {
   it("surfaces the server error and keeps the action when creation fails", async () => {
     const user = userEvent.setup();
     mockCreate.mockResolvedValue({ ok: false, status: 400, error: "Routine name already taken" });
-    render(<RoutineDraftCard draft={eventDraft} />);
+    renderCard(eventDraft);
 
     await user.click(screen.getByRole("button", { name: /turn it on/i }));
 
@@ -231,7 +313,7 @@ describe("RoutineDraftCard", () => {
 
   it("shows the On state on mount when the routine already exists", async () => {
     mockList.mockResolvedValue(["Landlord emails"]);
-    render(<RoutineDraftCard draft={eventDraft} />);
+    renderCard(eventDraft);
 
     expect(await screen.findByText("On")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "View run history" })).toBeNull();

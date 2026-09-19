@@ -91,6 +91,26 @@ export function useInvalidateRoutines(): () => Promise<void> {
   return () => queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
 }
 
+// Chat creates through a small fetch helper rather than a query mutation. Put
+// the returned server row into the authoritative list before invalidating it,
+// so an immediate detail navigation cannot mistake an older cached list for a
+// definitive "not found" result while the fresh list is loading. If the server
+// response is malformed, drop the list instead of guessing a routine shape.
+export function useSyncCreatedRoutine(): (routine: Routine | undefined) => void {
+  const queryClient = useQueryClient();
+  return (routine) => {
+    if (!routine) {
+      queryClient.removeQueries({ queryKey: LIST_QUERY_KEY, exact: true });
+      return;
+    }
+    queryClient.setQueryData<Routine[]>(LIST_QUERY_KEY, (current) => [
+      routine,
+      ...(current ?? []).filter((cached) => cached.id !== routine.id),
+    ]);
+    void queryClient.invalidateQueries({ queryKey: LIST_QUERY_KEY });
+  };
+}
+
 /** Outcome of a manual "run now": the action ran for real, so `status` may be a
  * run-level failure even though the HTTP call succeeded. */
 export interface RunNowResult {

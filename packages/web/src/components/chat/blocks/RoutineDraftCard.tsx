@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createRoutine, listRoutineNames } from "@/lib/chat-api";
 import type { PreviewPayload, RoutineDraftSpec } from "@/lib/chat-types";
+import { useSyncCreatedRoutine } from "@/hooks/use-routines";
 
 type CardState =
   | { kind: "draft" }
@@ -22,6 +23,7 @@ type CardState =
  */
 export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
   const [state, setState] = useState<CardState>({ kind: "draft" });
+  const syncCreatedRoutine = useSyncCreatedRoutine();
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +52,7 @@ export function RoutineDraftCard({ draft }: { draft: RoutineDraftSpec }) {
         typeof result.routineId === "string" && result.routineId.trim() !== ""
           ? result.routineId.trim()
           : undefined;
+      syncCreatedRoutine(result.routine?.id === routineId ? result.routine : undefined);
       setState({ kind: "on", routineId });
     } else {
       setState({
