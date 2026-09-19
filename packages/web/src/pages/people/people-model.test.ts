@@ -11,8 +11,10 @@ import {
   parsePeopleFilter,
   peoplePath,
   peopleRows,
+  recommendedLinkTargets,
   rowHandle,
   streamRows,
+  type LinkTarget,
   type PeopleRow,
 } from "./people-model";
 
@@ -339,5 +341,86 @@ describe("parsePeopleFilter", () => {
     expect(parsePeopleFilter("guardian")).toBe("all");
     expect(parsePeopleFilter("former-colleague")).toBe("all");
     expect(parsePeopleFilter(null)).toBe("all");
+  });
+});
+
+describe("recommendedLinkTargets", () => {
+  // A person as the picker holds them: a name to match on and a bond to show
+  // beside it. The guardian is filtered out before a target ever reaches here,
+  // so this list is the eligible people it always is.
+  function target(over: Partial<LinkTarget> = {}): LinkTarget {
+    return { id: "alicia-chen", displayName: "Alicia Chen", bondLevel: "acquaintance", ...over };
+  }
+
+  // An Unknown account row, built through the join so its level is the state's
+  // own answer rather than one asserted here.
+  function unknownRow(displayName: string): PeopleRow {
+    const row = peopleRows([], [contact({ channelUserId: "u-1", displayName })])[0];
+    if (!row) throw new Error("expected an account row");
+    return row;
+  }
+
+  it("recommends the person whose name is the account's, exactly", () => {
+    const alicia = target();
+    expect(recommendedLinkTargets(unknownRow("Alicia Chen"), [alicia])).toEqual([alicia]);
+  });
+
+  it("matches through trim, case, and Unicode composition", () => {
+    // The person's name is composed ("é" as one code point); the account's is
+    // the decomposed form ("e" + a combining acute), padded and lower-cased.
+    // Trim + NFC + case-fold makes them one name.
+    const jose = target({ id: "jose", displayName: "José River" });
+    expect(recommendedLinkTargets(unknownRow("  josé river  "), [jose])).toEqual([jose]);
+  });
+
+  it("offers every exact match and ranks none", () => {
+    // Two people fold to the same name; both are returned, in the order they
+    // arrived, so choosing between them stays the guardian's.
+    const a = target({ id: "a", displayName: "Sam Rivera", bondLevel: "inner-circle" });
+    const b = target({ id: "b", displayName: "sam rivera", bondLevel: "other" });
+    const c = target({ id: "c", displayName: "Someone Else" });
+    expect(recommendedLinkTargets(unknownRow("Sam Rivera"), [a, b, c])).toEqual([a, b]);
+  });
+
+  it("recommends nobody for a name that only looks close", () => {
+    const alicia = target();
+    // A first name alone, an added mark, an internal spacing difference, and a
+    // similar-but-different name are each not the same name.
+    for (const near of ["Alicia", "Alicia Chen!", "Alicia  Chen", "Alicia Chan"]) {
+      expect(recommendedLinkTargets(unknownRow(near), [alicia])).toEqual([]);
+    }
+  });
+
+  it("recommends nobody on an address alone", () => {
+    // The account is named by its handle, which no person's name is. A matching
+    // address is not a matching name, and only names are compared.
+    const alicia = target();
+    expect(recommendedLinkTargets(unknownRow("883104221"), [alicia])).toEqual([]);
+  });
+
+  it("never recommends for a dismissed (Stranger) account", () => {
+    const alicia = target();
+    const dismissed = peopleRows(
+      [],
+      [contact({ channelUserId: "u-2", displayName: "Alicia Chen", state: "dismissed" })],
+    )[0];
+    if (!dismissed) throw new Error("expected an account row");
+    expect(dismissed.level).toBe("stranger");
+    expect(recommendedLinkTargets(dismissed, [alicia])).toEqual([]);
+  });
+
+  it("never recommends for a person's own row", () => {
+    // A person is not an account waiting to be placed; there is nothing to link.
+    const alicia = target();
+    const personRow = peopleRows([person({ id: "p1", displayName: "Alicia Chen" })], [])[0];
+    if (!personRow) throw new Error("expected a person row");
+    expect(recommendedLinkTargets(personRow, [alicia])).toEqual([]);
+  });
+
+  it("treats a blank account name as no name to match", () => {
+    // A name that folds to nothing matches nobody, rather than every other
+    // nameless row.
+    const nameless = target({ id: "blank", displayName: "   " });
+    expect(recommendedLinkTargets(unknownRow("   "), [nameless])).toEqual([]);
   });
 });
