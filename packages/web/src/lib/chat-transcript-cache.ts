@@ -183,11 +183,16 @@ export class ChatTranscriptCache {
     return { contextKey, sessionId, revision, contextRevision: this.contextRevision };
   }
 
-  ownsLatestCacheWrite(token: TranscriptRequestToken, contextKey: string | null): boolean {
+  canWriteComplete(token: TranscriptRequestToken, contextKey: string | null): boolean {
     if (!contextKey || contextKey !== this.contextKey) return false;
-    return (
-      token.contextRevision === this.contextRevision &&
-      this.latestRequests.get(token.sessionId) === token.revision
+    if (token.contextRevision !== this.contextRevision) return false;
+    if (this.latestRequests.get(token.sessionId) === token.revision) return true;
+    // A complete older response is a valid fallback while its newer
+    // replacement is still pending. It may populate the cache now; a
+    // successful newer response will replace it, while a completed newer
+    // response prevents this branch and cannot be overwritten later.
+    return [...(this.activeRequests.get(token.sessionId) ?? [])].some(
+      (revision) => revision > token.revision,
     );
   }
 

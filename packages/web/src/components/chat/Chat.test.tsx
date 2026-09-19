@@ -9,12 +9,14 @@ import { Chat } from "./Chat";
 import type { ChatComposerSendControls, ChatComposerSnapshot } from "./ChatComposer";
 import type { ChatRow } from "./chat-view";
 import type { ChatMessage } from "@/lib/chat-types";
+import { AUTH_QUERY_KEY } from "@/lib/auth-state";
 import {
   AuthenticatedChatTranscriptCacheBoundary,
   ChatTranscriptCacheContext,
 } from "@/lib/chat-transcript-cache-context";
 import { chatTranscriptCache } from "@/lib/chat-transcript-cache";
 import {
+  ChatApiError,
   deleteSession,
   interruptTurn,
   listSessionMessages,
@@ -26,6 +28,7 @@ import {
 const t = (key: string) => key;
 const mockUseSessionIdentity = rs.hoisted(() => rs.fn());
 const mockUseDashboardIdentity = rs.hoisted(() => rs.fn());
+const mockInvalidateQueries = rs.hoisted(() => rs.fn());
 const appsPanel = rs.hoisted(() => ({ collapsed: true, setCollapsed: rs.fn() }));
 const composerHarness = rs.hoisted(() => ({
   onSend: null as
@@ -46,6 +49,10 @@ rs.mock("@/components/chat/use-session-identity", () => ({
 
 rs.mock("@/hooks/use-dashboard-identity", () => ({
   useDashboardIdentity: mockUseDashboardIdentity,
+}));
+
+rs.mock("@/lib/query-client", () => ({
+  queryClient: { invalidateQueries: mockInvalidateQueries },
 }));
 
 rs.mock("@/pages/free/workspace-context", () => ({
@@ -223,6 +230,7 @@ beforeEach(() => {
   stickToBottom.isAtBottom = true;
   rs.mocked(deleteSession).mockResolvedValue(new Response(null, { status: 204 }));
   rs.mocked(listSessionMessages).mockResolvedValue([]);
+  mockInvalidateQueries.mockResolvedValue(undefined);
   mockUseDashboardIdentity.mockReturnValue({
     data: {
       kind: "guardian",
@@ -514,6 +522,31 @@ describe("Chat history cache", () => {
     expect(screen.queryByText("history.refreshFailed")).toBeNull();
   });
 
+  it.each([
+    401, 403,
+  ])("clears cached and visible history when refresh loses authorization with HTTP %s", async (status) => {
+    const old = chatMessage("session-a", "old", "2026-09-19T00:00:00.000Z");
+    chatTranscriptCache.putComplete(context, "session-a", [old]);
+    rs.mocked(listSessionMessages).mockRejectedValue(
+      new ChatApiError("authorization lost", status, null),
+    );
+
+    const view = render(renderCachedChat("session-a"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("old");
+
+    expect(await screen.findByText("history.loadFailed")).toBeTruthy();
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+    expect(chatTranscriptCache.get(context, "session-a")).toBeUndefined();
+    await waitFor(() =>
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: AUTH_QUERY_KEY }),
+    );
+
+    view.unmount();
+    rs.mocked(listSessionMessages).mockReturnValue(new Promise(() => {}));
+    render(renderCachedChat("session-a"));
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("");
+  });
+
   it("does not restore a dropped optimistic row on the next cache hit", async () => {
     const durable = chatMessage("session-a", "durable", "2026-09-19T00:00:00.000Z");
     const optimistic = chatMessage("session-a", "optimistic-input", "2026-09-19T00:01:00.000Z");
@@ -628,6 +661,45 @@ describe("Chat history cache", () => {
     );
     expect(screen.queryByText("history.loading")).toBeNull();
     expect(screen.queryByText("history.loadFailed")).toBeNull();
+    expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+      "loaded",
+    ]);
+  });
+
+  it("keeps an initial complete load when a newer reconnect refresh fails afterward", async () => {
+    rs.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+    const initialLoad = deferred<ChatMessage[] | null>();
+    const forcedRefresh = deferred<ChatMessage[] | null>();
+    const loaded = chatMessage("session-a", "loaded", "2026-09-19T00:00:00.000Z");
+    rs.mocked(listSessionMessages)
+      .mockReturnValueOnce(initialLoad.promise)
+      .mockReturnValueOnce(forcedRefresh.promise);
+
+    render(renderCachedChat("session-a"));
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledOnce());
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+    const source = MockEventSource.instances[0]!;
+    act(() => {
+      source.emitLifecycle("open", MockEventSource.OPEN);
+      source.emitLifecycle("error", MockEventSource.CONNECTING);
+      source.emitLifecycle("open", MockEventSource.OPEN);
+    });
+    await waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+
+    initialLoad.resolve([loaded]);
+    await waitFor(() =>
+      expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded"),
+    );
+    expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
+      "loaded",
+    ]);
+
+    await act(async () => {
+      forcedRefresh.reject(new Error("offline"));
+      await forcedRefresh.promise.catch(() => undefined);
+    });
+    expect(await screen.findByText("history.refreshFailed")).toBeTruthy();
+    expect(screen.getByTestId("message-list").getAttribute("data-message-ids")).toBe("loaded");
     expect(chatTranscriptCache.get(context, "session-a")?.map((message) => message.id)).toEqual([
       "loaded",
     ]);

@@ -93,6 +93,7 @@ import {
   orderChatMessages,
 } from "@/lib/chat-message-ordering";
 import {
+  ChatApiError,
   deleteSession,
   interruptTurn,
   listChatAgents,
@@ -104,6 +105,8 @@ import {
   postSessionTurnJson,
   type PostTurnResult,
 } from "@/lib/chat-api";
+import { AUTH_QUERY_KEY } from "@/lib/auth-state";
+import { queryClient } from "@/lib/query-client";
 import { useArchiveSession, usePinSession } from "@/lib/session-events";
 import {
   snapshotWorkspaceForSend,
@@ -769,8 +772,13 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
       try {
         const data = await listSessionMessages(id);
         const currentContext = transcriptCacheContextRef.current;
+        const latestLocalRequest = latestRequestBySessionRef.current.get(id);
+        const newerRequestInFlight =
+          latestLocalRequest !== undefined &&
+          latestLocalRequest > localRequest &&
+          inFlightRequestsRef.current.get(id)?.has(latestLocalRequest) === true;
         if (
-          latestRequestBySessionRef.current.get(id) !== localRequest ||
+          (latestLocalRequest !== localRequest && !newerRequestInFlight) ||
           !chatTranscriptCache.isRequestContextCurrent(request, currentContext)
         ) {
           return;
@@ -810,7 +818,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           return next;
         });
         completeHistoriesRef.current.set(id, reconciledMessages);
-        if (chatTranscriptCache.ownsLatestCacheWrite(request, currentContext)) {
+        if (chatTranscriptCache.canWriteComplete(request, currentContext)) {
           const cachedMessages = chatTranscriptCache.get(currentContext, id);
           chatTranscriptCache.putComplete(
             currentContext,
@@ -828,7 +836,7 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
         if (isReadVisibleSession(id)) {
           void markSessionRead(id);
         }
-      } catch {
+      } catch (error) {
         requestFailed = true;
         // Leave the session unmarked so callers (auto-load + post-stream
         // refresh) can retry on the next trigger.
@@ -836,6 +844,26 @@ export const Chat = forwardRef<ChatHandle, ChatProps>(function ChatView(
           latestRequestBySessionRef.current.get(id) !== localRequest ||
           !chatTranscriptCache.isRequestContextCurrent(request, transcriptCacheContextRef.current)
         ) {
+          return;
+        }
+        if (error instanceof ChatApiError && (error.status === 401 || error.status === 403)) {
+          // Authorization failures are not stale-data refresh failures. Fail
+          // closed before the auth gate re-evaluates the current session, and
+          // retire local ownership so an older response cannot restore access.
+          chatTranscriptCache.delete(transcriptCacheContextRef.current, id);
+          loadedSessionsRef.current.delete(id);
+          completeHistoriesRef.current.delete(id);
+          latestRequestBySessionRef.current.delete(id);
+          localOptimisticMessageIdsRef.current.delete(id);
+          setMessages((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Map(prev);
+            next.delete(id);
+            messagesRef.current = next;
+            return next;
+          });
+          if (id === mainSessionIdRef.current) setHistoryLoadState("error");
+          void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
           return;
         }
         const fallbackRequest = Math.max(

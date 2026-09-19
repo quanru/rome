@@ -107,24 +107,24 @@ describe("ChatTranscriptCache", () => {
     const staleRequest = cache.beginRequest(contextA, "session-b");
 
     expect(cache.isRequestContextCurrent(staleRequest, contextB)).toBe(false);
-    expect(cache.ownsLatestCacheWrite(currentRequest, contextB)).toBe(true);
+    expect(cache.canWriteComplete(currentRequest, contextB)).toBe(true);
     expect(cache.get(contextB, "session-b")?.map((entry) => entry.id)).toEqual([
       "session-b-message",
     ]);
     expect(cache.snapshot().ids).toEqual(["session-b"]);
   });
 
-  it("assigns cache writes only to the latest request for one session", () => {
+  it("keeps an older complete result as fallback only while a newer request is pending", () => {
     const cache = new ChatTranscriptCache();
     cache.activateContext("context");
     const first = cache.beginRequest("context", "session-1");
     const second = cache.beginRequest("context", "session-1");
 
-    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
-    expect(cache.ownsLatestCacheWrite(second, "context")).toBe(true);
+    expect(cache.canWriteComplete(first, "context")).toBe(true);
+    expect(cache.canWriteComplete(second, "context")).toBe(true);
     cache.finishRequest(second);
-    expect(cache.ownsLatestCacheWrite(second, "context")).toBe(false);
-    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
+    expect(cache.canWriteComplete(second, "context")).toBe(false);
+    expect(cache.canWriteComplete(first, "context")).toBe(false);
   });
 
   it("restores cache-write ownership to an in-flight request when a newer request fails", () => {
@@ -135,9 +135,9 @@ describe("ChatTranscriptCache", () => {
 
     cache.finishRequest(second, { failed: true });
 
-    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(true);
+    expect(cache.canWriteComplete(first, "context")).toBe(true);
     cache.finishRequest(first);
-    expect(cache.ownsLatestCacheWrite(first, "context")).toBe(false);
+    expect(cache.canWriteComplete(first, "context")).toBe(false);
   });
 
   it("keeps a pending-identity request current through initial explicit activation", () => {
@@ -147,7 +147,7 @@ describe("ChatTranscriptCache", () => {
     cache.activateContext("context");
 
     expect(cache.isRequestContextCurrent(request, null)).toBe(true);
-    expect(cache.ownsLatestCacheWrite(request, "context")).toBe(true);
+    expect(cache.canWriteComplete(request, "context")).toBe(true);
   });
 
   it("accounts for live inserts without serializing the full transcript", () => {
