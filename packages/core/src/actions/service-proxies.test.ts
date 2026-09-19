@@ -86,6 +86,21 @@ describe("OriginMessengerProxy", () => {
     expect(JSON.stringify(seen)).not.toContain("connectionId");
     expect(JSON.stringify(seen)).not.toContain("conversationId");
   });
+
+  it("maps every process-seam send failure to indeterminate instead of throwing", async () => {
+    process.send = undefined;
+    setWorkerRpcInProcessDispatcher(async () => {
+      throw new Error("unexpected main-process failure");
+    });
+
+    await expect(
+      new OriginMessengerProxy("conductor").send({
+        origin: "or1_opaque" as never,
+        text: "Action needed.",
+        idempotencyKey: "asked:8",
+      }),
+    ).resolves.toEqual({ status: "indeterminate", deduplicated: false });
+  });
 });
 
 describe("TalkRouterProxy", () => {

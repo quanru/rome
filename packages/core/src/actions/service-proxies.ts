@@ -103,15 +103,10 @@ export class OriginMessengerProxy implements OriginMessenger {
         { appId: this.appId, input },
         { timeoutMs: ORIGIN_SEND_RPC_TIMEOUT_MS },
       );
-    } catch (err) {
-      if (
-        err instanceof WorkerRpcTimeoutError ||
-        err instanceof WorkerRpcDisconnectError ||
-        err instanceof WorkerRpcSendError
-      ) {
-        return { status: "indeterminate", deduplicated: false };
-      }
-      throw err;
+    } catch {
+      // Once a send crosses the process seam, any failure is observationally
+      // uncertain to the app. Never throw or automatically retry it.
+      return { status: "indeterminate", deduplicated: false };
     }
   }
 }

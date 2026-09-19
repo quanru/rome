@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import type { ConversationId, OriginReference, TalkRouter } from "@rome-os/app-runtime";
+import type { ConversationId, OriginReference } from "@rome-os/app-runtime";
 import { createTestDb, type TestDb } from "../test/helpers.js";
 import {
   OriginMessagingRepository,
@@ -17,18 +17,18 @@ const ROUTE = {
 function createHarness(options: { now?: Date; authorized?: boolean } = {}) {
   const testDb = createTestDb();
   let now = options.now ?? new Date("2026-09-19T12:00:00.000Z");
-  let connections = [{ connectionId: ROUTE.connectionId, service: ROUTE.service }];
-  const send = rs.fn(async (_connectionId: string, conversationId: ConversationId) => ({
+  let available = true;
+  const send = rs.fn(async (route: typeof ROUTE, _text: string) => ({
     messageId: "provider-message-1",
-    conversationId,
+    conversationId: route.conversationId as ConversationId,
   }));
-  const talkRouter = {
-    list: rs.fn(async () => connections),
+  const transport = {
+    preflight: rs.fn(async () => (available ? ("available" as const) : ("unavailable" as const))),
     send,
-  } as unknown as Pick<TalkRouter, "list" | "send">;
+  };
   const service = new OriginMessagingService(
     testDb.db,
-    talkRouter,
+    transport,
     (appId) =>
       (options.authorized ?? true) && (appId === APP_ID || appId === "another-first-party-app"),
     () => now,
@@ -40,8 +40,8 @@ function createHarness(options: { now?: Date; authorized?: boolean } = {}) {
     setNow(value: Date) {
       now = value;
     },
-    setConnections(value: typeof connections) {
-      connections = value;
+    setAvailable(value: boolean) {
+      available = value;
     },
   };
 }
@@ -83,9 +83,7 @@ describe("OriginMessagingService", () => {
       receipt: { messageId: "provider-message-1" },
     });
     expect(harness.send).toHaveBeenCalledTimes(1);
-    expect(harness.send).toHaveBeenCalledWith(ROUTE.connectionId, ROUTE.conversationId, {
-      text: "Action is needed on the Board.",
-    });
+    expect(harness.send).toHaveBeenCalledWith(ROUTE, "Action is needed on the Board.");
   });
 
   it("isolates references by app and by Rome database instance", async () => {
@@ -97,7 +95,7 @@ describe("OriginMessagingService", () => {
         text: "hello",
         idempotencyKey: "foreign-app",
       }),
-    ).resolves.toMatchObject({ status: "invalid_request", reason: "invalid_origin" });
+    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
 
     const other = createHarness();
     try {
@@ -108,9 +106,9 @@ describe("OriginMessagingService", () => {
           idempotencyKey: "foreign-instance",
         }),
       ).resolves.toEqual({
-        status: "invalid_request",
+        status: "unavailable",
         deduplicated: false,
-        reason: "invalid_origin",
+        reason: "origin_unavailable",
       });
       expect(other.send).not.toHaveBeenCalled();
     } finally {
@@ -133,9 +131,9 @@ describe("OriginMessagingService", () => {
           idempotencyKey: "denied",
         }),
       ).resolves.toEqual({
-        status: "invalid_request",
+        status: "unavailable",
         deduplicated: false,
-        reason: "not_authorized",
+        reason: "origin_unavailable",
       });
       expect(denied.send).not.toHaveBeenCalled();
     } finally {
@@ -153,14 +151,14 @@ describe("OriginMessagingService", () => {
         text: "hello",
         idempotencyKey: "malformed",
       }),
-    ).resolves.toMatchObject({ status: "invalid_request", reason: "malformed_origin" });
+    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
     await expect(
       harness.service.send(APP_ID, {
         origin: tampered,
         text: "hello",
         idempotencyKey: "tampered",
       }),
-    ).resolves.toMatchObject({ status: "invalid_request", reason: "invalid_origin" });
+    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
     expect(harness.send).not.toHaveBeenCalled();
   });
 
@@ -173,7 +171,7 @@ describe("OriginMessagingService", () => {
         text: "revoked",
         idempotencyKey: "revoked",
       }),
-    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_revoked" });
+    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
 
     const expired = await capture(harness.service);
     harness.setNow(
@@ -189,31 +187,29 @@ describe("OriginMessagingService", () => {
         text: "expired",
         idempotencyKey: "expired",
       }),
-    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_expired" });
+    ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
 
-    harness.setConnections([]);
+    harness.setAvailable(false);
     const unavailableHarness = createHarness();
     try {
       const unavailable = await capture(unavailableHarness.service);
-      unavailableHarness.setConnections([]);
+      unavailableHarness.setAvailable(false);
       await expect(
         unavailableHarness.service.send(APP_ID, {
           origin: unavailable,
           text: "unavailable",
           idempotencyKey: "unavailable",
         }),
-      ).resolves.toMatchObject({ status: "unavailable", reason: "route_unavailable" });
+      ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
 
-      unavailableHarness.setConnections([
-        { connectionId: ROUTE.connectionId, service: "not-discord" },
-      ]);
+      unavailableHarness.setAvailable(false);
       await expect(
         unavailableHarness.service.send(APP_ID, {
           origin: unavailable,
           text: "mismatch",
           idempotencyKey: "mismatch",
         }),
-      ).resolves.toMatchObject({ status: "unavailable", reason: "route_mismatch" });
+      ).resolves.toMatchObject({ status: "unavailable", reason: "origin_unavailable" });
       expect(unavailableHarness.send).not.toHaveBeenCalled();
     } finally {
       unavailableHarness.testDb.close();
@@ -235,10 +231,88 @@ describe("OriginMessagingService", () => {
     });
     await expect(harness.service.send(APP_ID, { ...input, text: "different" })).resolves.toEqual({
       status: "invalid_request",
-      deduplicated: true,
+      deduplicated: false,
       reason: "idempotency_conflict",
     });
     expect(harness.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("scopes an idempotency key to the captured origin", async () => {
+    const first = await capture(harness.service);
+    const second = await capture(harness.service);
+
+    await expect(
+      harness.service.send(APP_ID, { origin: first, text: "first", idempotencyKey: "same-key" }),
+    ).resolves.toMatchObject({ status: "accepted", deduplicated: false });
+    await expect(
+      harness.service.send(APP_ID, { origin: second, text: "second", idempotencyKey: "same-key" }),
+    ).resolves.toMatchObject({ status: "accepted", deduplicated: false });
+    expect(harness.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose provider route coordinates or extra receipt fields", async () => {
+    const origin = await capture(harness.service);
+    harness.send.mockResolvedValueOnce({
+      messageId: "m-1",
+      conversationId: ROUTE.conversationId as ConversationId,
+      connectionId: ROUTE.connectionId,
+      parts: [
+        {
+          messageId: "part-1",
+          kind: "text",
+          conversationId: ROUTE.conversationId,
+        },
+      ],
+    } as never);
+
+    const result = await harness.service.send(APP_ID, {
+      origin,
+      text: "hello",
+      idempotencyKey: "sanitized",
+    });
+    expect(result).toEqual({
+      status: "accepted",
+      deduplicated: false,
+      receipt: { messageId: "m-1", parts: [{ messageId: "part-1", kind: "text" }] },
+    });
+    expect(JSON.stringify(result)).not.toContain("connection");
+    expect(JSON.stringify(result)).not.toContain("conversation");
+  });
+
+  it("prunes expired routes and attempts after their bounded retention window", async () => {
+    const origin = await capture(harness.service);
+    await harness.service.send(APP_ID, {
+      origin,
+      text: "hello",
+      idempotencyKey: "old-attempt",
+    });
+    const repository = new OriginMessagingRepository(harness.testDb.db);
+
+    harness.setNow(
+      new Date(
+        new Date("2026-09-19T12:00:00.000Z").getTime() +
+          originMessagingInternals.attemptRetentionMs +
+          originMessagingInternals.routeRetentionMs +
+          1,
+      ),
+    );
+    repository.prune(
+      new Date(
+        new Date("2026-09-19T12:00:00.000Z").getTime() +
+          originMessagingInternals.attemptRetentionMs +
+          originMessagingInternals.routeRetentionMs +
+          1,
+      ),
+    );
+
+    expect(repository.findRoute(origin, APP_ID)).toBeNull();
+    await expect(
+      harness.service.send(APP_ID, {
+        origin,
+        text: "hello",
+        idempotencyKey: "old-attempt",
+      }),
+    ).resolves.toMatchObject({ status: "unavailable", deduplicated: false });
   });
 
   it("persists an indeterminate send and never automatically retries it", async () => {

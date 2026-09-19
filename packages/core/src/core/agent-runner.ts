@@ -487,7 +487,6 @@ export class AgentRunner {
       sharedContext: params.sharedContext,
       contextSuffix: params.contextSuffix,
       platformMessageId: params.platformMessageId,
-      originRoute,
     };
     const session = explicitSessionId
       ? await this.acquireExplicitSession(explicitSessionId, params.agentName, init)

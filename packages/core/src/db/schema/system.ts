@@ -892,19 +892,23 @@ export const originRoutes = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (table) => [index("idx_origin_routes_app_expiry").on(table.appId, table.expiresAt)],
+  (table) => [index("idx_origin_routes_expiry").on(table.expiresAt)],
 );
 
-/** One terminal outcome per app-supplied idempotency key. */
+/** One terminal outcome per app, captured origin, and app-supplied idempotency key. */
 export const originSendAttempts = sqliteTable(
   "origin_send_attempts",
   {
     appId: text("app_id").notNull(),
+    refHash: text("ref_hash").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     payloadHash: text("payload_hash").notNull(),
     outcome: text("outcome", { mode: "json" }).notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (table) => [primaryKey({ columns: [table.appId, table.idempotencyKey] })],
+  (table) => [
+    primaryKey({ columns: [table.appId, table.refHash, table.idempotencyKey] }),
+    index("idx_origin_send_attempts_updated_at").on(table.updatedAt),
+  ],
 );

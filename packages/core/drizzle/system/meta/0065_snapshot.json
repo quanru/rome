@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8f3a6282-eab5-469a-b363-52f8b8475afe",
+  "id": "6aedc6d4-b11e-43a9-b400-5db82b57bfdc",
   "prevId": "b601eb40-b94c-4a24-a181-bd31b5dd1b4b",
   "tables": {
     "action_executions": {
@@ -1253,10 +1253,9 @@
         }
       },
       "indexes": {
-        "idx_origin_routes_app_expiry": {
-          "name": "idx_origin_routes_app_expiry",
+        "idx_origin_routes_expiry": {
+          "name": "idx_origin_routes_expiry",
           "columns": [
-            "app_id",
             "expires_at"
           ],
           "isUnique": false
@@ -1272,6 +1271,13 @@
       "columns": {
         "app_id": {
           "name": "app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ref_hash": {
+          "name": "ref_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1313,15 +1319,24 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_origin_send_attempts_updated_at": {
+          "name": "idx_origin_send_attempts_updated_at",
+          "columns": [
+            "updated_at"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "origin_send_attempts_app_id_idempotency_key_pk": {
+        "origin_send_attempts_app_id_ref_hash_idempotency_key_pk": {
           "columns": [
             "app_id",
+            "ref_hash",
             "idempotency_key"
           ],
-          "name": "origin_send_attempts_app_id_idempotency_key_pk"
+          "name": "origin_send_attempts_app_id_ref_hash_idempotency_key_pk"
         }
       },
       "uniqueConstraints": {},

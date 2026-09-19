@@ -88,6 +88,7 @@ import { WorkerRpcServer } from "./actions/worker-rpc.js";
 import { setWorkerRpcInProcessDispatcher } from "./actions/worker-rpc-client.js";
 import { OriginMessengerProxy } from "./actions/service-proxies.js";
 import { OriginMessagingService } from "./origin-messaging/service.js";
+import { TalkExactOriginTransport } from "./origin-messaging/transport.js";
 import { AgentRunner } from "./core/agent-runner.js";
 import { AnthropicProvider } from "./core/anthropic-provider.js";
 import { CodexAppServerProvider } from "./core/codex-app-server-provider.js";
@@ -460,8 +461,16 @@ async function main() {
   });
   const originMessaging = new OriginMessagingService(
     db,
-    talkRouter,
-    (appId) => appCatalog.get(appId)?.firstParty === true,
+    new TalkExactOriginTransport(talkRouter),
+    (appId) => {
+      const app = appCatalog.get(appId);
+      return (
+        app?.firstParty === true &&
+        app.enabled === true &&
+        app.state === "installed" &&
+        "manifest" in app
+      );
+    },
   );
   const originMessengerFactory = (appId: string) => new OriginMessengerProxy(appId);
   appsLog.info("artifact legacy bindings loaded", {

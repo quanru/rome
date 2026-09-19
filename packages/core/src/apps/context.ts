@@ -204,7 +204,7 @@ export function createRomeAppContext(
       return { status: "unavailable", reason: "not_authorized" };
     },
     async send() {
-      return { status: "invalid_request", deduplicated: false, reason: "not_authorized" };
+      return { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
     },
   };
   const invokeActionResult = async (

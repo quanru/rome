@@ -195,8 +195,6 @@ export interface AgentSessionInit {
   /** Stable Rome conversation bound to this provider/runtime session. */
   romeSessionId?: string;
   sharedContext?: Record<string, unknown>;
-  /** Core-only exact origin inherited from a genuine inbound Talk action. */
-  originRoute?: ActionExecutionStore["originRoute"];
   forceNewSession?: boolean;
   /**
    * Set by `AgentSessionBridge` for runs that reach the top-level manager over
@@ -713,6 +711,8 @@ interface ForkTurnContext {
   model: string;
   /** Thread metadata for the fork's action executions (see ForkedAgentTurnInput). */
   threadContext?: ThreadContext;
+  /** Snapshot of the active source turn only; never retained by the session. */
+  originRoute?: ActionExecutionStore["originRoute"];
   /**
    * Interleave an out-of-band message into the forked turn's stream.
    */
@@ -1271,6 +1271,7 @@ async function openSession(
             workingDir,
             threadContext: refs.getThreadContext(),
             sharedContext: refs.getSharedContext(),
+            originRoute: refs.getOriginRoute(),
           },
         );
         try {
@@ -1443,7 +1444,7 @@ async function openSession(
       getTurnId: () => fork.forkTurnId,
       getThreadContext: () => fork.threadContext ?? init.threadContext,
       getSharedContext: () => init.sharedContext,
-      getOriginRoute: () => init.originRoute,
+      getOriginRoute: () => fork.originRoute,
       // Nothing drains a fork stream into webchat, so interactive action
       // results (pending_interaction / handoff / place_widget) must take the
       // prose fallbacks — otherwise the tool_result claims a card was shown
@@ -2643,6 +2644,9 @@ class AgentSessionImpl implements AgentSession {
     }
     this.activeForkedTurnCount++;
     this.lastActiveAt = Date.now();
+    // Capture authority at invocation. Waiting for the mutex must not pick up
+    // an unrelated later turn, and an idle session has no origin to inherit.
+    const originRoute = this.currentTurnOriginRouteRef;
     const mode: ForkRunMode = input.mode ?? "isolated";
     // Forked turns bracket their stream like regular turns; the ids are
     // minted here because no sendTurn is involved. No per-turn session_init
@@ -2733,6 +2737,7 @@ class AgentSessionImpl implements AgentSession {
             forkTurnId: turnId,
             model: forkModel?.model ?? sourceModelSession.model,
             threadContext: input.threadContext,
+            originRoute,
             emit: (msg) => outbound.push(msg),
             continuable: !!input.persistThreadKey,
           });

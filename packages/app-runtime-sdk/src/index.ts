@@ -1453,18 +1453,12 @@ export type OriginCaptureOutcome =
       reason: "not_inbound_talk_context" | "not_authorized" | "route_unavailable";
     };
 
-export type OriginSendUnavailableReason =
-  | "origin_expired"
-  | "origin_revoked"
-  | "route_unavailable"
-  | "route_mismatch";
+/** Deliberately non-specific so opaque capability validation cannot become an oracle. */
+export type OriginSendUnavailableReason = "origin_unavailable";
 
 export type OriginSendInvalidReason =
-  | "not_authorized"
-  | "malformed_origin"
   | "invalid_text"
   | "invalid_idempotency_key"
-  | "invalid_origin"
   | "idempotency_conflict";
 
 export type OriginSendOutcome =

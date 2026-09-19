@@ -1,12 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import type {
   MessageReceipt,
   OriginCaptureOutcome,
   OriginMessageReceipt,
   OriginReference,
   OriginSendOutcome,
-  TalkRouter,
 } from "@rome-os/app-runtime";
 import type { DrizzleDb } from "../db/index.js";
 import { originRoutes, originSendAttempts } from "../db/schema.js";
@@ -14,6 +13,8 @@ import { originRoutes, originSendAttempts } from "../db/schema.js";
 const ORIGIN_REFERENCE_PREFIX = "or1_";
 const ORIGIN_REFERENCE_PATTERN = /^or1_[A-Za-z0-9_-]{43}$/;
 const ORIGIN_REFERENCE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ORIGIN_RECORD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const SEND_ATTEMPT_RETENTION_MS = ORIGIN_REFERENCE_TTL_MS + ORIGIN_RECORD_RETENTION_MS;
 const MAX_TEXT_LENGTH = 20_000;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 
@@ -33,19 +34,62 @@ function referenceHash(reference: string): string {
   return sha256(reference);
 }
 
-function payloadHash(reference: string, text: string): string {
-  return sha256(JSON.stringify({ reference, text }));
+function payloadHash(text: string): string {
+  return sha256(JSON.stringify({ text }));
 }
 
-function deduplicated(outcome: StoredOutcome): OriginSendOutcome {
-  return { ...outcome, deduplicated: true };
+function publicOutcome(outcome: StoredOutcome, isDeduplicated: boolean): OriginSendOutcome {
+  switch (outcome.status) {
+    case "accepted":
+      return {
+        status: "accepted",
+        deduplicated: isDeduplicated,
+        receipt: sanitizeReceipt(outcome.receipt),
+      };
+    case "unavailable":
+      return {
+        status: "unavailable",
+        deduplicated: isDeduplicated,
+        reason: "origin_unavailable",
+      };
+    case "invalid_request":
+      if (
+        outcome.reason !== "invalid_text" &&
+        outcome.reason !== "invalid_idempotency_key" &&
+        outcome.reason !== "idempotency_conflict"
+      ) {
+        return { status: "indeterminate", deduplicated: isDeduplicated };
+      }
+      return {
+        status: "invalid_request",
+        deduplicated: isDeduplicated,
+        reason: outcome.reason,
+      };
+    case "indeterminate":
+      return { status: "indeterminate", deduplicated: isDeduplicated };
+  }
 }
 
-function sanitizeReceipt(receipt: MessageReceipt): OriginMessageReceipt {
+function sanitizeReceipt(receipt: MessageReceipt | OriginMessageReceipt): OriginMessageReceipt {
+  if (!receipt || typeof receipt !== "object") return {};
   return {
-    ...(receipt.messageId ? { messageId: receipt.messageId } : {}),
-    ...(receipt.parts ? { parts: receipt.parts } : {}),
+    ...(typeof receipt.messageId === "string" ? { messageId: receipt.messageId } : {}),
+    ...(Array.isArray(receipt.parts)
+      ? {
+          parts: receipt.parts
+            .filter(
+              (part): part is { messageId: string; kind: string } =>
+                typeof part?.messageId === "string" && typeof part?.kind === "string",
+            )
+            .map((part) => ({ messageId: part.messageId, kind: part.kind })),
+        }
+      : {}),
   };
+}
+
+export interface ExactOriginTransport {
+  preflight(route: ExactOriginRoute): Promise<"available" | "unavailable">;
+  send(route: ExactOriginRoute, text: string): Promise<MessageReceipt>;
 }
 
 export class OriginMessagingRepository {
@@ -96,6 +140,7 @@ export class OriginMessagingRepository {
 
   claimAttempt(input: {
     appId: string;
+    refHash: string;
     idempotencyKey: string;
     payloadHash: string;
     now: Date;
@@ -111,6 +156,7 @@ export class OriginMessagingRepository {
           .where(
             and(
               eq(originSendAttempts.appId, input.appId),
+              eq(originSendAttempts.refHash, input.refHash),
               eq(originSendAttempts.idempotencyKey, input.idempotencyKey),
             ),
           )
@@ -132,6 +178,7 @@ export class OriginMessagingRepository {
         tx.insert(originSendAttempts)
           .values({
             appId: input.appId,
+            refHash: input.refHash,
             idempotencyKey: input.idempotencyKey,
             payloadHash: input.payloadHash,
             outcome: { status: "indeterminate", deduplicated: false },
@@ -147,6 +194,7 @@ export class OriginMessagingRepository {
 
   finishAttempt(input: {
     appId: string;
+    refHash: string;
     idempotencyKey: string;
     outcome: StoredOutcome;
     now: Date;
@@ -157,10 +205,20 @@ export class OriginMessagingRepository {
       .where(
         and(
           eq(originSendAttempts.appId, input.appId),
+          eq(originSendAttempts.refHash, input.refHash),
           eq(originSendAttempts.idempotencyKey, input.idempotencyKey),
         ),
       )
       .run();
+  }
+
+  prune(now: Date): void {
+    const routeCutoff = new Date(now.getTime() - ORIGIN_RECORD_RETENTION_MS);
+    const attemptCutoff = new Date(now.getTime() - SEND_ATTEMPT_RETENTION_MS);
+    this.db.transaction((tx) => {
+      tx.delete(originRoutes).where(lt(originRoutes.expiresAt, routeCutoff)).run();
+      tx.delete(originSendAttempts).where(lt(originSendAttempts.updatedAt, attemptCutoff)).run();
+    });
   }
 }
 
@@ -169,7 +227,7 @@ export class OriginMessagingService {
 
   constructor(
     db: DrizzleDb,
-    private readonly talkRouter: Pick<TalkRouter, "list" | "send">,
+    private readonly transport: ExactOriginTransport,
     private readonly isFirstPartyApp: (appId: string) => boolean,
     private readonly now: () => Date = () => new Date(),
   ) {
@@ -183,17 +241,13 @@ export class OriginMessagingService {
     if (!route.connectionId || !route.service || !route.conversationId) {
       return { status: "unavailable", reason: "not_inbound_talk_context" };
     }
-    const connection = await this.talkRouter
-      .list()
-      .then((connections) =>
-        connections.find((candidate) => candidate.connectionId === route.connectionId),
-      )
-      .catch(() => undefined);
-    if (!connection || connection.service !== route.service) {
+    const availability = await this.transport.preflight(route).catch(() => "unavailable" as const);
+    if (availability !== "available") {
       return { status: "unavailable", reason: "route_unavailable" };
     }
 
     const createdAt = this.now();
+    this.repository.prune(createdAt);
     const expiresAt = new Date(createdAt.getTime() + ORIGIN_REFERENCE_TTL_MS);
     const reference =
       `${ORIGIN_REFERENCE_PREFIX}${randomBytes(32).toString("base64url")}` as OriginReference;
@@ -206,10 +260,7 @@ export class OriginMessagingService {
     input: { origin: string; text: string; idempotencyKey: string },
   ): Promise<OriginSendOutcome> {
     if (!this.isFirstPartyApp(appId)) {
-      return { status: "invalid_request", deduplicated: false, reason: "not_authorized" };
-    }
-    if (!ORIGIN_REFERENCE_PATTERN.test(input.origin)) {
-      return { status: "invalid_request", deduplicated: false, reason: "malformed_origin" };
+      return { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
     }
     if (!input.text.trim() || input.text.length > MAX_TEXT_LENGTH) {
       return { status: "invalid_request", deduplicated: false, reason: "invalid_text" };
@@ -222,50 +273,54 @@ export class OriginMessagingService {
       };
     }
 
+    if (!ORIGIN_REFERENCE_PATTERN.test(input.origin)) {
+      return { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
+    }
+
     const origin = input.origin as OriginReference;
+    const refHash = referenceHash(origin);
+    const now = this.now();
+    this.repository.prune(now);
     const claim = this.repository.claimAttempt({
       appId,
+      refHash,
       idempotencyKey: input.idempotencyKey,
-      payloadHash: payloadHash(origin, input.text),
-      now: this.now(),
+      payloadHash: payloadHash(input.text),
+      now,
     });
     if (!claim.claimed) {
       if (claim.conflict) {
         return {
           status: "invalid_request",
-          deduplicated: true,
+          deduplicated: false,
           reason: "idempotency_conflict",
         };
       }
-      return deduplicated(claim.outcome);
+      return publicOutcome(claim.outcome, true);
     }
 
     let outcome: OriginSendOutcome;
     const route = this.repository.findRoute(origin, appId);
     if (!route) {
-      outcome = { status: "invalid_request", deduplicated: false, reason: "invalid_origin" };
+      outcome = { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
     } else if (route.status === "revoked") {
-      outcome = { status: "unavailable", deduplicated: false, reason: "origin_revoked" };
+      outcome = { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
     } else if (route.expiresAt.getTime() <= this.now().getTime()) {
-      outcome = { status: "unavailable", deduplicated: false, reason: "origin_expired" };
+      outcome = { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
     } else {
-      const connection = await this.talkRouter
-        .list()
-        .then((connections) =>
-          connections.find((candidate) => candidate.connectionId === route.connectionId),
-        )
-        .catch(() => undefined);
-      if (!connection) {
-        outcome = { status: "unavailable", deduplicated: false, reason: "route_unavailable" };
-      } else if (connection.service !== route.service) {
-        outcome = { status: "unavailable", deduplicated: false, reason: "route_mismatch" };
+      const exactRoute = {
+        connectionId: route.connectionId,
+        service: route.service,
+        conversationId: route.conversationId,
+      };
+      const availability = await this.transport
+        .preflight(exactRoute)
+        .catch(() => "unavailable" as const);
+      if (availability !== "available") {
+        outcome = { status: "unavailable", deduplicated: false, reason: "origin_unavailable" };
       } else {
         try {
-          const receipt = await this.talkRouter.send(
-            route.connectionId,
-            route.conversationId as MessageReceipt["conversationId"],
-            { text: input.text },
-          );
+          const receipt = await this.transport.send(exactRoute, input.text);
           outcome =
             receipt.conversationId === route.conversationId
               ? {
@@ -285,14 +340,17 @@ export class OriginMessagingService {
 
     this.repository.finishAttempt({
       appId,
+      refHash,
       idempotencyKey: input.idempotencyKey,
       outcome,
       now: this.now(),
     });
-    return outcome;
+    return publicOutcome(outcome, false);
   }
 }
 
 export const originMessagingInternals = {
   referenceTtlMs: ORIGIN_REFERENCE_TTL_MS,
+  routeRetentionMs: ORIGIN_RECORD_RETENTION_MS,
+  attemptRetentionMs: SEND_ATTEMPT_RETENTION_MS,
 };

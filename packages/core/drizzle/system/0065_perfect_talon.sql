@@ -9,13 +9,16 @@ CREATE TABLE `origin_routes` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `idx_origin_routes_app_expiry` ON `origin_routes` (`app_id`,`expires_at`);--> statement-breakpoint
+CREATE INDEX `idx_origin_routes_expiry` ON `origin_routes` (`expires_at`);--> statement-breakpoint
 CREATE TABLE `origin_send_attempts` (
 	`app_id` text NOT NULL,
+	`ref_hash` text NOT NULL,
 	`idempotency_key` text NOT NULL,
 	`payload_hash` text NOT NULL,
 	`outcome` text NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL,
-	PRIMARY KEY(`app_id`, `idempotency_key`)
+	PRIMARY KEY(`app_id`, `ref_hash`, `idempotency_key`)
 );
+--> statement-breakpoint
+CREATE INDEX `idx_origin_send_attempts_updated_at` ON `origin_send_attempts` (`updated_at`);
