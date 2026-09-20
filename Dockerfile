@@ -100,6 +100,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm fetch \
     --filter @rome/core... \
     --filter @rome/discord-cli... \
+    --filter @rome-os/node... \
     --filter rome-web... \
     --filter @rome-os/app-web-sdk... \
     --filter @rome-os/app-runtime... \
@@ -126,6 +127,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --prefer-offline --frozen-lockfile \
     --filter @rome/core... \
     --filter @rome/discord-cli... \
+    --filter @rome-os/node... \
     --filter rome-web... \
     --filter @rome-os/app-web-sdk... \
     --filter @rome-os/app-runtime... \

@@ -67,8 +67,6 @@
       "ignoreDependencies": ["lint-staged", "@rstest/coverage-v8"]
     },
     "packages/core": {
-      // Agents invoke the CLI through its Docker PATH link rather than imports.
-      "ignoreDependencies": ["@rome-os/node"],
       "entry": [
         // The action engine spawns these by resolved path, so no import
         // reaches them. See packages/core/src/actions/engine.ts.

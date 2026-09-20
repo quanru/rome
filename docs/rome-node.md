@@ -3,6 +3,8 @@
 [`@rome-os/node`](../packages/rome-node/README.md) provides the `rome-node` command,
 a background caller daemon, and a reusable Gateway client. The command works
 without Rome Core. Core tells agents how to use the CLI through its prompt.
+The production image and local development stack install the CLI explicitly.
+Core does not declare it as a package dependency.
 
 ## Authorization and transport
 

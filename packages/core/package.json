@@ -102,8 +102,7 @@
     "ws": "^8.18.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6",
-    "zod-from-json-schema": "^0.5.2",
-    "@rome-os/node": "workspace:*"
+    "zod-from-json-schema": "^0.5.2"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.3",

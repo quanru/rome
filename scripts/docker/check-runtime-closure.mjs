@@ -32,6 +32,8 @@ const installFilters = [
   "--filter",
   "@rome/discord-cli...",
   "--filter",
+  "@rome-os/node...",
+  "--filter",
   "rome-web...",
   "--filter",
   "@rome-os/app-web-sdk...",
