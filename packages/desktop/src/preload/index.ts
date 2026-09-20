@@ -43,7 +43,8 @@ const api = {
     ready: (): void => ipcRenderer.send("pill:ready"),
     setWidth: (width: number): void => ipcRenderer.send("pill:setWidth", width),
     click: (): void => ipcRenderer.send("pill:click"),
-    dragStart: (): void => ipcRenderer.send("pill:dragStart"),
+    dragStart: (grabX: number, grabY: number): void =>
+      ipcRenderer.send("pill:dragStart", grabX, grabY),
     dragMove: (): void => ipcRenderer.send("pill:dragMove"),
     dragEnd: (): void => ipcRenderer.send("pill:dragEnd"),
     contextMenu: (): void => ipcRenderer.send("pill:contextMenu"),

@@ -56,7 +56,9 @@ export function PillPage() {
     if (e.button !== 0 || e.ctrlKey) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     gestureRef.current = { x: e.screenX, y: e.screenY, dragging: false };
-    romeApi.pill.dragStart();
+    // Where inside the window the pointer went down. The event carries it, so
+    // it is right even when the event itself is delivered late.
+    romeApi.pill.dragStart(e.clientX, e.clientY);
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>): void => {
@@ -72,12 +74,24 @@ export function PillPage() {
     romeApi.pill.dragMove();
   };
 
-  const endGesture = (click: boolean): void => {
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>): void => {
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+    gestureRef.current = null;
+    // This window is never focused, and while another app is busy in front the
+    // press, the moves and the release can reach it in one burst at the end —
+    // or with no moves at all. So the release is measured against the press
+    // too; a gesture that ended somewhere else was a drag, whatever came between.
+    const travelled = Math.hypot(e.screenX - gesture.x, e.screenY - gesture.y) >= DRAG_THRESHOLD_PX;
+    if (gesture.dragging || travelled) romeApi.pill.dragEnd();
+    else romeApi.pill.click();
+  };
+
+  const onPointerCancel = (): void => {
     const gesture = gestureRef.current;
     if (!gesture) return;
     gestureRef.current = null;
     if (gesture.dragging) romeApi.pill.dragEnd();
-    else if (click) romeApi.pill.click();
   };
 
   const onContextMenu = (e: MouseEvent<HTMLDivElement>): void => {
@@ -95,8 +109,8 @@ export function PillPage() {
       style={{ left: WINDOW_GUTTER_PX, top: WINDOW_GUTTER_PX }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={() => endGesture(true)}
-      onPointerCancel={() => endGesture(false)}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onContextMenu={onContextMenu}
     >
       <span

@@ -127,7 +127,7 @@ export interface RomeApi {
     ready(): void;
     setWidth(width: number): void;
     click(): void;
-    dragStart(): void;
+    dragStart(grabX: number, grabY: number): void;
     dragMove(): void;
     dragEnd(): void;
     contextMenu(): void;
@@ -273,7 +273,7 @@ function createMockRomeApi(): RomeApi {
       ready: () => log("pill.ready"),
       setWidth: (width) => log("pill.setWidth", width),
       click: () => log("pill.click"),
-      dragStart: () => log("pill.dragStart"),
+      dragStart: (grabX, grabY) => log("pill.dragStart", grabX, grabY),
       dragMove: () => {},
       dragEnd: () => log("pill.dragEnd"),
       contextMenu: () => log("pill.contextMenu"),

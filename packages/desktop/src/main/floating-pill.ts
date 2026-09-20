@@ -190,14 +190,15 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
     void showMainWindow();
   });
 
-  // Dragging is done here, from the real cursor position, rather than from
-  // coordinates the page sends: the page's own coordinates shift under it as
-  // the window moves.
-  ipcMain.on("pill:dragStart", () => {
-    if (!win) return;
-    const cursor = screen.getCursorScreenPoint();
-    const [x, y] = win.getPosition();
-    dragOffset = { x: cursor.x - x, y: cursor.y - y };
+  // The window follows the real cursor rather than coordinates the page sends,
+  // because the page's own coordinates shift under it as the window moves. The
+  // one thing taken from the page is where inside the window the pointer went
+  // down: the press can be delivered late, after the cursor has already moved
+  // on, so the cursor's position at this moment says nothing about the grab.
+  ipcMain.on("pill:dragStart", (_event, grabX: number, grabY: number) => {
+    if (!win || !Number.isFinite(grabX) || !Number.isFinite(grabY)) return;
+    // The page reports fractional CSS pixels; setPosition takes whole points.
+    dragOffset = { x: Math.round(grabX), y: Math.round(grabY) };
   });
 
   ipcMain.on("pill:dragMove", () => {
@@ -208,6 +209,12 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
 
   ipcMain.on("pill:dragEnd", () => {
     if (!win) return;
+    // A drag recognised only at the release never sent a move, so the window
+    // has not followed yet.
+    if (dragOffset) {
+      const cursor = screen.getCursorScreenPoint();
+      win.setPosition(cursor.x - dragOffset.x, cursor.y - dragOffset.y);
+    }
     dragOffset = null;
     const [x, y] = win.getPosition();
     const position = clampPillPosition(
