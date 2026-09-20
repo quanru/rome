@@ -4,7 +4,7 @@ import { PillPage } from "@/pages/PillPage";
 import "@/globals.css";
 
 // The window is transparent; the kit's body background would paint a rectangle
-// behind the capsule.
+// behind the icon.
 document.documentElement.style.background = "transparent";
 document.body.style.background = "transparent";
 document.body.style.overflow = "hidden";

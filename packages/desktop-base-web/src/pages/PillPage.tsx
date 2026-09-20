@@ -12,16 +12,18 @@ import { romeApi } from "@/lib/rome-api";
 
 // Below this the gesture is a click. A trackpad tap routinely moves a pixel or two.
 const DRAG_THRESHOLD_PX = 4;
-// Transparent gutter between the capsule and the window edge. The main process
-// assumes the same value: PILL_HEIGHT (56) = capsule (48) + 2 × 4.
+// Transparent gutter between the icon and the window edge. The main process
+// assumes the same value: PILL_HEIGHT (80) = logo disc (48) + gap (4) + name
+// label (20) + 2 × 4.
 const WINDOW_GUTTER_PX = 4;
 
-// The logo's inner panel is filled with --background, so the white disc has to
-// say what that is; the capsule's own --background is the dark theme's.
+// A white disc, so the black mark reads on any wallpaper. The logo's inner
+// panel is filled with --background, so the disc has to say what that is.
 const LOGO_DISC_STYLE = {
   background: "#fff",
   color: "#111",
   "--background": "#fff",
+  border: "1px solid rgba(0, 0, 0, 0.15)",
 } as CSSProperties;
 
 interface Gesture {
@@ -32,7 +34,7 @@ interface Gesture {
 
 export function PillPage() {
   const [name, setName] = useState("Rome");
-  const capsuleRef = useRef<HTMLDivElement>(null);
+  const iconRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
 
   useEffect(() => {
@@ -41,10 +43,10 @@ export function PillPage() {
     return off;
   }, []);
 
-  // The window is sized to the capsule, because a transparent window still
-  // swallows clicks over its empty area.
+  // The window is sized to the icon and its name, because a transparent window
+  // still swallows clicks over its empty area.
   useLayoutEffect(() => {
-    const el = capsuleRef.current;
+    const el = iconRef.current;
     if (!el) return;
     romeApi.pill.setWidth(el.offsetWidth + WINDOW_GUTTER_PX * 2);
   }, [name]);
@@ -86,11 +88,11 @@ export function PillPage() {
 
   return (
     <div
-      ref={capsuleRef}
+      ref={iconRef}
       role="button"
       aria-label={`Open ${name}`}
-      className="dark fixed flex h-12 w-max cursor-default select-none items-center gap-2.5 rounded-full border border-border bg-card pr-4 pl-1.5 text-card-foreground"
-      style={{ left: WINDOW_GUTTER_PX, top: WINDOW_GUTTER_PX, maxWidth: 312 }}
+      className="fixed flex w-max cursor-default select-none flex-col items-center gap-1"
+      style={{ left: WINDOW_GUTTER_PX, top: WINDOW_GUTTER_PX }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={() => endGesture(true)}
@@ -98,12 +100,17 @@ export function PillPage() {
       onContextMenu={onContextMenu}
     >
       <span
-        className="flex size-9 shrink-0 items-center justify-center rounded-full"
+        className="flex size-12 shrink-0 items-center justify-center rounded-full"
         style={LOGO_DISC_STYLE}
       >
-        <RomeLogo className="size-5" />
+        <RomeLogo className="size-7" />
       </span>
-      <span className="truncate text-sm font-medium">{name}</span>
+      {/* Dark in either appearance: the name sits on the user's wallpaper, not on
+          a Rome surface, so the theme's own background says nothing about what
+          is behind it. */}
+      <span className="dark flex h-5 max-w-40 items-center rounded-full border border-border bg-card px-2 text-xs font-medium text-card-foreground">
+        <span className="truncate">{name}</span>
+      </span>
     </div>
   );
 }

@@ -1,8 +1,8 @@
-// The window is the capsule (48px tall) plus a 4px transparent gutter on every
-// side, so the capsule's border is never clipped by the window edge.
-// PillPage.tsx carries the same gutter.
-export const PILL_HEIGHT = 56;
-export const PILL_DEFAULT_WIDTH = 160;
+// The window is the icon — a 48px logo disc, a 4px gap and a 20px name label
+// under it — plus a 4px transparent gutter on every side, so no border is
+// clipped by the window edge. PillPage.tsx carries the same numbers.
+export const PILL_HEIGHT = 80;
+export const PILL_DEFAULT_WIDTH = 96;
 export const PILL_EDGE_MARGIN = 24;
 export const PILL_FALLBACK_NAME = "Rome";
 
