@@ -13,6 +13,7 @@ import { isQuitting, setupLifecycle } from "./lifecycle";
 import { setupUpdater, updateManager } from "./updater";
 import { RESTART_BUTTON, updateDialogFor } from "./update-dialog";
 import { setupTray } from "./tray";
+import { setupFloatingPill } from "./floating-pill";
 import { setupApplicationMenu } from "./menu";
 import { shouldReturnToDashboard } from "./startup-surface";
 import { RuntimeManager, type RuntimeStatus } from "./runtime/manager";
@@ -108,6 +109,33 @@ async function bootstrap() {
         }
       },
     );
+    const showMainWindow = async (): Promise<void> => {
+      if (isQuitting()) return;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        // show() even when already visible: it activates the app outright,
+        // where focus() alone only asks politely and can leave the window
+        // behind the app the user clicked from.
+        mainWindow.show();
+        mainWindow.focus();
+        return;
+      }
+      mainWindow = await createMainWindow(runtimeManager);
+    };
+
+    // macOS only for now: the panel window type is what makes the pill
+    // unobtrusive, and it is AppKit's.
+    const floatingPill =
+      process.platform === "darwin"
+        ? setupFloatingPill({
+            showMainWindow,
+            openSettings: () => {
+              createSettingsWindow();
+            },
+            runtimeManager,
+          })
+        : null;
+
     setupTray({
       getMainWindow: () => mainWindow,
       ensureMainWindow: async () => {
@@ -119,6 +147,7 @@ async function bootstrap() {
         createSettingsWindow();
       },
       runtimeManager,
+      floatingPill,
     });
     setupUpdater();
     romeImageUpdater.start();
