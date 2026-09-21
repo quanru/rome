@@ -38,11 +38,10 @@ on:
 # absent environment is provisioned open — so until a maintainer actually
 # configures a protected environment with required reviewers, the secret-
 # bearing path (the `midscene` matrix) is restricted to trusted refs only:
-# pushes to main (merge-gated code) and manual dispatches on main. Pull
-# requests only run the secret-free `harness-validation` job (npm ci,
-# type-check, YAML case collection). To opt a PR into visual E2E later, add
-# the protected environment back and gate a pull_request matrix job on an
-# environment approval.
+# pushes to main (merge-gated code), manual dispatches on main, and same-repo
+# pull requests whose authors already have permission to push to the repository.
+# External fork pull requests only run the secret-free `harness-validation`
+# job (npm ci, type-check, YAML case collection).
 
 permissions:
   contents: read
@@ -94,11 +93,13 @@ jobs:
 
   midscene:
     name: Midscene visual (${{ matrix.shard }})
-    # Fail-closed trust gate: billable secrets only ever run against code on
-    # the protected default branch. (push to main already targets it; this
-    # also binds workflow_dispatch to main even if dispatched via the API on
-    # another ref.)
-    if: github.ref == 'refs/heads/main'
+    # Fail-closed trust gate: billable secrets run against the protected
+    # default branch or a same-repository pull request. External fork pull
+    # requests never receive repository secrets.
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
