@@ -31,12 +31,19 @@ cases:
       - wait: { duration: 1000 }
       - aiTap: Calendar
       - wait: { duration: 1000 }
+      # The calendar heading is built from the browser's current month, so it
+      # must not be pinned to "September 2026" (the case would fail in
+      # October against unchanged code). The regex below requires a real
+      # month-name/year title regardless of the run date.
+      - app.expectTexts:
+          matches:
+            - '\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d\b'
       - aiAssert: >-
-          The view switches to a monthly calendar headed "September 2026"
-          with weekday headers (Sun through Sat) and dated cells. A legend
-          distinguishes "recurring" and "one-time" runs, and days carrying
-          scheduled routines show markers. "Calendar" is the active view
-          switcher button.
+          The view switches to a monthly calendar headed with the current
+          month name and four-digit year, with weekday headers (Sun through
+          Sat) and dated cells. A legend distinguishes "recurring" and
+          "one-time" runs, and days carrying scheduled routines show markers.
+          "Calendar" is the active view switcher button.
       - aiTap: List
       - wait: { duration: 800 }
       - aiAssert: >-

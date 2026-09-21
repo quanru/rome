@@ -48,10 +48,22 @@ cases:
           target: "Search title, App, Agent, context, or ID"
           clear: true
       - wait: { duration: 800 }
+      # Clearing restores ALL 22 all-time rows, so the three plumber rows
+      # that matched the query are still present — only the filter goes away.
+      - app.expectTexts:
+          all:
+            - "Leak follow-up with Dana"
+            - "Invoice from the plumber"
+            - "Plumber for the leak"
+            - "Roadmap questions from Ines"
       - aiAssert: >-
-          Clearing the search restores the full all-time list:
-          "Leak follow-up with Dana" is back as the first row and the
-          three plumber rows are gone.
+          Clearing the search repopulates the list instead of leaving the
+          filtered view: the search field is empty, "Leak follow-up with
+          Dana" is the first row again, and unrelated sessions such as
+          "Roadmap questions from Ines" are visible; the list is no longer
+          limited to three plumber matches. (The three plumber sessions are
+          older and sit further down the restored list — their continued
+          presence is covered by the DOM check above.)
       - app.scrollContent: { position: bottom }
       - wait: { duration: 500 }
       - aiAssert: >-
