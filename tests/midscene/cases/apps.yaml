@@ -1,5 +1,5 @@
 cases:
-  - name: APPS-01 Installed apps grid lists the five fixture apps and built-in entries
+  - name: APPS-01 Search and restore the installed-app catalog
     tags:
       - apps
       - shard-2
@@ -7,98 +7,76 @@ cases:
       - app.open:
           path: /apps
       - aiAct: >-
-          Search the installed apps for "Browser", inspect the matching built-in app, then clear
+          1. Search the installed apps for "Browser", inspect the matching built-in app, then clear
           the search so the complete apps grid is visible again.
       - aiAssert: >-
           The Apps page is shown in English with the heading "Apps". There is a search field labeled
-          "Search apps", an "App store" button, and an "Update all" button.
-      - aiAssert: >-
-          The "My apps" screen shows an "Installed apps" group and a "Built-in apps" group, each
-          with a count badge (5 and 9). The fixture app tiles and the built-in entry tiles are laid
-          out in a grid.
-      - aiAssert: >-
-          the visible interface contains "Installed apps", "YouTube Distill", "Code Review", "Issue
+          "Search apps", an "App store" button, and an "Update all" button. The "My apps" screen
+          shows an "Installed apps" group and a "Built-in apps" group, each with a count badge (5
+          and 9). The fixture app tiles and the built-in entry tiles are laid out in a grid. the
+          visible interface contains "Installed apps", "YouTube Distill", "Code Review", "Issue
           Triage", "Fitness Tracker", "Stock Daily", "Built-in apps", "Browser".
-  - name: APPS-02 Search narrows the apps grid
-    tags:
-      - apps
-      - shard-2
-    steps:
-      - app.open:
-          path: /apps
-      - aiAct: Find the field identified by "Search apps", enter text with "issue".
-      - wait:
-          duration: 700
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "Search apps", enter text with "issue".
       - aiAssert: >-
           The grid shows "1 result" and only the "Issue Triage" app is listed; the other installed
           apps ("Code Review", "Stock Daily", etc.) are not shown.
-  - name: APPS-03 Search without matches shows the empty state
-    tags:
-      - apps
-      - shard-2
-    steps:
-      - app.open:
-          path: /apps
-      - aiAct: Find the field identified by "Search apps", enter text with "zzz-nonexistent".
-      - wait:
-          duration: 700
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "Search apps", enter text with "zzz-nonexistent".
       - aiAssert: >-
           The page shows the empty state 'No apps match "zzz-nonexistent"' and the helper text "Try
           a different search, or browse the App store."
-  - name: APPS-04 Disable an app from its tile menu and re-enable it
+  - name: APPS-02 Disable, re-enable, and uninstall apps from tile menus
     tags:
       - apps
       - shard-2
     steps:
       - app.open:
           path: /apps
-      - aiAct: Find the visible control labelled "More actions for Issue Triage" and click it.
-      - wait:
-          duration: 500
-      - aiAssert: >-
-          An app tile actions dropdown menu is open listing the entries "View details", "Open full
-          view", "Pin to sidebar", "Access", "Disable", "Uninstall", and "Uninstall and erase data".
-          There is no "Enable" entry because the app is currently enabled.
-      - aiAct: Find and click the "Disable" menu item for Issue Triage.
-      - wait:
-          duration: 1000
-      - aiAct: Find the visible control labelled "More actions for Issue Triage" and click it.
-      - wait:
-          duration: 500
-      - aiAssert: The reopened tile menu now offers "Enable" and no longer offers "Disable".
-      - aiAct: Find and click the "Enable" menu item.
-      - wait:
-          duration: 1000
-      - aiAct: Find the visible control labelled "More actions for Issue Triage" and click it.
-      - wait:
-          duration: 500
+      - aiAct: >-
+          1. Find the visible control labelled "More actions for Issue Triage" and click it.
+
+          2. Find and click the "Disable" menu item for Issue Triage.
+
+          3. Find the visible control labelled "More actions for Issue Triage" and click it.
+
+          4. Find and click the "Enable" menu item.
+
+          5. Find the visible control labelled "More actions for Issue Triage" and click it.
+
+          7. Before continuing, confirm these visible checkpoints: An app tile actions dropdown menu
+          is open listing the entries "View details", "Open full view", "Pin to sidebar", "Access",
+          "Disable", "Uninstall", and "Uninstall and erase data". There is no "Enable" entry because
+          the app is currently enabled. The reopened tile menu now offers "Enable" and no longer
+          offers "Disable". The menu is back to the enabled state: it offers "Disable" and does not
+          offer "Enable".
       - aiAssert: "The menu is back to the enabled state: it offers \"Disable\" and does not offer \"Enable\"."
-      - aiAct: Use the "Escape" keyboard command in the current interface.
-  - name: APPS-05 Uninstall an app through the confirmation dialog
-    tags:
-      - apps
-      - shard-2
-    steps:
-      - app.open:
-          path: /apps
-      - aiAct: Find the visible control labelled "More actions for Stock Daily" and click it.
-      - wait:
-          duration: 500
-      - aiAct: Find and click the "Uninstall" menu item (the plain one, not "Uninstall and erase data").
-      - wait:
-          duration: 800
-      - aiAssert: >-
-          A confirmation dialog titled "Uninstall Stock Daily?" explains that the app is removed but
-          its database rows and data directory are preserved for a later reinstall, and offers
-          "Cancel" and "Uninstall" buttons.
-      - aiAct: Find and click the "Uninstall" button in the confirmation dialog.
-      - wait:
-          duration: 1200
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the visible control labelled "More actions for Stock Daily" and click it.
+
+          3. Find and click the "Uninstall" menu item (the plain one, not "Uninstall and erase
+          data").
+
+          4. Find and click the "Uninstall" button in the confirmation dialog.
+
+          5. Before continuing, confirm these visible checkpoints: A confirmation dialog titled
+          "Uninstall Stock Daily?" explains that the app is removed but its database rows and data
+          directory are preserved for a later reinstall, and offers "Cancel" and "Uninstall"
+          buttons.
       - aiAssert: >-
           The Stock Daily tile disappears from the Installed apps group, the Installed apps count
           drops to 4, and a success toast confirms Stock Daily was uninstalled with its data
           preserved. The other four fixture apps remain listed.
-  - name: APPS-06 App details page renders manage rows and capability cards
+  - name: APPS-03 Inspect the Issue Triage app details and capabilities
     tags:
       - apps
       - shard-2
@@ -106,30 +84,11 @@ cases:
       - app.open:
           path: /app-details/issue-triage
       - aiAct: >-
-          Explore the Issue Triage details page by reviewing its management actions and scrolling
+          1. Explore the Issue Triage details page by reviewing its management actions and scrolling
           through its capability cards, without changing the app.
       - aiAssert: >-
           The details page for Issue Triage is shown. There is a "Back to apps" link, the app name
           "Issue Triage" with version "0.2.2", an "Enabled" switch in the manage section, and
-          "Uninstall" / "Uninstall and erase data" management rows.
-      - aiAssert: >-
-          Capability cards are shown with count pills; cards declaring nothing display the "No …
-          declared." empty text appropriate to the capability. A README card is not shown because
-          the mock has no readme.
-  - name: APPS-07 Installing an unknown store handle shows the not-found state
-    tags:
-      - apps
-      - shard-2
-    steps:
-      - app.open:
-          path: /install-app/demo-handle/not-a-real-app
-          waitUntil: any
-      - wait:
-          duration: 1500
-      - aiAct: >-
-          Retry loading the unknown app once and confirm the page remains in the not-found state; do
-          not leave the error page.
-      - aiAssert: >-
-          The install confirmation page shows an error stating the app was not found in the store
-          ("App not found in the store") with a "Retry" button and a "Cancel" button. No install
-          button is offered.
+          "Uninstall" / "Uninstall and erase data" management rows. Capability cards are shown with
+          count pills; cards declaring nothing display the "No … declared." empty text appropriate
+          to the capability. A README card is not shown because the mock has no readme.

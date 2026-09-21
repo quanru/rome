@@ -2,9 +2,9 @@
 
 > Onboarding attachment for Rome maintainers.
 >
-> Status: all 91 cases catalogued in section 5 are defined as AI-native YAML
+> Status: all 42 journeys catalogued in section 5 are defined as AI-native YAML
 > workflows under `tests/midscene/cases/`. Six CI shards split them
-> 14/15/14/20/17/11. Each case uses `aiAct` for interaction and `aiAssert` for
+> 5/8/7/9/8/5. Each case uses `aiAct` for interaction and `aiAssert` for
 > its visible outcome.
 
 ## 1. Background and Goals
@@ -202,12 +202,12 @@ roughly 8–12 minutes of wall time):
 
 | Shard | Cases | Contents |
 | --- | --- | --- |
-| shard-1 | 14 | Chat core: home, conversation list, composer, basic transcript |
-| shard-2 | 15 | Chat rich cards (7) + apps (7) + E2E-03 install story |
-| shard-3 | 14 | Sessions (7) + routines (5) + E2E-01/02 stories |
-| shard-4 | 20 | Activity (6) + people (6) + files/memory (8) |
-| shard-5 | 17 | Settings (11) + auth (3) + SHELL-01/04/06 |
-| shard-6 | 11 | Recorded apps deep walkthrough (5) + SHELL-02/03/05/07 + GLOBAL-01/02 (i18n, mobile) |
+| shard-1 | 5 | Chat core journeys |
+| shard-2 | 8 | Apps, rich chat cards, and E2E-03 |
+| shard-3 | 7 | Sessions, routines, and E2E-01/02 |
+| shard-4 | 9 | Activity, people, files, and memory |
+| shard-5 | 8 | Settings, auth, and desktop shell journeys |
+| shard-6 | 5 | Recorded apps, desktop shell, and mobile navigation |
 
 The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
 shard-2, AUTH-01 → shard-5).
@@ -219,147 +219,52 @@ shard-2, AUTH-01 → shard-5).
 > no YAML).
 
 <!-- CASE-CATALOG -->
-This iteration lands **91** ✅ mock-drivable cases (15 YAML files), grouped by
-suite. The Shard column shows CI ownership.
+This iteration lands **42** ✅ mock-drivable user journeys in 15 YAML files.
 
-### auth-shell (12, shard-5/6)
-
-| ID | Case |
-| --- | --- |
-| AUTH-01 | Mock guardian opens the root route and lands on the chat home |
-| AUTH-02 | `/dev/login` renders the local sign-in form with required-field validation |
-| AUTH-03 | Submitting the login form hits the generic "Login failed" error (unmocked login write endpoint) |
-| SHELL-01 | Sidebar entries navigate to every built-in page |
-| SHELL-02 | ⌘/Ctrl+K opens chat search and matches a conversation |
-| SHELL-03 | ⌘/Ctrl+B collapses/expands the sidebar |
-| SHELL-04 | Edit mode removes a pin and Add restores it |
-| SHELL-05 | The sidebar becomes a closable drawer at mobile viewport (`mobile`) |
-| SHELL-06 | The account menu shows identity and account actions |
-| SHELL-07 | Logout is unsupported in mock mode and reports an error toast |
-| GLOBAL-01 | Unknown routes silently redirect to the chat home |
-| GLOBAL-02 | Switching to Chinese localizes the whole shell (`zh`) |
-
-### chat (21, shard-1/2)
-
-| ID | Case |
-| --- | --- |
-| CHAT-01 | Home composer placeholder, upload, project and reasoning controls |
-| CHAT-02 | Reasoning effort menu offers Fast / Think / Ultrathink |
-| CHAT-03 | Project selector lists projects and a create entry |
-| CHAT-04 | Sending from the home composer fails clearly without a backend |
-| CHAT-05 | In-conversation send fails without losing the draft |
-| CHAT-06 | Slash skill menu loads and reports its unavailable state |
-| CHAT-07 | @ agent picker offers the two fixture agents |
-| CHAT-08 | Recent conversations are grouped by date (curated + older) |
-| CHAT-09 | Opening a conversation from the sidebar loads its transcript |
-| CHAT-10 | A successful tool trace expands from its collapsed summary |
-| CHAT-11 | A failed turn trace surfaces the model provider error |
-| CHAT-12 | A subagent delegation trace shows its recorded-not-available state |
-| CHAT-13 | Helpful feedback can be submitted and is recorded |
-| CHAT-14 | Copy message copies a plain-text assistant turn |
-| CHAT-15 | An answered design-question card locks the chosen answers |
-| CHAT-16 | The built-app final reply renders sections and a collapsible mermaid diagram |
-| CHAT-17 | A learning-kit link opens YouTube Distill in a workspace tile |
-| CHAT-18 | A workout-plan link opens Fitness Tracker in a tile |
-| CHAT-19 | A market-recap link opens a specific Stock Daily report in a tile |
-| CHAT-20 | The live question card keeps Send disabled until all answers are in, then submits to the designed failure |
-| CHAT-21 | Rejecting the plumber approval turns the card rejected |
-
-### apps (13, shard-2/6)
-
-| ID | Case |
-| --- | --- |
-| APPS-01 | Installed apps grid lists the five fixture apps and built-in entries |
-| APPS-02 | Search narrows the grid ("1 result") |
-| APPS-03 | Empty-state copy for a search with no matches |
-| APPS-04 | Tile-menu Disable/Enable toggles instantly |
-| APPS-05 | Uninstall confirmation dialog and post-uninstall count/toast |
-| APPS-06 | App details page manage rows and capability cards |
-| APPS-07 | Install page not-found state for an unknown store handle |
-| RAPP-01 | Issue Triage recorded panel (Repos/Triaged/Succeeded/Failed + #363) |
-| RAPP-02 | YouTube Distill recorded session and 15-section mind map |
-| RAPP-03 | Code Review recorded PR review (timeline + Verdict + Findings P1–P3) |
-| RAPP-04 | Fitness Tracker weekly plan and beginner/20-min settings |
-| RAPP-05 | Stock Daily weekday schedule and full daily report (sections 1/4/8) |
-| E2E-03 | Open a built app from its chat link and find it in Apps (`story`) |
-
-### sessions (7, shard-3)
-
-| ID | Case |
-| --- | --- |
-| SES-01 | List columns, type badges and pagination (13 rows in the 7-day window) |
-| SES-02 | Search across title/context (three plumber hits under All time) |
-| SES-03 | Type facet filters to Channel and shows a clearable chip |
-| SES-04 | Switching the time range to All time expands the list to 22 rows |
-| SES-05 | "No sessions found" empty state for an unmatched search |
-| SES-06 | Channel session read-only detail and Details sheet (Technical details) |
-| SES-07 | Webchat session detail offers Open chat back to the conversation |
-
-### routines (6, shard-3)
-
-| ID | Case |
-| --- | --- |
-| ROUT-01 | Summary cards (Total/Active/Paused/Next up), groups, schedules and switches |
-| ROUT-02 | Calendar month view with recurring/one-time legend |
-| ROUT-03 | Timeline orders upcoming runs and action names on a time axis |
-| ROUT-04 | Create Routine dialog presents the three trigger types |
-| ROUT-05 | Toggling an on-demand routine updates the Active/Paused counts instantly |
-| E2E-01 | Enable a routine in chat and verify it on the Routines page (`story`) |
-
-### activity (7, shard-3/4*)
-
-| ID | Case |
-| --- | --- |
-| ACT-01 | Live indicator, count chips, pending-approval banner and status filters |
-| ACT-02 | Three channel connection requests with pairing-code guidance |
-| ACT-03 | Running filter isolates the single in-flight action and offers Cancel |
-| ACT-04 | Rejecting a send_message approval in Activity decrements the banner |
-| ACT-05 | A webhook delivery's payload JSON can be expanded |
-| ACT-06 | Error filter lists the three failed executions with Details |
-| E2E-02 | Approve send_message in chat and verify it in Activity (`story`) |
-
-> *E2E-02 also carries the `activity` topic tag but is sharded to shard-3
-> alongside E2E-01.
-
-### people (6, shard-4)
-
-| ID | Case |
-| --- | --- |
-| PPL-01 | Latest recent-conversation previews |
-| PPL-02 | Directory grouped by bond (Inner circle/Acquaintance/Other) with counts |
-| PPL-03 | Bond filter chip narrows the directory |
-| PPL-04 | Person detail message timeline, channel labels and composer |
-| PPL-05 | Timeline channel filter (WhatsApp / All) |
-| PPL-06 | Person actions menu (Change bond / Link account / Merge / Memory profile) |
-
-### files / memory (8, shard-4)
-
-| ID | Case |
-| --- | --- |
-| FILE-01 | Projects file-tree root and the unmocked error state of the right-hand dashboard |
-| FILE-02 | Read-only viewing of demo-app/README.md |
-| FILE-03 | Editing todo.md stays in memory across file switches |
-| FILE-04 | A newly created file appears in the tree |
-| FILE-05 | Renaming onto a duplicate name hits 409 "Already exists." |
-| FILE-06 | Memory tree with journal/projects/relationship and BONDS.md |
-| FILE-07 | Today's journal entry exists at its dated path |
-| FILE-08 | Memory-note edits persist across file switches |
-
-### settings (11, shard-5)
-
-| ID | Case |
-| --- | --- |
-| SET-01 | /settings redirects to Appearance and exposes six tabs |
-| SET-02 | Appearance switches to dark mode instantly |
-| SET-03 | Connections lists the nine fixture connections |
-| SET-04 | Revoking a connection grant updates the card instantly (reset on refresh) |
-| SET-05 | App-key creation input validation and save |
-| SET-06 | Channels conversation activation cards and per-conversation configuration |
-| SET-07 | AI Tools shows the Claude connection status/usage and supports logout |
-| SET-08 | Favors balance, pending decisions and ledger |
-| SET-09 | Advanced access control, computer use and developer toggles |
-| SET-10 | Adding an allowed dashboard email saves and toasts |
-| SET-11 | Developer toggles save via PUT /api/settings and persist across navigation |
+| ID | User journey | Shard |
+| --- | --- | --- |
+| ACT-01 | Activity overview and status filters stay consistent | shard-4 |
+| ACT-02 | Review pending requests and reject an action approval | shard-4 |
+| ACT-03 | Inspect an accepted webhook delivery payload | shard-4 |
+| APPS-01 | Search and restore the installed-app catalog | shard-2 |
+| APPS-02 | Disable, re-enable, and uninstall apps from tile menus | shard-2 |
+| APPS-03 | Inspect the Issue Triage app details and capabilities | shard-2 |
+| AUTH-01 | Authenticated root navigation reaches the chat home | shard-5 |
+| AUTH-02 | Login validation and failed submission preserve the form | shard-5 |
+| CHAT-06 | Inspect the answered design card and built-app reply | shard-2 |
+| CHAT-07 | Open linked apps from three recorded conversations | shard-2 |
+| CHAT-08 | Complete the live question card and preserve its failed submission | shard-2 |
+| CHAT-09 | Reject the plumber approval card | shard-2 |
+| CHAT-01 | Configure the home composer and inspect its menus | shard-1 |
+| CHAT-02 | Exercise composer pickers and the failed-send state | shard-1 |
+| CHAT-03 | Find a conversation, inspect its transcript, and preserve a failed draft | shard-1 |
+| CHAT-04 | Inspect successful, failed, and delegated execution traces | shard-1 |
+| CHAT-05 | Give feedback and copy assistant messages | shard-1 |
+| E2E-01 | Enable a proposed routine and verify it across Chat and Routines | shard-3 |
+| E2E-02 | Approve a message and inspect its Activity record | shard-3 |
+| E2E-03 | Open a built app from Chat and find it in Apps | shard-2 |
+| FILE-01 | Search the project tree and open a project file | shard-4 |
+| FILE-02 | Edit an existing file and create a new project file | shard-4 |
+| FILE-03 | Handle a duplicate project-file rename | shard-4 |
+| FILE-04 | Browse journal and relationship memory, then persist a project-note edit | shard-4 |
+| PPL-01 | Browse recent people, directory groups, and bond filters | shard-4 |
+| PPL-02 | Inspect a person timeline, channel filters, and account actions | shard-4 |
+| RAPP-01 | Inspect the Issue Triage dashboard and recent results | shard-6 |
+| RAPP-02 | Review a recorded code review from timeline to findings | shard-6 |
+| RAPP-03 | Inspect a Stock Daily report from schedule to market news | shard-6 |
+| ROUT-01 | Explore routine list, calendar, timeline, and creation options | shard-3 |
+| ROUT-02 | Toggle an on-demand routine and restore its paused state | shard-3 |
+| SES-01 | Search sessions across time ranges and reach the empty state | shard-3 |
+| SES-02 | Filter channel sessions and compare seven-day with all-time results | shard-3 |
+| SES-03 | Inspect channel and webchat session details, then reopen Chat | shard-3 |
+| SET-01 | Navigate Settings and switch appearance mode | shard-5 |
+| SET-02 | Inspect connections, disconnect a grant, and add an app key | shard-5 |
+| SET-03 | Inspect channel activation and log out an AI tool | shard-5 |
+| SET-04 | Review favors and advanced settings, then persist access controls | shard-5 |
+| SHELL-01 | Navigate every built-in surface from Chat to Settings | shard-5 |
+| SHELL-02 | Search chats, toggle the sidebar, and edit pinned entries | shard-6 |
+| SHELL-03 | Use the mobile navigation drawer | shard-6 |
+| SHELL-04 | Inspect account actions, handle logout failure, and switch language | shard-5 |
 
 ### ⚠️ Candidates blocked by section 6 mock gaps (no YAML yet)
 

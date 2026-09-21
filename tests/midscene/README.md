@@ -26,6 +26,8 @@ PRs.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.
+- The suite contains 42 user journeys. Related page states share one case so
+  the model completes a product goal instead of replaying isolated UI checks.
 - The package also registers deterministic nodes for harness setup and focused
   debugging:
   `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,

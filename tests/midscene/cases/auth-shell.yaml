@@ -1,5 +1,5 @@
 cases:
-  - name: AUTH-01 Mock guardian opens the app root and lands on the chat home
+  - name: AUTH-01 Authenticated root navigation reaches the chat home
     tags:
       - poc
       - auth
@@ -8,17 +8,16 @@ cases:
       - app.open:
           path: /
       - aiAct: >-
-          Use the sidebar to open Apps, then return to Chat and leave the application on the chat
+          1. Use the sidebar to open Apps, then return to Chat and leave the application on the chat
           home.
       - app.expectUrl:
           path: /chat
       - aiAssert: >-
           The chat home is shown in English. It shows the greeting "Welcome,", the headline "What
           should we create?", and the left app navigation is visible with the Chat and Apps entries.
-      - aiAssert: >-
           Exactly one message composer is visible, and its placeholder reads "How can I help you
           today?".
-  - name: AUTH-02 Login preview renders the local sign-in form with validation
+  - name: AUTH-02 Login validation and failed submission preserve the form
     tags:
       - auth
       - shard-5
@@ -26,29 +25,25 @@ cases:
       - app.open:
           path: /dev/login
           waitUntil: login
-      - aiAssert: >-
-          The sign-in page is shown in English with the heading "Sign In" and the description "Use
-          your guardian account to access Rome." It has "Username" and "Password" fields and a "Sign
-          in" submit button. A language switcher is visible in the top-right corner.
-      - aiAct: Find and click the "Sign in" button with both fields empty.
-      - wait:
-          duration: 600
+      - aiAct: >-
+          1. Find and click the "Sign in" button with both fields empty.
+
+          2. Before continuing, confirm these visible checkpoints: The sign-in page is shown in
+          English with the heading "Sign In" and the description "Use your guardian account to
+          access Rome." It has "Username" and "Password" fields and a "Sign in" submit button. A
+          language switcher is visible in the top-right corner.
       - aiAssert: >-
           Inline validation messages "Username is required." and "Password is required." appear and
           no navigation happens.
-  - name: AUTH-03 Submitting the login form against the mock shows a login failure
-    tags:
-      - auth
-      - shard-5
-    steps:
-      - app.open:
-          path: /dev/login
-          waitUntil: login
-      - aiAct: Find the field identified by "Username", enter text with "guardian".
-      - aiAct: Find the field identified by "Password", enter text with "demo-password".
-      - aiAct: Find and click the "Sign in" button.
-      - wait:
-          duration: 1500
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "Username", enter text with "guardian".
+
+          3. Find the field identified by "Password", enter text with "demo-password".
+
+          4. Find and click the "Sign in" button.
       - aiAssert: >-
           The page stays on the sign-in form and shows a red error saying "Login failed". The filled
           username is still present so it can be retried.

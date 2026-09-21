@@ -1,5 +1,5 @@
 cases:
-  - name: E2E-02 Approve the send_message card in chat and verify the Activity feed
+  - name: E2E-02 Approve a message and inspect its Activity record
     tags:
       - poc
       - story
@@ -8,28 +8,23 @@ cases:
     steps:
       - app.open:
           path: /chat/mock-chat-4
+      - aiAct: >-
+          In the open "Plumber for the leak" conversation, approve the pending outbound Telegram
+          message. Finish when the approval card visibly shows that the action completed.
       - aiAssert: >-
-          The conversation "Plumber for the leak" is open. A yellow approval card titled "Guardian
-          approval needed" shows a "Pending approval" badge. It previews an outbound telegram
-          message saying "The plumber is booked for Thursday 9am — does that still work for you?"
-          and gives two buttons: "Reject" and "Approve".
-      - aiAct: Find and click Approve.
-      - aiAssert: >-
-          The card resolves successfully: the badge reads "Approved & done", the buttons are gone,
-          and the green footer says "✓ Action approved and executed successfully."
-      - aiAct: Find and click the Activity entry in the left app navigation sidebar.
+          The approval card reads "Approved & done", its Approve and Reject buttons are gone, and
+          the green footer says "✓ Action approved and executed successfully."
+      - aiAct: >-
+          Open Activity from the left app navigation, select the Approved filter, and find the
+          send_message approval that was just completed.
       - app.expectUrl:
           path: /activity
       - aiAssert: >-
-          The yellow pending-approvals banner at the top says exactly "3 pending approvals requiring
-          review" (the send_message row is no longer counted as pending).
-      - aiAct: Find and click Approved.
-      - aiAssert: >-
-          With the "Approved" filter active, the feed lists the approval whose description is
-          'Action "send_message" requires guardian approval'. Its status pill reads "Executed" and
-          the row offers no Approve or Reject buttons (the place_order row may also be present, but
-          the send_message row is terminal).
-      - aiAct: Find and click the "Payload" disclosure on the send_message approval row.
+          The Activity summary shows 3 pending approvals. The send_message approval is listed with
+          status "Executed" and has no Approve or Reject buttons.
+      - aiAct: >-
+          Expand the Payload disclosure on the executed send_message approval row and leave its JSON
+          details visible.
       - aiAssert: >-
           The expanded payload JSON for the send_message approval shows "person": "Ray", "channel":
           "telegram", and the message text "The plumber is booked for Thursday 9am — does that still

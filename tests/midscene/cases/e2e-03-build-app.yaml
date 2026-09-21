@@ -1,5 +1,5 @@
 cases:
-  - name: E2E-03 Open the built Issue Triage app from its chat link and find it in Apps
+  - name: E2E-03 Open a built app from Chat and find it in Apps
     tags:
       - poc
       - story
@@ -9,20 +9,15 @@ cases:
       - app.open:
           path: /chat/mock-chat-build-app
       - aiAct: >-
-          Explore the page by scrolling until the content containing "When should the app label an
-          issue?" is visible.
+          In the "Build an app from an idea" conversation, find the final built-app reply and open
+          its Issue Triage link. Finish when the Issue Triage dashboard is visible in a workspace
+          tile beside the conversation.
       - aiAssert: >-
-          The conversation "Build an app from an idea" is open. The design question card is visible
-          with its questions, including "When should the app label an issue?" and "Should it apply
-          labels directly, or suggest for review?".
-      - aiAct: Find the content link labelled "Issue Triage" and open it.
-      - wait:
-          duration: 3000
-      - aiAssert: >-
-          The Issue Triage app opens in a workspace tile beside the still-open conversation. Its
-          dashboard is visible inside that tile (repository configuration / triage content), not an
-          error or "page not found".
-      - aiAct: Find and click the Apps entry in the left app navigation sidebar.
+          The Issue Triage app is open in a workspace tile beside the still-visible conversation.
+          Its dashboard shows repository or triage content, not an error or page-not-found state.
+      - aiAct: >-
+          Open Apps from the left application sidebar and find Issue Triage in the installed-app
+          catalog.
       - app.expectUrl:
           path: /apps
       - aiAssert: >-

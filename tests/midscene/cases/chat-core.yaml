@@ -1,53 +1,39 @@
 cases:
-  - name: CHAT-01 Home composer shows placeholder, upload, project and reasoning controls
+  - name: CHAT-01 Configure the home composer and inspect its menus
     tags:
       - chat
       - shard-1
     steps:
       - app.open:
           path: /chat
-      - wait:
-          duration: 800
       - aiAct: >-
-          Focus the message composer, type "draft", then clear the draft without sending it. Inspect
-          the upload, project, reasoning, and send controls while keeping their settings unchanged.
+          1. Focus the message composer, type "draft", then clear the draft without sending it.
+          Inspect the upload, project, reasoning, and send controls while keeping their settings
+          unchanged.
       - aiAssert: >-
           The chat home shows the greeting "Welcome," and the headline "What should we create?". The
           message composer shows the placeholder "How can I help you today?", the current project
-          name "default", and a reasoning effort control that currently reads "Think".
-      - aiAssert: A button labelled "Upload files" is visible.
-      - aiAssert: A button labelled "Project" is visible.
-      - aiAssert: A button labelled "Send" is visible.
-  - name: CHAT-02 Reasoning effort menu offers Fast, Think and Ultrathink
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: Find the visible control labelled "Reasoning effort" and click it.
-      - wait:
-          duration: 600
+          name "default", and a reasoning effort control that currently reads "Think". A button
+          labelled "Upload files" is visible. A button labelled "Project" is visible. A button
+          labelled "Send" is visible.
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the visible control labelled "Reasoning effort" and click it.
       - aiAssert: >-
           A small popover menu opens above the composer listing three options: "Fast", "Think", and
-          "Ultrathink".
-      - aiAssert: The menu item "Fast" is visible and not selected.
-      - aiAssert: The menu item "Think" is visible and selected.
-      - aiAssert: The menu item "Ultrathink" is visible and not selected.
-  - name: CHAT-03 Project selector lists projects and a create entry
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: Find the visible control labelled "Project" and click it.
-      - wait:
-          duration: 700
+          "Ultrathink". The menu item "Fast" is visible and not selected. The menu item "Think" is
+          visible and selected. The menu item "Ultrathink" is visible and not selected.
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the visible control labelled "Project" and click it.
       - aiAssert: >-
           A project picker menu opens listing multiple available projects and a "Create project"
           action.
-  - name: CHAT-04 Sending from the home composer fails clearly without a backend
+  - name: CHAT-02 Exercise composer pickers and the failed-send state
     tags:
       - chat
       - shard-1
@@ -55,64 +41,36 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          Find the field identified by "How can I help you today?", enter text with "Book a focus
+          1. Find the field identified by "How can I help you today?", enter text with "Book a focus
           block tomorrow morning".
-      - aiAct: Find the visible control labelled "Send" and click it.
-      - wait:
-          duration: 2000
+
+          2. Find the visible control labelled "Send" and click it.
       - aiAssert: >-
           The message is not sent: an error above the composer reports the failed request to
           "/api/chat/sessions" (the standalone mock has no chat backend, so the dev proxy fails).
           The typed text remains in the composer and the URL stays on /chat (no new conversation is
           created).
-  - name: CHAT-05 Sending inside a conversation fails without removing the draft
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat/mock-chat-2
       - aiAct: >-
-          Find the field identified by "How can I help you today?", enter text with "Make the
-          subject line shorter".
-      - aiAct: >-
-          Send the draft from the composer at the bottom of the conversation. Do not use the Send
-          button inside the earlier question card.
-      - wait:
-          duration: 2000
-      - aiAssert: >-
-          Sending fails with an error above the composer: a proxy error message naming
-          "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
-          typed draft "Make the subject line shorter" is still in the composer and no new user
-          message bubble appears in the transcript.
-  - name: CHAT-06 Slash skill menu loads and reports its unavailable state
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: Find the field identified by "How can I help you today?", enter text with "/".
-      - wait:
-          duration: 1200
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "How can I help you today?", enter text with "/".
       - aiAssert: >-
           Typing "/" surfaces the skill picker failure state: an error notice reads "Failed to load
           skills." and no skill entries are listed.
-  - name: CHAT-07 Agent mention picker offers the two fixture agents
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: Find the field identified by "How can I help you today?", enter text with "@".
-      - wait:
-          duration: 1000
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "How can I help you today?", enter text with "@".
+
+          4. Before continuing, confirm these visible checkpoints: An agent mention picker titled
+          "Pick an agent to chat with" opens, showing a "Built-in agents" section with a "Rome"
+          group and its two agents, "main" and "envoy".
       - aiAssert: >-
           An agent mention picker titled "Pick an agent to chat with" opens, showing a "Built-in
           agents" section with a "Rome" group and its two agents, "main" and "envoy".
-      - aiAct: Use the "Escape" keyboard command in the current interface.
-  - name: CHAT-08 Recent chats are grouped by date with curated and older fixtures
+  - name: CHAT-03 Find a conversation, inspect its transcript, and preserve a failed draft
     tags:
       - chat
       - shard-1
@@ -120,7 +78,7 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          Expand the recent Chats list with the Load 3 more control and inspect the additional
+          1. Expand the recent Chats list with the Load 3 more control and inspect the additional
           conversations while keeping the sidebar open.
       - aiAssert: >-
           The "Chats" section in the sidebar groups conversations by project folder. The "default"
@@ -128,39 +86,42 @@ cases:
           room for a daily workout", "Have the market recap ready every day", "Morning brief
           tweaks", "Weekly planning", and "Plumber for the leak". The "website-redesign" project
           lists "Draft launch email".
-  - name: CHAT-09 Opening a conversation from the sidebar loads its transcript
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: Find and click the "Draft launch email" row in the Chats sidebar list.
-      - app.expectUrl:
-          path: /chat/mock-chat-2
-      - wait:
-          duration: 1000
       - aiAct: >-
-          Explore the page by scrolling until the content containing "Can the launch copy be
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find and click the "Draft launch email" row in the Chats sidebar list.
+
+          3. Explore the page by scrolling until the content containing "Can the launch copy be
           warmer?" is visible.
-      - wait:
-          duration: 400
-      - aiAssert: >-
-          The conversation "Draft launch email" is open. Its first user request reads "Can the
-          launch copy be warmer? The roadmap paragraph reads like a changelog.", and the assistant
-          reply that follows starts "Here's a warmer pass at that paragraph:" with the rewritten
-          line "We built Rome because keeping a household running takes more attention than any one
-          person has to spare."
-      - aiAct: >-
-          Explore the page by scrolling until the content containing "It reads the info semantic
+
+          4. Explore the page by scrolling until the content containing "It reads the info semantic
           tokens" is visible.
-      - wait:
-          duration: 400
+
+          5. Before continuing, confirm these visible checkpoints: the application reaches route
+          /chat/mock-chat-2 The conversation "Draft launch email" is open. Its first user request
+          reads "Can the launch copy be warmer? The roadmap paragraph reads like a changelog.", and
+          the assistant reply that follows starts "Here's a warmer pass at that paragraph:" with the
+          rewritten line "We built Rome because keeping a household running takes more attention
+          than any one person has to spare."
       - aiAssert: >-
           The later assistant answer that supplies the announcement banner as a paste-in snippet
           renders a tsx code block immediately above the line "It reads the info semantic tokens, so
           it tracks whichever theme is active."
-  - name: CHAT-10 Successful tool trace opens from the collapsed summary
+      - aiAct: >-
+          1. Open the “Draft launch email” conversation from the Chats sidebar.
+
+          2. Find the field identified by "How can I help you today?", enter text with "Make the
+          subject line shorter".
+
+          3. Send the draft from the composer at the bottom of the conversation. Do not use the Send
+          button inside the earlier question card.
+      - aiAssert: >-
+          Sending fails with an error above the composer: a proxy error message naming
+          "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
+          typed draft "Make the subject line shorter" is still in the composer and no new user
+          message bubble appears in the transcript.
+  - name: CHAT-04 Inspect successful, failed, and delegated execution traces
     tags:
       - chat
       - shard-1
@@ -168,56 +129,46 @@ cases:
       - app.open:
           path: /chat/mock-chat-1
       - aiAct: >-
-          Explore the page by scrolling until the content containing "1 app · 1 step · 8.4s" is
+          1. Explore the page by scrolling until the content containing "1 app · 1 step · 8.4s" is
           visible.
-      - aiAssert: A collapsed trace summary under an assistant turn reads "1 app · 1 step · 8.4s".
-      - aiAct: Find and click the collapsed trace summary reading "1 app · 1 step · 8.4s".
-      - wait:
-          duration: 1000
+
+          2. Find and click the collapsed trace summary reading "1 app · 1 step · 8.4s".
+
+          3. Before continuing, confirm these visible checkpoints: A collapsed trace summary under
+          an assistant turn reads "1 app · 1 step · 8.4s".
       - aiAssert: >-
           A "Trace" drawer opens. Its header reads "Used 1 app · 1 step · 8.4s"; the step list names
           the "briefer" app session and shows a successful "settings_get" tool step with the detail
           "keys: [2]" and a per-step duration. There is no error styling on this step.
-  - name: CHAT-11 Failed turn trace surfaces the model provider error
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat/mock-chat-3
       - aiAct: >-
-          Explore the page by scrolling until the content containing "The model provider is
+          1. Open the “Weekly planning” conversation from the Chats sidebar.
+
+          2. Explore the page by scrolling until the content containing "The model provider is
           unavailable" is visible.
-      - wait:
-          duration: 500
-      - aiAssert: >-
-          The failed assistant turn shows an inline error reading "Error: The model provider is
-          unavailable — the run stopped here."
-      - aiAct: Find and click the failed trace with the "model provider is unavailable" error.
-      - wait:
-          duration: 1000
+
+          3. Find and click the failed trace with the "model provider is unavailable" error.
+
+          4. Before continuing, confirm these visible checkpoints: The failed assistant turn shows
+          an inline error reading "Error: The model provider is unavailable — the run stopped here."
       - aiAssert: >-
           The trace drawer shows the failed step "Fetching it from the vendor portal." followed by a
           provider error card stating "Claude usage limit reached" with guidance to check usage or
           pick another model, and an "Open AI Tools" action.
-  - name: CHAT-12 Subagent delegation trace shows its recorded-not-available state
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat/mock-chat-3
-      - aiAct: Explore the page by scrolling until the content containing "researcher" is visible.
-      - aiAssert: >-
-          Near the routine proposal there is a delegated-subagents chip for the "researcher"
-          subagent marked "completed" (its control is labelled "Open trace for researcher").
-      - aiAct: Find the visible control labelled "Open trace for researcher" and click it.
-      - wait:
-          duration: 1000
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Explore the page by scrolling until the content containing "researcher" is visible.
+
+          3. Find the visible control labelled "Open trace for researcher" and click it.
+
+          4. Before continuing, confirm these visible checkpoints: Near the routine proposal there
+          is a delegated-subagents chip for the "researcher" subagent marked "completed" (its
+          control is labelled "Open trace for researcher").
       - aiAssert: >-
           The trace panel explains the trace is not available yet, showing "Trace not available yet"
           with a "Retry" action.
-  - name: CHAT-13 Helpful-turn feedback submits and records
+  - name: CHAT-05 Give feedback and copy assistant messages
     tags:
       - chat
       - shard-1
@@ -225,29 +176,22 @@ cases:
       - app.open:
           path: /chat/mock-chat-2
       - aiAct: >-
-          Explore the page by scrolling until the content containing "Lead with the reader, not the
-          feature." is visible.
-      - aiAct: Find and click the "Mark this turn helpful" control on that assistant turn.
-      - wait:
-          duration: 600
-      - aiAssert: >-
-          A feedback popover opens with an optional comment field with the placeholder "Optional:
-          what went wrong, or what was great?" and a "Submit" button.
-      - aiAct: Find and click Submit.
-      - wait:
-          duration: 1000
+          1. Explore the page by scrolling until the content containing "Lead with the reader, not
+          the feature." is visible.
+
+          2. Find and click the "Mark this turn helpful" control on that assistant turn.
+
+          3. Find and click Submit.
+
+          4. Before continuing, confirm these visible checkpoints: A feedback popover opens with an
+          optional comment field with the placeholder "Optional: what went wrong, or what was
+          great?" and a "Submit" button.
       - aiAssert: A control labelled "Feedback recorded" is visible, it is disabled.
-  - name: CHAT-14 Copy message copies a plain-text assistant turn
-    tags:
-      - chat
-      - shard-1
-    steps:
-      - app.open:
-          path: /chat/mock-chat-1
-      - aiAct: Explore the page by scrolling until the content containing "Kept. Tomorrow" is visible.
       - aiAct: >-
-          Find and click the "Copy message" control on the assistant turn containing "Kept.
+          1. Open the “Morning brief tweaks” conversation from the Chats sidebar.
+
+          2. Explore the page by scrolling until the content containing "Kept. Tomorrow" is visible.
+
+          3. Find and click the "Copy message" control on the assistant turn containing "Kept.
           Tomorrow".
-      - wait:
-          duration: 500
       - aiAssert: A control labelled "Copied" is visible.

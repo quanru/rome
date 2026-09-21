@@ -1,5 +1,5 @@
 cases:
-  - name: SET-01 Settings redirect to Appearance and expose all six tabs
+  - name: SET-01 Navigate Settings and switch appearance mode
     tags:
       - settings
       - shard-5
@@ -7,8 +7,8 @@ cases:
       - app.open:
           path: /settings
       - aiAct: >-
-          Open Connections from the Settings navigation, then return to Appearance without changing
-          any setting.
+          1. Open Connections from the Settings navigation, then return to Appearance without
+          changing any setting.
       - app.expectUrl:
           path: /settings/appearance
       - aiAssert: >-
@@ -16,21 +16,15 @@ cases:
           are visible in this order: "Appearance", "Connections", "Channels", "AI Tools", "Favors",
           and "Advanced". The Appearance section shows the rows "Language", "Theme", and "Appearance
           mode", with the controls currently set to English, Ember, and System. (The Light and Dark
-          alternatives live inside the closed "Appearance mode" select and are exercised in SET-02.)
-  - name: SET-02 Appearance mode switches to Dark instantly
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/appearance
-      - aiAct: Open the "Appearance mode" select and choose "Dark".
-      - wait:
-          duration: 600
+          alternatives live inside the closed "Appearance mode" select and are exercised later in
+          this journey.)
+      - aiAct: |-
+          1. Open Settings and select Appearance.
+          2. Open the "Appearance mode" select and choose "Dark".
       - aiAssert: >-
           The whole settings UI immediately renders with a dark background and light text (dark mode
           is applied without a save button or reload).
-  - name: SET-03 Connections list shows the nine fixture connections
+  - name: SET-02 Inspect connections, disconnect a grant, and add an app key
     tags:
       - settings
       - shard-5
@@ -38,114 +32,87 @@ cases:
       - app.open:
           path: /settings/connections
       - aiAct: >-
-          Explore the page by scrolling until the content containing "Every channel and service" is
-          visible.
-      - wait:
-          duration: 400
+          1. Explore the page by scrolling until the content containing "Every channel and service"
+          is visible.
       - aiAssert: >-
           the visible interface contains "Every channel and service your agent can use, in one
           place.", "Telegram", "WhatsApp", "WeChat", "LinkedIn", "Discord", "Email", "Feishu",
-          "GitHub", "Composio", "Connected", "App keys", "1 key".
-      - aiAssert: >-
-          The "Connections" section is shown with service rows marked "Connected", beginning with
-          Telegram and WhatsApp.
-  - name: SET-04 Disconnecting a connection grant updates the card until refresh
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/connections
+          "GitHub", "Composio", "Connected", "App keys", "1 key". The "Connections" section is shown
+          with service rows marked "Connected", beginning with Telegram and WhatsApp.
       - aiAct: >-
-          Explore the page by scrolling until the content containing "Every channel and service" is
-          visible.
-      - aiAct: Find the visible control labelled "Open GitHub" and click it.
-      - wait:
-          duration: 800
-      - aiAssert: >-
-          A GitHub connection detail dialog is open. It shows "GitHub" with a "Connected" state and
-          the demo account "Rome Demo" (rome-demo), describes the repositories/issues/pull-requests
-          capabilities, and offers a "Disconnect" action.
-      - aiAct: Find and click the "Disconnect" button in the GitHub dialog.
-      - wait:
-          duration: 1000
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Explore the page by scrolling until the content containing "Every channel and service"
+          is visible.
+
+          3. Find the visible control labelled "Open GitHub" and click it.
+
+          4. Find and click the "Disconnect" button in the GitHub dialog.
+
+          5. Before continuing, confirm these visible checkpoints: A GitHub connection detail dialog
+          is open. It shows "GitHub" with a "Connected" state and the demo account "Rome Demo"
+          (rome-demo), describes the repositories/issues/pull-requests capabilities, and offers a
+          "Disconnect" action.
       - aiAssert: >-
           The grant is revoked in memory: the GitHub section now presents a not-connected state with
           a "Connect" affordance instead of the connected identity.
-  - name: SET-05 App keys add flow validates input and saves successfully
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/connections/app-keys
+      - aiAct: >-
+          1. From Connections, open App keys.
+
+          2. Find and click Add key.
+
+          3. Find the field identified by "e.g. SHOP_DB_PASSWORD", enter text with
+          "SHOP_DB_PASSWORD".
+
+          4. Find the visible control labelled "Save for all apps" and click it.
+
+          5. Find the field identified by "Secret value", enter text with "demo-secret-123".
+
+          6. Find the visible control labelled "Save for all apps" and click it.
+
+          7. Before continuing, confirm these visible checkpoints: The App keys page shows the
+          heading "App keys" and an existing key labeled "Demo service API key", plus an "Add key"
+          button. A "New key" form is shown with a "Name apps use" field, a "Secret value" field,
+          the warning "Any app installed on your Rome will be able to read this.", and a "Save for
+          all apps" button. the visible interface contains "Enter the secret value.".
       - aiAssert: >-
-          The App keys page shows the heading "App keys" and an existing key labeled "Demo service
-          API key", plus an "Add key" button.
-      - aiAct: Find and click Add key.
-      - wait:
-          duration: 500
-      - aiAssert: >-
-          A "New key" form is shown with a "Name apps use" field, a "Secret value" field, the
-          warning "Any app installed on your Rome will be able to read this.", and a "Save for all
-          apps" button.
-      - aiAct: Find the field identified by "e.g. SHOP_DB_PASSWORD", enter text with "SHOP_DB_PASSWORD".
-      - aiAct: Find the visible control labelled "Save for all apps" and click it.
-      - wait:
-          duration: 700
-      - aiAssert: the visible interface contains "Enter the secret value.".
-      - aiAct: Find the field identified by "Secret value", enter text with "demo-secret-123".
-      - aiAct: Find the visible control labelled "Save for all apps" and click it.
-      - wait:
-          duration: 1000
-      - aiAssert: the visible interface contains "Saved. Apps can now read SHOP_DB_PASSWORD.".
-      - aiAssert: the visible interface contains "SHOP_DB_PASSWORD".
-  - name: SET-06 Channels page lists conversation activation cards
+          the visible interface contains "Saved. Apps can now read SHOP_DB_PASSWORD.". the visible
+          interface contains "SHOP_DB_PASSWORD".
+  - name: SET-03 Inspect channel activation and log out an AI tool
     tags:
       - settings
       - shard-5
     steps:
       - app.open:
           path: /settings/channels
-      - wait:
-          duration: 800
-      - aiAssert: >-
-          the visible interface contains "All connections", "Any status", "Rome / can you see active
-          chats?", "Ray".
-      - aiAssert: >-
-          The Channels tab shows the "All connections" and "Any status" filters, and a group
-          conversation card titled "Rome / can you see active chats?" marked as a Discord group that
-          is currently Online, with the "Rome in this conversation" activation switch turned on.
-      - aiAct: Find and click the "Rome / can you see active chats?" conversation card.
-      - wait:
-          duration: 1000
+      - aiAct: >-
+          1. Find and click the "Rome / can you see active chats?" conversation card.
+
+          2. Before continuing, confirm these visible checkpoints: the visible interface contains
+          "All connections", "Any status", "Rome / can you see active chats?", "Ray". The Channels
+          tab shows the "All connections" and "Any status" filters, and a group conversation card
+          titled "Rome / can you see active chats?" marked as a Discord group that is currently
+          Online, with the "Rome in this conversation" activation switch turned on.
       - aiAssert: >-
           The card's configuration sections are shown, including an "Activation" section ("Rome in
           this conversation"), a "Respond" policy set to "Only when mentioned", and "Reply
           placement" options ("Native thread", "Inline").
-  - name: SET-07 AI Tools shows Claude connected with usage and supports logout
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/ai-tools
-      - aiAssert: >-
-          The AI Tools tab shows the heading "AI Tools" with a "Refresh" action. The Claude provider
-          card shows a "Connected" state, "Signed in with claude.ai" with "Account type: Max", an
-          "API Key" control, a "Log Out" action, and usage windows labeled "5H USED" and "7D USED".
-          The ChatGPT provider card shows "Not connected".
-      - aiAct: Find and click the "Log Out" button on the Claude card.
-      - wait:
-          duration: 600
-      - aiAssert: >-
-          A confirmation dialog titled "Log out of Claude?" explains that it "Signs out on this
-          server only." and offers "Cancel" and "Log Out".
-      - aiAct: Find and click the confirm "Log out" button in the dialog.
-      - wait:
-          duration: 1000
+      - aiAct: >-
+          1. Open Settings and select AI Tools.
+
+          2. Find and click the "Log Out" button on the Claude card.
+
+          3. Find and click the confirm "Log out" button in the dialog.
+
+          4. Before continuing, confirm these visible checkpoints: The AI Tools tab shows the
+          heading "AI Tools" with a "Refresh" action. The Claude provider card shows a "Connected"
+          state, "Signed in with claude.ai" with "Account type: Max", an "API Key" control, a "Log
+          Out" action, and usage windows labeled "5H USED" and "7D USED". The ChatGPT provider card
+          shows "Not connected". A confirmation dialog titled "Log out of Claude?" explains that it
+          "Signs out on this server only." and offers "Cancel" and "Log Out".
       - aiAssert: The Claude card switches to a "Not connected" state with a "Log In" button.
-  - name: SET-08 Favors page renders balance, pending decision and ledger
+  - name: SET-04 Review favors and advanced settings, then persist access controls
     tags:
       - settings
       - shard-5
@@ -153,79 +120,61 @@ cases:
       - app.open:
           path: /settings/favors
       - aiAct: >-
-          Explore the pending payment decision and the Ledger by scrolling through the Favors page,
-          without paying or declining anything.
+          1. Explore the pending payment decision and the Ledger by scrolling through the Favors
+          page, without paying or declining anything.
       - aiAssert: >-
           The Favors tab shows the heading "Favors" and the description about balance, payments, and
-          paid app actions. Balance / Earned / Spent summary cards are visible.
-      - aiAssert: >-
-          The "Awaiting your payment decision" section lists one pending "place_grocery_order"
-          request for 120 favors with "Pay" and "Decline" buttons. A "Paid action requests" section
-          and a "Ledger" section are also rendered.
-  - name: SET-09 Advanced page exposes access control, computer use and developer toggles
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/advanced
-      - aiAssert: >-
-          The Advanced tab shows the heading "Advanced Settings". Near the top, an "Access Control"
-          section contains an "Allowed emails" group listing partner@example.com and
-          sitter@example.com with an add input, alongside a "System" section with a "Check for
-          updates" action.
-      - aiAssert: the visible interface contains "Couldn't load version info.", "Retry".
-      - aiAct: Explore the page by scrolling until the content containing "Computer Use" is visible.
-      - wait:
-          duration: 500
+          paid app actions. Balance / Earned / Spent summary cards are visible. The "Awaiting your
+          payment decision" section lists one pending "place_grocery_order" request for 120 favors
+          with "Pay" and "Decline" buttons. A "Paid action requests" section and a "Ledger" section
+          are also rendered.
+      - aiAct: >-
+          1. Open Settings and select Advanced.
+
+          2. Explore the page by scrolling until the content containing "Computer Use" is visible.
+
+          3. Before continuing, confirm these visible checkpoints: The Advanced tab shows the
+          heading "Advanced Settings". Near the top, an "Access Control" section contains an
+          "Allowed emails" group listing partner@example.com and sitter@example.com with an add
+          input, alongside a "System" section with a "Check for updates" action. the visible
+          interface contains "Couldn't load version info.", "Retry".
       - aiAssert: >-
           The "Computer Use" section lists OpenCLI at "v1.8.8" / "Running" and "Rome browser" as
           "Connected" (Profile rome-browser), plus a disconnected "Mac Chrome" row. Below it, a
           "Presentation mode" toggle carries the "Mask agent identity in chat" browser-only
-          description.
+          description. A collapsed "Developer Settings" disclosure is visible below the Computer Use
+          section.
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the field identified by "Add email address", enter text with
+          "neighbour@example.com".
+
+          3. Find the visible control labelled "Add" and click it.
+
+          4. Before continuing, confirm these visible checkpoints: The Access Control allowed-emails
+          field lists partner@example.com and sitter@example.com.
       - aiAssert: >-
-          A collapsed "Developer Settings" disclosure is visible below the Computer Use section.
-  - name: SET-10 Adding an allowed dashboard email saves and toasts
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/advanced
-      - aiAssert: The Access Control allowed-emails field lists partner@example.com and sitter@example.com.
-      - aiAct: Find the field identified by "Add email address", enter text with "neighbour@example.com".
-      - aiAct: Find the visible control labelled "Add" and click it.
-      - aiAssert: the visible interface contains "Allowed emails saved".
-      - aiAssert: the visible interface contains "neighbour@example.com".
-  - name: SET-11 Developer toggles save via PUT /api/settings and persist across navigation
-    tags:
-      - settings
-      - shard-5
-    steps:
-      - app.open:
-          path: /settings/advanced
-      - wait:
-          duration: 1200
-      - aiAct: Find the visible control labelled "Developer Settings" and click it.
-      - wait:
-          duration: 600
-      - aiAssert: A switch labelled "Show Claude and ChatGPT usage" is visible, it is selected.
-      - aiAct: Find the visible control labelled "Show Claude and ChatGPT usage" and click it.
-      - wait:
-          duration: 700
-      - aiAssert: A switch labelled "Show Claude and ChatGPT usage" is visible, it is not selected.
-      - aiAssert: the visible interface contains "Settings saved".
-      - aiAct: Find the visible control labelled "Connections" and click it.
-      - app.expectUrl:
-          path: /settings/connections
-      - wait:
-          duration: 800
-      - aiAct: Find the visible control labelled "Advanced" and click it.
-      - app.expectUrl:
-          path: /settings/advanced
-      - wait:
-          duration: 1000
-      - aiAct: Find the visible control labelled "Developer Settings" and click it.
-      - wait:
-          duration: 600
+          the visible interface contains "Allowed emails saved". the visible interface contains
+          "neighbour@example.com".
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Find the visible control labelled "Developer Settings" and click it.
+
+          3. Find the visible control labelled "Show Claude and ChatGPT usage" and click it.
+
+          4. Find the visible control labelled "Connections" and click it.
+
+          5. Find the visible control labelled "Advanced" and click it.
+
+          6. Find the visible control labelled "Developer Settings" and click it.
+
+          7. Before continuing, confirm these visible checkpoints: A switch labelled "Show Claude
+          and ChatGPT usage" is visible, it is selected. A switch labelled "Show Claude and ChatGPT
+          usage" is visible, it is not selected. the visible interface contains "Settings saved".
+          the application reaches route /settings/connections the application reaches route
+          /settings/advanced
       - aiAssert: A switch labelled "Show Claude and ChatGPT usage" is visible, it is not selected.

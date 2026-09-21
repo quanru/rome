@@ -1,5 +1,5 @@
 cases:
-  - name: E2E-01 Turn on a routine proposed in chat and verify it lands in Routines
+  - name: E2E-01 Enable a proposed routine and verify it across Chat and Routines
     tags:
       - poc
       - story
@@ -8,27 +8,25 @@ cases:
     steps:
       - app.open:
           path: /chat/mock-chat-3
+      - aiAct: >-
+          In the open "Weekly planning" conversation, find the "Scheduled routine" proposal for
+          "Every Monday at 9:00 AM, list anything that has stalled and nudge me." and turn it on.
+          Finish when the proposal visibly shows that the routine is enabled.
       - aiAssert: >-
-          The conversation "Weekly planning" is open. In the agent's latest reply there is a
-          "Scheduled routine" proposal card. It says "Every Monday at 9:00 AM, list anything that
-          has stalled and nudge me." and the card has a "Turn it on" button. The card is not
-          switched on yet (no "On" badge).
-      - aiAct: Find and click Turn it on.
-      - aiAssert: >-
-          The routine card now shows a green "On" badge and the footer "Saved. Next time it matches,
-          Rome will run it within a minute. Manage it in Routines." There is no "Turn it on" button
-          anymore.
-      - aiAct: Find and click the Routines entry in the left app navigation sidebar.
+          The routine proposal card shows a green "On" badge and the footer "Saved. Next time it
+          matches, Rome will run it within a minute. Manage it in Routines." There is no "Turn it
+          on" button anymore.
+      - aiAct: >-
+          Open Routines from the left app navigation and find the newly enabled weekly stall check.
       - app.expectUrl:
           path: /routines
       - aiAssert: >-
-          The Routines page lists a routine named "Weekly stall check". It is enabled/active (its
-          toggle is switched on), and the active routines count includes it.
-      - aiAct: Return to the previous page using normal browser navigation.
+          The Routines page lists "Weekly stall check" as enabled, and the active routines count
+          includes it.
+      - aiAct: >-
+          Return to the previous page using normal browser navigation.
       - app.expectUrl:
           path: /chat/mock-chat-3
-      - wait:
-          duration: 2000
       - aiAssert: >-
-          Back in the conversation, the same routine proposal card still shows the "On" badge and no
-          "Turn it on" button.
+          Back in the "Weekly planning" conversation, the same routine proposal card still shows
+          the "On" badge and no "Turn it on" button.

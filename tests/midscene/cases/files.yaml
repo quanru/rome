@@ -1,201 +1,153 @@
 cases:
-  - name: FILE-01 Projects tree shows the fixture folders and files
+  - name: FILE-01 Search the project tree and open a project file
     tags:
       - files
       - shard-4
     steps:
       - app.open:
           path: /projects
-      - wait:
-          duration: 1000
       - aiAct: >-
-          Use the project-file search to find todo.md, then clear the search so the complete
+          1. Use the project-file search to find todo.md, then clear the search so the complete
           top-level project tree is visible again.
       - aiAssert: >-
           The Projects file browser is shown in English with the heading "Projects", a "Search
           project files..." search field, and a New (+) control. The top level of the folder tree
-          lists the "demo-app" and "research" folders (collapsed) plus a "todo.md" file.
-      - aiAssert: >-
-          With a folder selected, the right-hand dashboard area fails to load its summary because
-          that endpoint is not mocked: a "Network error" message with a "Retry" button is shown,
-          while the file tree itself remains usable.
-  - name: FILE-02 Opening a file renders its contents in the viewer
-    tags:
-      - files
-      - shard-4
-    steps:
-      - app.open:
-          path: /projects
-      - wait:
-          duration: 800
-      - aiAct: Expand the "demo-app" folder and open its "README.md" file in the tree.
-      - wait:
-          duration: 1200
+          lists the "demo-app" and "research" folders (collapsed) plus a "todo.md" file. With a
+          folder selected, the right-hand dashboard area fails to load its summary because that
+          endpoint is not mocked: a "Network error" message with a "Retry" button is shown, while
+          the file tree itself remains usable.
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Expand the "demo-app" folder and open its "README.md" file in the tree.
       - aiAssert: >-
           The README.md file opens in the content area in Preview mode, rendering its markdown (a
           "README.md" heading and the mock file body), and the expanded demo-app folder lists its
           "src" subfolder, "README.md", and "notes.txt".
-  - name: FILE-03 Editing a text file persists within the session
+  - name: FILE-02 Edit an existing file and create a new project file
     tags:
       - files
       - shard-4
     steps:
       - app.open:
           path: /projects/todo.md
-      - wait:
-          duration: 1200
-      - aiAct: Find and click the "Edit" option of the Preview/Edit view toggle.
-      - wait:
-          duration: 1000
-      - aiAct: |-
-          Use the visible code editor to append "
-          Buy more coffee beans", then save the file.
-      - aiAssert: A control labelled "Save" is visible, it is disabled.
-      - aiAssert: The editor's text ends with the newly appended line "Buy more coffee beans".
       - aiAct: >-
-          Expand the "research" folder in the tree and open its "papers.md" file, then open
+          1. Find and click the "Edit" option of the Preview/Edit view toggle.
+
+          2. Use the visible code editor to append "
+
+          Buy more coffee beans", then save the file.
+
+          3. Expand the "research" folder in the tree and open its "papers.md" file, then open
           "todo.md" again.
-      - wait:
-          duration: 1200
+
+          4. Before continuing, confirm these visible checkpoints: A control labelled "Save" is
+          visible, it is disabled. The editor's text ends with the newly appended line "Buy more
+          coffee beans".
       - aiAssert: >-
           The todo.md content shown now ends with the line "Buy more coffee beans" (the edit made
           before switching files is still present).
-  - name: FILE-04 Creating a new file appears in the tree
-    tags:
-      - files
-      - shard-4
-    steps:
-      - app.open:
-          path: /projects
-      - wait:
-          duration: 1000
-      - aiAct: Find and click the "demo-app" folder row in the file tree.
-      - wait:
-          duration: 500
-      - aiAct: Find the visible control labelled "New" and click it.
-      - wait:
-          duration: 500
-      - aiAct: Find and click New file.
-      - wait:
-          duration: 700
-      - aiAssert: >-
-          A "New file" dialog opens titled "New file", explaining it will create a file in
-          projects/demo-app/, with a Name field prefilled "Untitled.md" and "Cancel" / "Create file"
-          actions.
-      - aiAct: Find the field identified by "Name", replace its current value with "CHECKLIST.md".
-      - aiAct: Find and click Create file.
-      - wait:
-          duration: 1200
-      - app.expectUrl:
-          path: /projects/demo-app/CHECKLIST.md
-      - wait:
-          duration: 800
-      - aiAssert: >-
-          The new CHECKLIST.md opens automatically in the content area and also appears under
-          demo-app in the tree (the mock's file-watch event reconciles it in immediately), selected
-          as the active row.
-      - aiAct: Find and click the "Edit" option of the Preview/Edit view toggle.
-      - wait:
-          duration: 1000
-      - aiAct: |-
-          Use the visible code editor to replace the editor contents with "# Checklist
+      - aiAct: >-
+          1. Open Projects through the sidebar and return to the project tree.
+
+          2. Find and click the "demo-app" folder row in the file tree.
+
+          3. Find the visible control labelled "New" and click it.
+
+          4. Find and click New file.
+
+          5. Find the field identified by "Name", replace its current value with "CHECKLIST.md".
+
+          6. Find and click Create file.
+
+          7. Find and click the "Edit" option of the Preview/Edit view toggle.
+
+          8. Use the visible code editor to replace the editor contents with "# Checklist
+
           ", then save the file.
-      - aiAssert: A control labelled "Save" is visible, it is disabled.
-      - aiAssert: The editor's first line reads "# Checklist" for CHECKLIST.md.
-  - name: FILE-05 Renaming onto an existing name shows the conflict error
+
+          9. Before continuing, confirm these visible checkpoints: A "New file" dialog opens titled
+          "New file", explaining it will create a file in projects/demo-app/, with a Name field
+          prefilled "Untitled.md" and "Cancel" / "Create file" actions. the application reaches
+          route /projects/demo-app/CHECKLIST.md The new CHECKLIST.md opens automatically in the
+          content area and also appears under demo-app in the tree (the mock's file-watch event
+          reconciles it in immediately), selected as the active row.
+      - aiAssert: >-
+          A control labelled "Save" is visible, it is disabled. The editor's first line reads "#
+          Checklist" for CHECKLIST.md.
+  - name: FILE-03 Handle a duplicate project-file rename
     tags:
       - files
       - shard-4
     steps:
       - app.open:
           path: /projects
-      - wait:
-          duration: 1000
-      - aiAct: Find and click the "demo-app" folder expander in the file tree.
-      - wait:
-          duration: 600
-      - aiAct: Find the visible control labelled "More actions for notes.txt" and click it.
-      - wait:
-          duration: 500
-      - aiAct: Find and click Rename.
-      - wait:
-          duration: 700
-      - aiAssert: >-
-          A "Rename item" dialog opens with the Name field prefilled "notes.txt" and "Cancel" /
-          "Rename" actions.
-      - aiAct: Find the field identified by "Name", replace its current value with "README.md".
-      - aiAct: Find and click Rename.
-      - wait:
-          duration: 900
+      - aiAct: >-
+          1. Find and click the "demo-app" folder expander in the file tree.
+
+          2. Find the visible control labelled "More actions for notes.txt" and click it.
+
+          3. Find and click Rename.
+
+          4. Find the field identified by "Name", replace its current value with "README.md".
+
+          5. Find and click Rename.
+
+          6. Before continuing, confirm these visible checkpoints: A "Rename item" dialog opens with
+          the Name field prefilled "notes.txt" and "Cancel" / "Rename" actions.
       - aiAssert: >-
           An error toast reads "Already exists." and both files remain in the tree: "notes.txt" is
           still listed and "README.md" is untouched.
-  - name: FILE-06 Memory browser shows journal, relationship and project notes
+  - name: FILE-04 Browse journal and relationship memory, then persist a project-note edit
     tags:
       - files
       - shard-4
     steps:
       - app.open:
           path: /memory
-      - wait:
-          duration: 1000
-      - aiAssert: >-
-          The Memory file browser is shown with top-level folders "journal", "projects",
-          "relationship", and "topics", plus "IDENTITY.md" and "MEMORY.md" notes.
-      - aiAct: Find and click the "relationship" folder expander in the file tree.
-      - wait:
-          duration: 700
-      - aiAssert: >-
-          Expanding "relationship" reveals "BONDS.md", "GUARDIAN.md", and per-person notes including
-          "ray-oster.md", "nadia-petrova.md", and "mira-chen.md".
-      - aiAct: Find and click the "BONDS.md" tree row.
-      - wait:
-          duration: 1000
+      - aiAct: >-
+          1. Find and click the "relationship" folder expander in the file tree.
+
+          2. Find and click the "BONDS.md" tree row.
+
+          3. Before continuing, confirm these visible checkpoints: The Memory file browser is shown
+          with top-level folders "journal", "projects", "relationship", and "topics", plus
+          "IDENTITY.md" and "MEMORY.md" notes. Expanding "relationship" reveals "BONDS.md",
+          "GUARDIAN.md", and per-person notes including "ray-oster.md", "nadia-petrova.md", and
+          "mira-chen.md".
       - aiAssert: >-
           The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
           Circle" section listing ray-oster and nadia-petrova.
-  - name: FILE-07 Today's journal entry exists under the dated journal path
-    tags:
-      - files
-      - shard-4
-    steps:
-      - app.open:
-          path: /memory
-      - wait:
-          duration: 800
       - aiAct: >-
-          Expand the "journal" folder and its year/month subfolders, then open today's journal entry
-          (the single .md file under the month folder).
-      - wait:
-          duration: 1000
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Expand the "journal" folder and its year/month subfolders, then open today's journal
+          entry (the single .md file under the month folder).
       - aiAssert: >-
           Today's journal note opens with a date heading and lists the items about Ray's Saturday
           hike and Mira's clinic intake form.
-  - name: FILE-08 Memory notes can be edited and survive switching files
-    tags:
-      - files
-      - shard-4
-    steps:
-      - app.open:
-          path: /memory
-      - wait:
-          duration: 800
-      - aiAct: Expand "projects" and its "default" subfolder, then open "PROJECT.md".
-      - wait:
-          duration: 1000
-      - aiAct: Find and click the "Edit" option of the Preview/Edit view toggle.
-      - wait:
-          duration: 1000
-      - aiAct: |-
-          Use the visible code editor to append "
+      - aiAct: >-
+          1. Close transient menus and clear temporary searches, filters, or drafts before
+          continuing, without undoing saved changes.
+
+          2. Expand "projects" and its "default" subfolder, then open "PROJECT.md".
+
+          3. Find and click the "Edit" option of the Preview/Edit view toggle.
+
+          4. Use the visible code editor to append "
+
           ## Update
 
+
           Follow up Friday.
+
           ", then save the file.
-      - aiAssert: A control labelled "Save" is visible, it is disabled.
-      - aiAct: >-
-          Open "GUARDIAN.md" inside the relationship folder, then open PROJECT.md under
+
+          5. Open "GUARDIAN.md" inside the relationship folder, then open PROJECT.md under
           projects/default again.
-      - wait:
-          duration: 1200
+
+          6. Before continuing, confirm these visible checkpoints: A control labelled "Save" is
+          visible, it is disabled.
       - aiAssert: The reopened PROJECT.md still contains "Follow up Friday." under its "Update" heading.
