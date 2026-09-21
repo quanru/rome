@@ -21,6 +21,34 @@ const loaded = await loadTestProject(configPath);
 let fileCount = 0;
 let caseCount = 0;
 const failures = [];
+const atomicAiNode = /^ai(?:Tap|Scroll|Input|Hover|Keyboard)/;
+const infrastructureNodes = new Set([
+  "app.open",
+  "app.reload",
+  "app.expectUrl",
+]);
+
+const validateAiNativeCase = (testCase) => {
+  const nodes = testCase.definition.steps.map((step) => step.node);
+  const problems = [];
+
+  if (nodes[0] !== "app.open") problems.push("the first step must be app.open");
+  if (!nodes.includes("aiAct")) problems.push("at least one aiAct is required");
+  if (!nodes.includes("aiAssert")) problems.push("at least one aiAssert is required");
+
+  const forbidden = nodes.filter(
+    (node) =>
+      atomicAiNode.test(node) ||
+      (node.startsWith("app.") && !infrastructureNodes.has(node)),
+  );
+  if (forbidden.length > 0) {
+    problems.push(`use aiAct instead of ${[...new Set(forbidden)].join(", ")}`);
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`${testCase.definition.name}: ${problems.join("; ")}`);
+  }
+};
 
 for (const project of loaded.projects) {
   const selection = project.files ?? DEFAULT_TEST_FILE_SELECTION;
@@ -46,6 +74,7 @@ for (const project of loaded.projects) {
           env: process.env,
         },
       );
+      for (const testCase of document.cases) validateAiNativeCase(testCase);
       caseCount += document.cases.length;
     } catch (error) {
       failures.push({ sourcePath, error });

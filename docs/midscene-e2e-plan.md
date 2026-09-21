@@ -1,11 +1,11 @@
-# Rome Midscene E2E Plan
+# Rome Midscene AI-Native E2E Plan
 
 > Onboarding attachment for Rome maintainers.
 >
-> Status: all 91 cases catalogued in section 5 are landed as YAML under
-> `tests/midscene/cases/`, split across 6 CI shards (14/15/14/20/17/11), and
-> pass **91/91 locally in mock mode** (including the PoC stories AUTH-01 and
-> E2E-01/02/03).
+> Status: all 91 cases catalogued in section 5 are defined as AI-native YAML
+> workflows under `tests/midscene/cases/`. Six CI shards split them
+> 14/15/14/20/17/11. Each case uses `aiAct` for interaction and `aiAssert` for
+> its visible outcome.
 
 ## 1. Background and Goals
 
@@ -32,7 +32,7 @@ real accounts and no external side effects, and is reproducible on a fork PR.
 
 Goals:
 
-- Establish a **long-lived guard** visual E2E baseline for Rome's core product
+- Establish a long-lived AI-native E2E baseline for Rome's core product
   stories.
 - Serve as a reference implementation for offering Midscene CI to open-source
   projects (deterministic fixtures + visual-semantic assertions + sharded CI).
@@ -77,14 +77,16 @@ GitHub Actions (6 shards)
   Projects by default; other entries live behind the "all apps" popover. Cases
   write `rome-sidebar-pins` (the shell's own localStorage contract) so every
   built-in entry is expanded and cross-page sidebar clicks are deterministic.
-- **Layered AI and deterministic nodes**: mechanical operations (navigation,
-  URLs, scrolling) use the custom Playwright nodes; only visual-semantic
-  judgments go to `aiTap`/`aiAssert`, which cuts both runtime and flakiness.
+- **AI-native interaction**: `aiAct` performs navigation, typing, scrolling,
+  menu selection, and other user actions from a goal. `aiAssert` checks visible
+  outcomes. Deterministic nodes handle setup and local debugging only.
 - **Env-driven selection**: `MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
 
-The custom nodes (full list and parameters in `midscene-node-reference.md`):
+The harness registers custom nodes for setup and local debugging. Committed
+cases use `app.open` and may use `app.expectUrl` when the browser address is not
+visible to the model. The full list remains in `midscene-node-reference.md`.
 
 | Node | Purpose |
 | --- | --- |
@@ -184,7 +186,7 @@ reasons behind them.
   minutes); its log is uploaded as an artifact on failure.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
   every case carries exactly one `shard-N` tag. `fail-fast: false`,
-  `max-parallel: 6`, a 45-minute per-job timeout, and 2 case-level retries.
+  `max-parallel: 2`, a 45-minute per-job timeout, and 2 case-level retries.
 - **Evidence**: every shard always uploads the `midscene_run/` and
   `.midscene/` report artifacts (14-day retention); the mock server log is
   attached on failure.
@@ -467,17 +469,16 @@ MIDSCENE_INCLUDE_TAGS=poc npm test   # PoC stories only
 
 ## 8. Authoring and Maintenance Conventions
 
-1. Every case starts with `app.open`; use `app.reload` only to test "after
-   refresh" behavior. For cross-page linkage use `aiTap` on the sidebar plus
-   `app.goBack` (which keeps in-memory state).
-2. Mechanical operations (navigation/URL/scrolling/same-name links) always use
-   custom nodes; reserve AI nodes for visual semantics. AI assertions quote
-   the English UI copy and state element presence/absence explicitly (e.g.
-   "the button is gone").
-3. Parameter-less custom nodes are written `app.goBack: {}` in YAML.
-4. A case carries exactly one `shard-N` tag; functional tags
-   (chat/routines/…) are added as needed.
-5. New cases must pass repeatedly in a fresh context; inter-case dependencies
+1. Every case starts with `app.open`. Use `app.reload` only to test refresh
+   behavior.
+2. Every case contains at least one `aiAct` and one `aiAssert`. The collection
+   check rejects atomic AI nodes and operational `app.*` nodes.
+3. Write each `aiAct` as a user goal. Combine related clicks, typing,
+   scrolling, and navigation when they serve one intent.
+4. Write `aiAssert` prompts against visible outcomes and stable product text.
+5. A case carries exactly one `shard-N` tag. Add functional tags such as
+   `chat` or `routines` as needed.
+6. New cases must pass repeatedly in a fresh context. Inter-case dependencies
    are forbidden.
-6. When fixtures change, update case assertions in lockstep; when a new product
+7. When fixtures change, update case assertions in lockstep. When a new product
    capability is added, add the mock handler before the ⚠️ case.

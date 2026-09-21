@@ -1,38 +1,36 @@
 cases:
-  - name: >-
-      E2E-02 Approve the send_message card in chat and verify the Activity feed
-    tags: [poc, story, activity, shard-3]
+  - name: E2E-02 Approve the send_message card in chat and verify the Activity feed
+    tags:
+      - poc
+      - story
+      - activity
+      - shard-3
     steps:
-      - app.open: { path: /chat/mock-chat-4 }
+      - app.open:
+          path: /chat/mock-chat-4
       - aiAssert: >-
-          The conversation "Plumber for the leak" is open. A yellow approval
-          card titled "Guardian approval needed" shows a "Pending approval"
-          badge. It previews an outbound telegram message saying
-          "The plumber is booked for Thursday 9am — does that still work for
-          you?" and gives two buttons: "Reject" and "Approve".
-      - aiTap: Approve
+          The conversation "Plumber for the leak" is open. A yellow approval card titled "Guardian
+          approval needed" shows a "Pending approval" badge. It previews an outbound telegram
+          message saying "The plumber is booked for Thursday 9am — does that still work for you?"
+          and gives two buttons: "Reject" and "Approve".
+      - aiAct: Find and click Approve.
       - aiAssert: >-
-          The card resolves successfully: the badge reads "Approved & done",
-          the buttons are gone, and the green footer says
-          "✓ Action approved and executed successfully."
-      # The approval card and the Activity page resolve against the same mock
-      # row, so client-side navigation shows the resolution there immediately.
-      - aiTap: the Activity entry in the left app navigation sidebar
-      - app.expectUrl: { path: /activity }
+          The card resolves successfully: the badge reads "Approved & done", the buttons are gone,
+          and the green footer says "✓ Action approved and executed successfully."
+      - aiAct: Find and click the Activity entry in the left app navigation sidebar.
+      - app.expectUrl:
+          path: /activity
       - aiAssert: >-
-          The yellow pending-approvals banner at the top says exactly
-          "3 pending approvals requiring review" (the send_message row is no
-          longer counted as pending).
-      - aiTap: Approved
+          The yellow pending-approvals banner at the top says exactly "3 pending approvals requiring
+          review" (the send_message row is no longer counted as pending).
+      - aiAct: Find and click Approved.
       - aiAssert: >-
-          With the "Approved" filter active, the feed lists the approval whose
-          description is 'Action "send_message" requires guardian approval'.
-          Its status pill reads "Executed" and the row offers no Approve or
-          Reject buttons (the place_order row may also be present, but the
-          send_message row is terminal).
-      - aiTap: the "Payload" disclosure on the send_message approval row
+          With the "Approved" filter active, the feed lists the approval whose description is
+          'Action "send_message" requires guardian approval'. Its status pill reads "Executed" and
+          the row offers no Approve or Reject buttons (the place_order row may also be present, but
+          the send_message row is terminal).
+      - aiAct: Find and click the "Payload" disclosure on the send_message approval row.
       - aiAssert: >-
-          The expanded payload JSON for the send_message approval shows
-          "person": "Ray", "channel": "telegram", and the message text
-          "The plumber is booked for Thursday 9am — does that still work for
-          you?".
+          The expanded payload JSON for the send_message approval shows "person": "Ray", "channel":
+          "telegram", and the message text "The plumber is booked for Thursday 9am — does that still
+          work for you?".

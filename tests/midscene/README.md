@@ -23,8 +23,11 @@ PRs.
     Chinese CI machine);
   - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
     pins only Apps/Chat/Projects by default).
-- Alongside Midscene's built-in AI nodes (`aiTap`/`aiAssert`/`aiAct`/`wait`,
-  etc.), this package registers 15 deterministic nodes:
+- Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
+  visible outcomes. `app.open` provides the isolated starting route, and
+  `wait` covers fixed mock settling time.
+- The package also registers deterministic nodes for harness setup and focused
+  debugging:
   `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,
   `app.clickContentLink`, `app.clickByLabel`, `app.expectControl`,
   `app.expectMenuItem`, `app.expectTexts`, `app.expectDom`, `app.monacoEdit`,
@@ -106,64 +109,23 @@ HEADLESS=false npm test
 
 ## Authoring Conventions
 
-1. **Every case starts with `app.open`** to guarantee fixture reset; use
-   `app.reload` only when verifying "after refresh" behavior.
-2. Prefer deterministic nodes for navigation/scrolling/URL assertions; reserve
-   `aiTap`/`aiAssert` for visual-semantic judgments.
-3. `aiAssert` copy quotes the actual English UI text and describes structure
-   explicitly (presence/absence of cards, badges, buttons).
-4. Parameter-less custom nodes must be written as `app.goBack: {}` in YAML;
-   otherwise they parse as scalars and collection fails.
-5. Cases assert only against synthetic fixture data in the repo; never
-   introduce real names, accounts or credentials.
-6. Chat pages stick to the bottom: programmatic scrolling is pushed back, so
-   for long transcripts use `app.scrollTextIntoView` (internally it first sends
-   a trusted wheel gesture to release the stick-to-bottom behavior).
-7. The file-browser editor (Projects/Memory) is Monaco, where visual actions
-   are very slow and unstable: switch to the Edit view first, then use
-   `app.monacoEdit` (changes the value through the monaco API; `save: true`
-   waits for the PUT to finish). Assert disabled button state with
-   `app.expectControl` instead of trying to tell it apart from a screenshot.
-8. For repeated same-name controls (the sessions question card and the composer
-   each have a "Send"), select by DOM order with
-   `app.clickByLabel: { index: n }`. The selected check in dropdown menus such
-   as the composer's "Reasoning effort" has no `aria-checked`; assert it with
-   `app.expectMenuItem` instead of having the model count checkmarks in a
-   screenshot. `app.clickByLabel` also covers both `<a>` (settings
-   sub-navigation) and `<summary>` (disclosure regions like Developer
-   Settings), so use it — not `aiTap` — for cross-settings navigation and
-   expanding disclosures.
-9. For cards/messages taller than one viewport (the five-question design card,
-   multi-section build replies, the nine-item Connections list, the Channels
-   conversation list), a screenshot shows only part of them: use
-   `app.expectTexts: { all: [...] }` to verify the full-text manifest via the
-   DOM, and let the visual assertion describe only what is visible in the
-   current viewport after scroll positioning.
-10. "Locked" states such as an answered question card are almost
-    indistinguishable from editable state in a screenshot (a disabled fieldset
-    still renders placeholder copy): assert structural facts with
-    `app.expectDom` — `fieldset[disabled]`, the count of
-    `button[aria-pressed="true"]`, the number of buttons in the bottom action
-    row, and so on.
-11. Steps that are **expected to trip form validation** must not use a single
-    `aiAct` (the model treats "submission was rejected" as its own task failure
-    and retries until the replan budget is exhausted): split into
-    `app.typeText` (located by placeholder or `<label for>`) + `app.clickByLabel`
-    to submit + `app.expectTexts` to assert the validation copy; resubmitting
-    after correcting the input works the same way.
-12. Toasts render in a sonner portal outside `<main>` and disappear after a few
-    seconds: use `app.expectTexts: { scope: body }` to poll the toast copy
-    immediately after the triggering action, not `aiAssert` (the toast is often
-    already gone by screenshot time); persistent list/form changes go through
-    the default `scope: main` DOM assertions.
-13. Product static assets missing in mock mode (such as
-    `/desktop-vnc.html` embedded in the desktop workspace, served by @rome/core
-    in production) get placeholder files under `packages/web/mock/public/`;
-    MSW (a browser Service Worker) cannot intercept an iframe's initial
-    document navigation (the new frame has not registered the worker yet), so
-    these requests must go through the dev server's static layer.
-14. Recorded apps (`/apps/*-*`, e.g. issue-triage, yt-distill) render inside an
-    **open Shadow DOM**: visual assertions (`aiAssert`/`aiTap`) and Playwright's
-    role engine work normally, but the `innerText`/`main` selectors behind
-    `app.expectTexts`/`app.expectDom` cannot pierce the shadow root — do not
-    use those two nodes on these pages.
+1. Start every case with `app.open`. This resets the fixture state. Use
+   `app.reload` only when the scenario tests refresh behavior.
+2. Give `aiAct` a user goal and enough context to choose the right control.
+   Combine related clicks, typing, scrolling, and navigation into one task when
+   they form one user intent.
+3. Use `aiAssert` after each meaningful state change. Describe the visible
+   outcome and quote stable UI text that separates success from nearby states.
+4. Every case must contain at least one `aiAct` and one `aiAssert`. The
+   collection check rejects atomic AI nodes such as `aiTap` and operational
+   `app.*` nodes. `app.expectUrl` is allowed because the model cannot see the
+   browser address bar.
+5. Use `wait` only for mock state that settles asynchronously. Do not use fixed
+   waits as a substitute for an observable completion condition.
+6. Keep a case focused on one user goal. Put multiple checkpoints in the same
+   case only when they prove one stateful flow.
+7. Use synthetic fixture data only. Never add real people, accounts, tokens, or
+   chat content.
+8. Keep deterministic nodes as local debugging tools. Adding one to a committed
+   case requires changing the collection policy and documenting why AI cannot
+   perform the operation.
