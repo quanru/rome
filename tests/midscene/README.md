@@ -100,6 +100,7 @@ HEADLESS=false npm test
 | `shard-N` | CI shard ownership (N=1…6), see the planning doc |
 | `zh` | Chinese-UI (i18n) cases |
 | `mobile` | Narrow-viewport cases |
+| `deterministic-assist` | AI-native journey with a narrowly scoped deterministic helper for a documented visual-model limitation |
 
 ## Reports and Artifacts
 
@@ -121,13 +122,15 @@ HEADLESS=false npm test
 4. Every case must contain at least one `aiAct` and one `aiAssert`. The
    collection check rejects atomic AI nodes such as `aiTap` and operational
    `app.*` nodes. `app.expectUrl` is allowed because the model cannot see the
-   browser address bar.
+   browser address bar. A case tagged `deterministic-assist` may use only the
+   allowlisted helpers for a confirmed visual-model limitation; keep the user
+   interaction and visible outcome covered by `aiAct` and `aiAssert`.
 5. Use `wait` only for mock state that settles asynchronously. Do not use fixed
    waits as a substitute for an observable completion condition.
 6. Keep a case focused on one user goal. Put multiple checkpoints in the same
    case only when they prove one stateful flow.
 7. Use synthetic fixture data only. Never add real people, accounts, tokens, or
    chat content.
-8. Keep deterministic nodes as local debugging tools. Adding one to a committed
-   case requires changing the collection policy and documenting why AI cannot
-   perform the operation.
+8. Keep deterministic nodes as local debugging tools. A committed exception
+   must use the `deterministic-assist` tag and explain the visual limitation in
+   the case or pull request.

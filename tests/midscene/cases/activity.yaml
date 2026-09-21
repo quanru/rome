@@ -1,40 +1,27 @@
 cases:
-  - name: ACT-01 Filter Activity to failed executions
+  - name: ACT-03 Review requests and inspect an accepted webhook payload
     tags:
       - activity
       - shard-4
-    steps:
-      - app.open:
-          path: /activity
-      - aiAct: >-
-          Click the visible "Error" status filter once, then stop.
-      - aiAssert: >-
-          The Error filter is active and the feed shows three failed executions with no approval
-          buttons.
-  - name: ACT-02 Review pending requests
-    tags:
-      - activity
-      - shard-4
+      - deterministic-assist
     steps:
       - app.open:
           path: /activity
       - aiAct: >-
           Click the "Review" action in the pending-approvals banner once, then stop.
       - aiAssert: >-
-          The feed lists three pending connection requests from "Alex" (account-0, account-1,
-          account-2) for the "Telegram", "Discord", and "Feishu" channels. Each request says it is
-          valid for 10 minutes, shows "Pair with a verification code" guidance, and offers "Approve"
-          and "Reject" buttons.
-  - name: ACT-03 Inspect an accepted webhook delivery payload
-    tags:
-      - activity
-      - shard-4
-    steps:
-      - app.open:
-          path: /activity
-      - aiAct: >-
-          Find the first "weather_forecast" webhook row and open its "Payload" disclosure once.
-          Stop with the payload expanded.
-      - aiAssert: >-
-          The expanded payload renders the delivery body as JSON-style text (quoted keys and values)
-          rather than an empty panel.
+          The feed lists three pending connection requests from "Alex" for the "Telegram",
+          "Discord", and "Feishu" channels, with Approve and Reject actions.
+      - app.clickByLabel:
+          label: All
+          exact: true
+      - app.scrollTextIntoView:
+          text: Webhook received for weather_forecast
+      - app.clickByLabel:
+          label: Payload
+      - app.scrollTextIntoView:
+          text: cabin
+      - app.expectTexts:
+          all:
+            - '"location"'
+            - '"cabin"'

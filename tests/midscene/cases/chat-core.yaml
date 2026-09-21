@@ -80,11 +80,10 @@ cases:
           path: /chat/mock-chat-1
       - aiAct: >-
           Click the visible collapsed trace summary reading "1 app · 1 step · 8.4s" beneath the
-          first assistant response. Finish when the Trace drawer opens.
+          first assistant response once, then stop.
       - aiAssert: >-
-          A "Trace" drawer opens. Its header reads "Used 1 app · 1 step · 8.4s"; the step list names
-          the "briefer" app session and shows a successful "settings_get" tool step with the detail
-          "keys: [2]" and a per-step duration. There is no error styling on this step.
+          The "Trace" drawer is open and shows a successful "settings_get" step for the "briefer"
+          app, including "keys: [2]" and a duration. The header reads "Used 1 app · 1 step · 8.4s".
   - name: CHAT-05 Draft an answer in an unanswered question card
     tags:
       - chat

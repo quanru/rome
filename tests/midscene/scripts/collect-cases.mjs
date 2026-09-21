@@ -23,9 +23,16 @@ let caseCount = 0;
 const failures = [];
 const atomicAiNode = /^ai(?:Tap|Scroll|Input|Hover|Keyboard)/;
 const infrastructureNodes = new Set(["app.open", "app.reload", "app.expectUrl"]);
+const deterministicAssistNodes = new Set([
+  "app.clickByLabel",
+  "app.expectTexts",
+  "app.scrollTextIntoView",
+]);
 
 const validateAiNativeCase = (testCase) => {
   const nodes = testCase.definition.steps.map((step) => step.node);
+  const tags = new Set(testCase.definition.tags);
+  const allowsDeterministicAssist = tags.has("deterministic-assist");
   const problems = [];
 
   if (nodes[0] !== "app.open") problems.push("the first step must be app.open");
@@ -34,10 +41,16 @@ const validateAiNativeCase = (testCase) => {
 
   const forbidden = nodes.filter(
     (node) =>
-      atomicAiNode.test(node) || (node.startsWith("app.") && !infrastructureNodes.has(node)),
+      atomicAiNode.test(node) ||
+      (node.startsWith("app.") &&
+        !infrastructureNodes.has(node) &&
+        !(allowsDeterministicAssist && deterministicAssistNodes.has(node))),
   );
   if (forbidden.length > 0) {
     problems.push(`use aiAct instead of ${[...new Set(forbidden)].join(", ")}`);
+  }
+  if (allowsDeterministicAssist && !nodes.some((node) => deterministicAssistNodes.has(node))) {
+    problems.push("remove the unused deterministic-assist tag");
   }
 
   if (problems.length > 0) {

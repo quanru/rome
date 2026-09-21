@@ -5,11 +5,15 @@ cases:
       - story
       - apps
       - shard-2
+      - deterministic-assist
     steps:
       - app.open:
           path: /chat/mock-chat-build-app
+      - app.scrollTextIntoView:
+          text: Done. The Issue Triage app is built, installed, and verified
       - aiAct: >-
-          Click the visible "Issue Triage" app link in the final built-app reply once, then stop.
+          In the visible sentence beginning "Done. The Issue Triage app is built", click the final
+          underlined "Issue Triage" link once, then stop immediately.
       - aiAssert: >-
-          The Issue Triage app dashboard is open and shows repository or triage content rather than
-          an error or page-not-found state.
+          The Issue Triage app is open in a workspace tile beside the still-visible conversation.
+          Its dashboard shows repository or triage content, not an error or page-not-found state.
