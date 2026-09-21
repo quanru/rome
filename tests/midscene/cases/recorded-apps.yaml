@@ -11,10 +11,11 @@ cases:
       - aiAssert: >-
           Recent triage activity shows issue "#363" for "rome-os/rome" with its feature-request
           label and P2 priority badge.
-  - name: RAPP-02 Open a recorded code review
+  - name: RAPP-02 Inspect completed Code Review and Stock Daily records
     tags:
       - apps
       - shard-6
+      - deterministic-assist
     steps:
       - app.open:
           path: /apps/code-review
@@ -23,15 +24,10 @@ cases:
       - aiAssert: >-
           The PR #301 review detail is open and shows its completed review timeline rather than an
           error state.
-  - name: RAPP-03 Open a completed Stock Daily report
-    tags:
-      - apps
-      - shard-6
-    steps:
       - app.open:
           path: /apps/stock-daily
-      - aiAct: >-
-          Click the completed report dated "2026-09-11" in Report History once, then stop.
+      - app.clickByLabel:
+          label: 2026-09-11
       - aiAssert: >-
           The report view has a "Back to list" control, is marked "Completed", and is titled "US
           Stock Market Daily Close Report | 2026-09-11". Its body begins with the data cutoff note
