@@ -198,6 +198,7 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
   const location = useLocation();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
+  const [selectedResult, setSelectedResult] = useState<string | undefined>();
   const [sessions, setSessions] = useState<ChatSession[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -377,6 +378,15 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
     : chatLoading;
   const hasResults = resultCount > 0;
   const hasPartialFailure = isSearching && (loadError || Boolean(appsError));
+  const firstAppResultValue =
+    isSearching && matchingApps[0] ? `app:${matchingApps[0].app.id}` : undefined;
+
+  // cmdk retains its selection when later-rendered app rows insert before an
+  // already selected chat. Keep a newly available top app selected so Enter
+  // follows the Apps-first keyboard order promised by this switcher.
+  useEffect(() => {
+    setSelectedResult(firstAppResultValue);
+  }, [firstAppResultValue]);
 
   const appItems = matchingApps.map((entry) => (
     <CommandItem
@@ -491,6 +501,8 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
         loop
         vimBindings={false}
         label={t("recentChats.search")}
+        value={selectedResult}
+        onValueChange={setSelectedResult}
         className="bg-transparent"
       >
         <CommandInput
@@ -535,7 +547,7 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
                 <span className="mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive-bg text-destructive-fg">
                   <AlertCircle className="size-5" aria-hidden />
                 </span>
-                <p className="text-ui text-foreground">{t("recentChats.searchChatLoadError")}</p>
+                <p className="text-ui text-foreground">{t("recentChats.searchLoadError")}</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -580,16 +592,15 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
                   role="alert"
                 >
                   <AlertCircle className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1">{t("recentChats.searchChatLoadError")}</span>
+                  <span className="min-w-0 flex-1">{t("recentChats.searchLoadError")}</span>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label={t("recentChats.searchRetryChats")}
                     onClick={() => setLoadAttempt((attempt) => attempt + 1)}
                     onKeyDown={stopEnterPropagation}
                   >
-                    {t("recentChats.searchRetry")}
+                    {t("recentChats.searchRetryChats")}
                   </Button>
                 </div>
               ) : null}
@@ -604,11 +615,10 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label={t("recentChats.searchRetryApps")}
                     onClick={retryApps}
                     onKeyDown={stopEnterPropagation}
                   >
-                    {t("recentChats.searchRetry")}
+                    {t("recentChats.searchRetryApps")}
                   </Button>
                 </div>
               ) : null}

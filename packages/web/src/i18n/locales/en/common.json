@@ -57,7 +57,6 @@
     "searchClear": "Clear search",
     "searchLoading": "Loading chats…",
     "searchLoadError": "Chats couldn't be loaded",
-    "searchChatLoadError": "Chats couldn't be loaded",
     "searchAppLoadError": "Apps couldn't be loaded",
     "searchRetry": "Try again",
     "searchRetryChats": "Retry loading chats",

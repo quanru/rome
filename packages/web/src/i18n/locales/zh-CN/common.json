@@ -57,7 +57,6 @@
     "searchClear": "清除搜索",
     "searchLoading": "正在加载对话…",
     "searchLoadError": "无法加载对话",
-    "searchChatLoadError": "无法加载对话",
     "searchAppLoadError": "无法加载应用",
     "searchRetry": "重试",
     "searchRetryChats": "重新加载对话",

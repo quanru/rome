@@ -435,6 +435,40 @@ describe("ChatSearchDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("selects the first app when app results arrive after matching chats", async () => {
+    let resolveApps: (response: Response) => void;
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/chat/sessions?status=all") {
+        return Response.json([chatSession("road-chat", "Roadmap review", "work/rome")]);
+      }
+      if (url.startsWith("/api/chat/sessions/search?q=")) return Response.json([]);
+      if (url === "/api/apps") {
+        return new Promise<Response>((resolve) => {
+          resolveApps = resolve;
+        });
+      }
+      return Response.json({}, { status: 404 });
+    }) as typeof fetch);
+    const user = userEvent.setup();
+    renderSearch("/settings?hideSidebar=1", true);
+
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
+    await user.type(input, "road");
+    expect(
+      (await screen.findByRole("option", { name: /Roadmap review/ })).getAttribute("aria-selected"),
+    ).toBe("true");
+
+    resolveApps!(Response.json({ apps: [installedApp("road-app", "Roadmap")] }));
+
+    const app = await screen.findByRole("option", { name: "Roadmap" });
+    expect(app.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/apps/road-app?hideSidebar=1"),
+    );
+  });
+
   it("ranks openable app matches and excludes apps that cannot be opened", async () => {
     mockSessionSearch(
       [],
@@ -474,7 +508,8 @@ describe("ChatSearchDialog", () => {
     const icon = options[0].querySelector("img");
     expect(icon?.getAttribute("src")).toBe("/notes.svg");
     expect(icon?.getAttribute("alt")).toBe("");
-    expect(options[1].textContent).toContain("N");
+    expect(options[1].querySelector("img")).toBeNull();
+    expect(options[1].querySelector("div")?.textContent).toBe("N");
   });
 
   it("opens a registered host-owned app route", async () => {
@@ -569,7 +604,9 @@ describe("ChatSearchDialog", () => {
     const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     await user.type(input, "beta");
     expect((await screen.findAllByRole("option"))[0].textContent).toContain("Beta plan");
-    await user.click(await screen.findByRole("button", { name: "Retry loading apps" }));
+    const retryApps = await screen.findByRole("button", { name: "Retry loading apps" });
+    expect(retryApps.textContent).toBe("Retry loading apps");
+    await user.click(retryApps);
 
     expect(await screen.findByRole("option", { name: "Beta App" })).toBeTruthy();
     expect((input as HTMLInputElement).value).toBe("beta");
@@ -599,7 +636,9 @@ describe("ChatSearchDialog", () => {
     expect(await screen.findByText("Chats couldn't be loaded")).toBeTruthy();
     const input = screen.getByRole("combobox", { name: "Search apps and chats" });
     await user.type(input, "beta");
-    await user.click(screen.getByRole("button", { name: "Retry loading chats" }));
+    const retryChats = screen.getByRole("button", { name: "Retry loading chats" });
+    expect(retryChats.textContent).toBe("Retry loading chats");
+    await user.click(retryChats);
 
     const [retried] = await screen.findAllByRole("option");
     expect(retried.textContent).toContain("Beta plan");
