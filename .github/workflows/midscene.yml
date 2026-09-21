@@ -132,6 +132,13 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Type-check Midscene custom nodes
+        # npm test loads midscene.config.ts via tsx/esbuild without semantic
+        # TS checks, so run the standalone package's tsc before the expensive
+        # browser shards.
+        working-directory: tests/midscene
+        run: npm run typecheck
+
       # dev:mock runs build:kit before rsbuild dev, so first-request readiness
       # can take a few minutes after the job starts.
       - name: Start Rome mock server

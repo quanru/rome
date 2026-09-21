@@ -6,6 +6,7 @@ import type {
   SearchResult,
 } from "@/components/file-browser/store/types";
 import type { FileBrowserTreeNode } from "@/lib/file-browser-tree";
+import type { FileBrowserWatchEvent } from "@/lib/file-browser-watch";
 
 /**
  * The in-memory filesystem behind a file-browser surface — `/api/projects` and
@@ -45,8 +46,9 @@ function baseName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-/** Mirrors the frontend's FileBrowserWatchEvent kind union (file-browser-watch). */
-type FileBrowserWatchEventKind = "add" | "addDir" | "change" | "unlink" | "unlinkDir";
+// Reuse the consumer's contract rather than restating the union, so the mock
+// cannot drift from FileBrowserWatchEvent["kind"] without a type error.
+type FileBrowserWatchEventKind = FileBrowserWatchEvent["kind"];
 
 const watchKindFor = (node: MockFsNode): FileBrowserWatchEventKind =>
   node.type === "directory" ? "addDir" : "add";

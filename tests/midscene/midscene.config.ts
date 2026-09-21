@@ -92,6 +92,14 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
     const browserContext = await context.browser.newContext({
       viewport: VIEWPORTS[input.viewport],
       locale: 'en-US',
+      // Fixtures encode absolute instants (e.g. Stock Daily's
+      // 2026-09-15T20:30:00Z, asserted as "09/16, 04:30 AM"). GitHub's hosted
+      // runners run in UTC and a developer's laptop may run in any zone, so a
+      // host-dependent zone would reformat those timestamps differently. Pin
+      // the zone in which every case is authored; the wall clock is left real
+      // because mock timestamps are generated as offsets from now (freezing
+      // Date in the page would mislabel the Today/Yesterday grouping).
+      timezoneId: 'Asia/Shanghai',
       // The copy-message control only swaps to its "Copied" confirmation once
       // navigator.clipboard.writeText resolves; grant it explicitly so the
       // feedback is deterministic under headless CI.
