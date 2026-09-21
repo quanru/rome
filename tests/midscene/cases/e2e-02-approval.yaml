@@ -9,8 +9,8 @@ cases:
       - app.open:
           path: /chat/mock-chat-4
       - aiAct: >-
-          Click the orange "Approve" button on the visible "Guardian approval needed" card. Finish
-          when the card shows that the action completed.
+          Click the orange "Approve" button on the visible "Guardian approval needed" card once,
+          then stop.
       - aiAssert: >-
           The approval card reads "Approved & done", its Approve and Reject buttons are gone, and
           the green footer says "✓ Action approved and executed successfully."
