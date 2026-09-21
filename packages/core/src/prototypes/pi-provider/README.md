@@ -1,0 +1,120 @@
+# Pi provider SDK prototype
+
+This is an inspectable spike, not a registered Rome provider. It tests the two
+riskiest seams in the Pi provider proposal:
+
+1. Pi's supported SDK can discover the models authenticated by Pi, including
+   custom `models.json` entries.
+2. A Pi `AgentSession` can be created with Rome's prompt and only Rome-owned
+   custom tools, while Pi streaming/tool events are translated to Rome's
+   provider-neutral `AgentMessage` shapes.
+
+The prototype never starts the Pi CLI, a PTY, or a terminal. The live-run path
+uses an in-memory Pi session and disables Pi extensions, skills, prompt
+templates, context files, session files, and built-in file/shell tools.
+
+## Try it
+
+From the repository root, run the deterministic offline demonstration:
+
+```sh
+pnpm --filter @rome/core prototype:pi demo
+```
+
+It creates a temporary Pi `models.json` with two upstream providers that expose
+the same bare model id. The output shows both as distinct, reversible qualified
+ids and never prints the placeholder credential.
+
+Inspect the guardian's real Pi configuration without network catalog refresh:
+
+```sh
+pnpm --filter @rome/core prototype:pi discover
+```
+
+Add `--refresh` to allow Pi's provider-owned remote catalog refresh (bounded to
+15 seconds). Authentication and model setup remain Pi-owned in
+`~/.pi/agent`; this command does not offer login.
+
+If that output includes a model, exercise a real SDK turn:
+
+```sh
+pnpm --filter @rome/core prototype:pi run anthropic/claude-sonnet-5 \
+  "Call rome_probe with value hello, then report its result."
+```
+
+The command prints JSON Lines in Rome's `AgentMessage` shape. A successful tool
+call demonstrates that the model sees a Rome-owned callback without gaining
+Pi's shell or file tools. The final accounting identifies the provider as
+`pi` and the model as the exact qualified Pi model id.
+
+## What this proves
+
+- `ModelRuntime.getAvailable()` returns dynamic, auth-filtered built-in and
+  custom models. Provider plus model id can be encoded into Rome's existing
+  exact-model string without collisions or routing through Rome's native
+  provider of the same name.
+- `createAgentSession()` accepts a caller-selected exact model, an isolated
+  resource loader, in-memory settings/session state, a caller-owned system
+  prompt, and caller-owned custom tools.
+- Pi streams text, thinking, tool start, tool result, terminal, and accounting
+  information with enough structure to adapt to Rome's provider contract.
+- `AgentSession.abort()` is available for Rome cancellation. The prototype
+  wires an optional `AbortSignal` to it.
+
+## Findings and limitations
+
+- **Tool eligibility is not discoverable.** Pi's current `Model` metadata says
+  whether text/image input and reasoning are supported, but has no general
+  “supports function tools” field. `getAvailable()` means authenticated, not
+  proven compatible with Rome's tool contract. Production needs a conservative
+  eligibility policy, an upstream capability addition, or a provider/model
+  probe before satisfying the product acceptance criterion.
+- **Auth availability is not a live access check.** A configured credential can
+  still be revoked, out of quota, or denied for one model. Runtime failures must
+  trigger a safe status refresh and Rome's structured error classification.
+- **Pi and Rome have different transcript ownership.** This spike uses
+  `SessionManager.inMemory()` and does not implement restart, resume, fork, or
+  conversion of Rome's durable transcript into Pi messages. Production must
+  make Rome authoritative and test prefix fidelity across eviction/restart.
+- **Streaming phase is lossy.** Pi text deltas do not identify commentary versus
+  final-answer phase. This bridge streams deltas immediately and classifies the
+  completed block from Pi's stop reason. Rome UI behavior needs explicit review.
+- **Pi still composes the effective system prompt.** Even with a full resource
+  loader prompt override, the SDK appends runtime context such as `<cwd>` (shown
+  by `demo`). Production must review this composition and make it stable across
+  resume/fork rather than assuming Rome's input string is byte-identical on the
+  wire.
+- **Configuration can execute credential resolvers.** Pi custom model values may
+  use `!command` resolution. Although that is Pi-owned credential configuration,
+  production must decide whether the Rome daemon may execute it, bound it, and
+  document the security boundary. This spike's demo uses only a literal dummy
+  value.
+- **Errors need hardening.** The discovery result exposes only failed provider
+  ids, not SDK error text, but the live-turn path has not yet implemented Rome's
+  auth/quota/transient error taxonomy or systematic secret redaction.
+- **SDK churn and footprint are material.** The official package moved from the
+  deprecated `@mariozechner` namespace to `@earendil-works`; this spike pins
+  `@earendil-works/pi-coding-agent` 0.86.1. Its dependency graph includes
+  provider SDKs that will increase install size and supply-chain surface.
+- This spike does not wire AI Tools status, the model selector, provider
+  resolution, session pins, approvals, MCP servers, subagents, images, structured
+  output, retries, or production tests.
+
+## Recommended production breakdown
+
+1. **Catalog and status (2–3 engineering days):** add Pi provider identity,
+   safe status/refresh state, qualified-id storage, configuration diagnostics,
+   and a settled tool-eligibility policy.
+2. **Provider session adapter (4–6 days):** translate Rome prompts, images,
+   actions/skills/subagents and Pi events; implement cancellation, max-turns,
+   error classification, output schemas, and strict resource isolation.
+3. **Durability and selection (3–5 days):** dynamic selector entries,
+   unavailable saved choices, exact resolver behavior, transcript
+   reconstruction/resume, model pins, and restart/idle/fork coverage.
+4. **Security and product hardening (4–6 days):** AI Tools setup copy, secret
+   redaction, credential-command policy, approval/tool tests, quota/revocation
+   refresh, dependency review, and end-to-end regression coverage.
+
+Estimate: roughly **3–4 engineering weeks** for one engineer, depending mainly
+on the tool-eligibility decision and transcript-resume design. The work should
+land in reviewable slices; this prototype should not be promoted wholesale.
