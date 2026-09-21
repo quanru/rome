@@ -1,0 +1,32 @@
+cases:
+  - name: >-
+      E2E-03 Open the built Issue Triage app from its chat link and find it in
+      Apps
+    tags: [poc, story, apps, shard-2]
+    steps:
+      - app.open: { path: /chat/mock-chat-build-app }
+      # The question card is the first turn of this long transcript and the
+      # chat view is pinned to the newest message, so bring the card into view
+      # by its own text.
+      - app.scrollTextIntoView:
+          text: "When should the app label an issue?"
+      - aiAssert: >-
+          The conversation "Build an app from an idea" is open. The design
+          question card is visible with its questions, including
+          "When should the app label an issue?" and
+          "Should it apply labels directly, or suggest for review?".
+      # The final assistant message links the built app. Inside the chat
+      # workspace, that link opens the app in a side tile rather than leaving
+      # the conversation (same name exists in the sidebar, so the in-message
+      # link is clicked deterministically).
+      - app.clickContentLink: { text: "Issue Triage" }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The Issue Triage app opens in a workspace tile beside the still-open
+          conversation. Its dashboard is visible inside that tile (repository
+          configuration / triage content), not an error or "page not found".
+      - aiTap: the Apps entry in the left app navigation sidebar
+      - app.expectUrl: { path: /apps }
+      - aiAssert: >-
+          The Apps page's installed apps list shows "Issue Triage" as an
+          installed app with an affordance to open it.

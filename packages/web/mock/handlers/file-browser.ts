@@ -45,6 +45,12 @@ function baseName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
+/** Mirrors the frontend's FileBrowserWatchEvent kind union (file-browser-watch). */
+type FileBrowserWatchEventKind = "add" | "addDir" | "change" | "unlink" | "unlinkDir";
+
+const watchKindFor = (node: MockFsNode): FileBrowserWatchEventKind =>
+  node.type === "directory" ? "addDir" : "add";
+
 function parentPathOf(path: string): string {
   return path.slice(0, path.lastIndexOf("/"));
 }
@@ -133,6 +139,29 @@ export function fileBrowserHandlers({
 
   const notFound = () => HttpResponse.json({ error: "not found" }, { status: 404 });
 
+  /**
+   * Active `/events` streams. The real backend pushes chokidar watches over
+   * this channel; the browser's SSE reconciler reloads the root tree (and the
+   * selected file) on every change. Without it the mock's own POST/PATCH /
+   * DELETE writes would land in the fixture but never reappear in the tree
+   * until a full refresh, because the tree slice short-circuits already
+   * loaded folders from its in-memory cache.
+   */
+  const subscribers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  const encoder = new TextEncoder();
+  const emit = (kind: FileBrowserWatchEventKind, path: string): void => {
+    const payload = JSON.stringify({ at: Date.now(), kind, logicalRoot, path });
+    const frame = encoder.encode(`event: change\ndata: ${payload}\n\n`);
+    for (const controller of subscribers) {
+      try {
+        controller.enqueue(frame);
+      } catch {
+        // A closed stream drops on enqueue; the cancel handler removes it.
+        subscribers.delete(controller);
+      }
+    }
+  };
+
   return [
     http.get(`${apiBasePath}/tree`, ({ request }) => {
       const params = new URL(request.url).searchParams;
@@ -179,6 +208,7 @@ export function fileBrowserHandlers({
       const node = findNode(tree, body.path);
       if (!node || node.type !== "file") return notFound();
       node.content = body.content;
+      emit("change", body.path);
       return HttpResponse.json({ message: "Saved" });
     }),
     http.post(`${apiBasePath}/file`, async ({ request }) => {
@@ -194,6 +224,7 @@ export function fileBrowserHandlers({
         return HttpResponse.json({ error: "Already exists." }, { status: 409 });
       }
       siblings.push(body.type === "folder" ? dir(body.path, []) : file(body.path, ""));
+      emit(body.type === "folder" ? "addDir" : "add", body.path);
       return HttpResponse.json({ path: body.path });
     }),
     // One route, two writes: `name` renames in place, `parentPath` moves.
@@ -215,13 +246,21 @@ export function fileBrowserHandlers({
       if (!siblings) return notFound();
       const node = detach(body.path);
       if (!node) return notFound();
+      const oldKind: FileBrowserWatchEventKind =
+        node.type === "directory" ? "unlinkDir" : "unlink";
       repath(node, nextPath);
       siblings.push(node);
+      emit(oldKind, body.path);
+      emit(watchKindFor(node), nextPath);
       return HttpResponse.json({ path: nextPath });
     }),
     http.delete(`${apiBasePath}/file`, ({ request }) => {
       const path = new URL(request.url).searchParams.get("path") ?? "";
-      return detach(path) ? HttpResponse.json({ message: "Deleted" }) : notFound();
+      const node = findNode(tree, path);
+      const removed = detach(path);
+      if (!removed) return notFound();
+      emit(node?.type === "directory" ? "unlinkDir" : "unlink", path);
+      return HttpResponse.json({ message: "Deleted" });
     }),
     http.get(`${apiBasePath}/search`, ({ request }) => {
       const query = new URL(request.url).searchParams.get("q")?.toLowerCase() ?? "";
@@ -236,10 +275,33 @@ export function fileBrowserHandlers({
     }),
     // The fixture tree has no git behind it, so history is legitimately empty.
     http.get(`${apiBasePath}/history`, () => HttpResponse.json([] as HistoryEntry[])),
-    // Keep the file-browser watch EventSource connected without emitting events.
+    // File-watch EventSource. A `ready` frame triggers the frontend's
+    // initial rebaseline, and writes elsewhere in these handlers enqueue
+    // `change` frames so the tree reconciles the way it does against core.
     http.get(`${apiBasePath}/events`, () => {
-      const stream = new ReadableStream({ start() {} });
-      return new HttpResponse(stream, { headers: { "Content-Type": "text/event-stream" } });
+      // `cancel()` receives the cancellation reason, not the controller, so
+      // keep the controller in the stream closure to unsubscribe reliably.
+      let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+          subscribers.add(controller);
+          const ready = encoder.encode(
+            `event: ready\ndata: ${JSON.stringify({ at: Date.now(), logicalRoot })}\n\n`,
+          );
+          try {
+            controller.enqueue(ready);
+          } catch {
+            subscribers.delete(controller);
+          }
+        },
+        cancel() {
+          if (controller) subscribers.delete(controller);
+        },
+      });
+      return new HttpResponse(stream, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
     }),
   ];
 }

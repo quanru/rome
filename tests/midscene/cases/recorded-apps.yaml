@@ -1,0 +1,127 @@
+cases:
+  - name: RAPP-01 Issue Triage dashboard shows repository and recent triage results
+    tags: [apps, shard-6]
+    steps:
+      - app.open: { path: /apps/issue-triage }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The Issue Triage recorded app renders inside its embedded view with
+          the heading "Issue Triage" and the subtitle "AI auto-labeling for
+          GitHub issues · 1 repo · 3 triaged". Stat counters read
+          "Repos 1", "Triaged 3", "Succeeded 3", and "Failed 0". A
+          "Recent triage activity" section lists three succeeded results for
+          "rome-os/rome", including issue "# 363" titled
+          "opencli: support browser extensions in managed sessions" with the
+          "feature-request" label and a "P2" priority badge.
+
+  - name: RAPP-02 YouTube Distill opens the recorded talk with its mind map
+    tags: [apps, shard-6]
+    steps:
+      # Only the mind map was recorded for this fixture record; the Summary
+      # and Slides tabs show their regenerate ("replace") affordances instead
+      # of stored content, so this case asserts the recorded mind map only.
+      - app.open: { path: /apps/yt-distill }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The YouTube Distill recorded app shows a "History" section
+          containing one item, "Deep Dive into LLMs like ChatGPT", tagged
+          "Sample", authored by "Andrej Karpathy", with "Mindmap",
+          "Summary", and "Slides" output chips and a "Ready" state.
+      - aiTap: 'the "Deep Dive into LLMs like ChatGPT" history item'
+      - wait: { duration: 2500 }
+      - aiAssert: >-
+          The record detail view renders with a "Back" control, the title
+          "Deep Dive into LLMs like ChatGPT", a "Ready" state, a
+          "Watch on YouTube" link, and output tabs "Mindmap", "Summary",
+          "Slides", and "Transcript". The Mindmap tab is selected and its
+          outline lists the talk's 15 sections, beginning with
+          "1. Core Mental Model" and ending with "15. Closing Guidance".
+
+  - name: RAPP-03 Code Review dashboard opens the recorded PR review with verdict
+    tags: [apps, shard-6]
+    steps:
+      - app.open: { path: /apps/code-review }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The Code Review recorded app dashboard shows "1 repo · 2 reviews"
+          for "rome-os/rome" and an Activity list with two completed reviews:
+          "PR #301 fix(app-web-sdk): resolve app renderer from the SDK" and
+          "PR #300 chore(apps): drop unused runtime dependencies", each
+          marked "Completed".
+      - aiTap: 'the "PR #301" review item'
+      - wait: { duration: 2500 }
+      - aiAssert: >-
+          The review detail renders with a "Back" control, the heading
+          "#301 fix(app-web-sdk): resolve app renderer from the SDK", and a
+          "completed" state attributed to "zhangfand". A review timeline
+          shows the queued/cloning/reviewing/posting stages.
+      - app.scrollTextIntoView: { text: "Verdict" }
+      - wait: { duration: 600 }
+      - aiAssert: >-
+          Below the timeline, a "Verdict" section reads "REQUEST_CHANGES"
+          followed by a "Findings (3)" heading.
+      - app.scrollTextIntoView: { text: "[P2]" }
+      - wait: { duration: 600 }
+      - aiAssert: >-
+          The findings list continues below P1 with a "[P2]" finding and a
+          "[P3]" finding, each with a source file reference, so all three
+          ranked findings are present.
+
+  - name: RAPP-04 Fitness Tracker shows the weekly plan and beginner settings
+    tags: [apps, shard-6]
+    steps:
+      # The Today card computes its date from the system clock (the day of
+      # the week and its workout change between runs), so assert only the
+      # stable shell here; the fixed weekly schedule is checked on Week Plan.
+      - app.open: { path: /apps/fitness-tracker }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The Fitness Tracker recorded app opens on its Today view, with
+          navigation tabs "Today", "Week Plan", "Library", "Stats", and
+          "Settings".
+      - aiTap: Week Plan
+      - wait: { duration: 1200 }
+      - aiAssert: >-
+          The Week Plan shows Monday ("Mon") as "Full Body · 20 min" built
+          from four five-minute modules (warm-up, fat-burning/full-body,
+          plank core, and stretch cool-down), and Sunday ("Sun") as a
+          "Rest" day.
+      - aiTap: >-
+          the "Settings" tab in the Fitness Tracker app's own bottom
+          navigation — not the "Settings" entry in the left app sidebar
+      - wait: { duration: 1200 }
+      - aiAssert: >-
+          The Settings view shows a "Current Level" section with "Beginner"
+          selected and a "Daily Duration" section with
+          "20 min (4 modules)" selected, plus a "Rest Days" section and a
+          "Save & regenerate weekly plan" button.
+
+  - name: RAPP-05 Stock Daily shows the weekday schedule and a full report
+    tags: [apps, shard-6]
+    steps:
+      - app.open: { path: /apps/stock-daily }
+      - wait: { duration: 3000 }
+      - aiAssert: >-
+          The Stock Daily recorded app header shows "2 reports" with
+          "Frequency Weekdays" and a next-run time of "09/16, 04:30 AM". The
+          Report History lists two scheduled, completed reports dated
+          "2026-09-11" and "2026-09-10", each with a preview of its data
+          cutoff note.
+      - aiTap: 'the "2026-09-11" report row'
+      - wait: { duration: 2500 }
+      - aiAssert: >-
+          The report view renders with a "Back to list" control and the
+          title "US Stock Market Daily Close Report | 2026-09-11", marked
+          "Completed". The report body opens with the data cutoff note and
+          the "1. Major Index Overview" section (an executive summary may
+          appear above the numbered sections).
+      - app.scrollTextIntoView: { text: "4. Sector Performance" }
+      - wait: { duration: 600 }
+      - aiAssert: >-
+          The report body contains the "4. Sector Performance" section.
+      - app.scrollTextIntoView: { text: "8. Key Stock News and Notable Moves" }
+      - wait: { duration: 600 }
+      - aiAssert: >-
+          Further down, the "8. Key Stock News and Notable Moves" section is
+          rendered with news entries, confirming the full recorded report is
+          browsable rather than an error state.
