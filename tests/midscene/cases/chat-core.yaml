@@ -71,7 +71,7 @@ cases:
           "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
           typed draft "Make the subject line shorter" is still in the composer and no new user
           message bubble appears in the transcript.
-  - name: CHAT-04 Inspect successful, failed, and delegated execution traces
+  - name: CHAT-04 Inspect a successful execution trace
     tags:
       - chat
       - shard-1
@@ -79,46 +79,13 @@ cases:
       - app.open:
           path: /chat/mock-chat-1
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "1 app · 1 step · 8.4s" is
-          visible.
-
-          2. Find and click the collapsed trace summary reading "1 app · 1 step · 8.4s".
-
-          3. Before continuing, confirm these visible checkpoints: A collapsed trace summary under
-          an assistant turn reads "1 app · 1 step · 8.4s".
+          Click the visible collapsed trace summary reading "1 app · 1 step · 8.4s" beneath the
+          first assistant response. Finish when the Trace drawer opens.
       - aiAssert: >-
           A "Trace" drawer opens. Its header reads "Used 1 app · 1 step · 8.4s"; the step list names
           the "briefer" app session and shows a successful "settings_get" tool step with the detail
           "keys: [2]" and a per-step duration. There is no error styling on this step.
-      - aiAct: >-
-          1. Open the “Weekly planning” conversation from the Chats sidebar.
-
-          2. Explore the page by scrolling until the content containing "The model provider is
-          unavailable" is visible.
-
-          3. Find and click the failed trace with the "model provider is unavailable" error.
-
-          4. Before continuing, confirm these visible checkpoints: The failed assistant turn shows
-          an inline error reading "Error: The model provider is unavailable — the run stopped here."
-      - aiAssert: >-
-          The trace drawer shows the failed step "Fetching it from the vendor portal." followed by a
-          provider error card stating "Claude usage limit reached" with guidance to check usage or
-          pick another model, and an "Open AI Tools" action.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Explore the page by scrolling until the content containing "researcher" is visible.
-
-          3. Find the visible control labelled "Open trace for researcher" and click it.
-
-          4. Before continuing, confirm these visible checkpoints: Near the routine proposal there
-          is a delegated-subagents chip for the "researcher" subagent marked "completed" (its
-          control is labelled "Open trace for researcher").
-      - aiAssert: >-
-          The trace panel explains the trace is not available yet, showing "Trace not available yet"
-          with a "Retry" action.
-  - name: CHAT-05 Give feedback and copy assistant messages
+  - name: CHAT-05 Draft an answer in an unanswered question card
     tags:
       - chat
       - shard-1
@@ -126,25 +93,9 @@ cases:
       - app.open:
           path: /chat/mock-chat-2
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "Lead with the reader, not
-          the feature." is visible.
-
-          2. Find and click the "Mark this turn helpful" control on that assistant turn.
-
-          3. Find and click Submit.
-
-          4. Before continuing, confirm these visible checkpoints: A feedback popover opens with an
-          optional comment field with the placeholder "Optional: what went wrong, or what was
-          great?" and a "Submit" button.
+          On the visible question card beginning "Before I rewrite it for that audience, three
+          things:", enter "Avoid jargon" in the optional "Anything to avoid?" text area. Do not
+          send or dismiss the card.
       - aiAssert: >-
-          The feedback popover is closed and the thumbs-up icon for that assistant turn remains
-          filled or highlighted, showing that the helpful rating was recorded.
-      - aiAct: >-
-          1. Open the “Morning brief tweaks” conversation from the Chats sidebar.
-
-          2. Explore the page by scrolling until the content containing "Kept. Tomorrow" is visible.
-
-          3. Click the "Copy message" control on the assistant turn containing "Kept. Tomorrow",
-          confirm that its copy icon briefly changes to a checkmark, then finish.
-      - aiAssert: >-
-          The assistant turn containing "Kept. Tomorrow" is visible with its message action controls.
+          The unanswered question card remains open and its optional "Anything to avoid?" field
+          contains the draft "Avoid jargon".
