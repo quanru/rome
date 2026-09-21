@@ -1,20 +1,60 @@
 name: Set up Rome CI environment
 description: Install Nix, realize the flake CI shell, and restore the pnpm store
 
+inputs:
+  pnpm-store-cache:
+    description: >-
+      `read-write` saves the pnpm store at post-job, `read-only` only restores
+      it. The entry is keyed on the lockfile alone and is immutable
+      first-writer-wins, so only a job that runs an unfiltered
+      `pnpm install --frozen-lockfile` may write: a partial store saved from a
+      job that skipped or filtered its install would be what every other job
+      restores for that lockfile.
+    required: false
+    default: read-only
+
 runs:
   using: composite
   steps:
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
 
+    # Realize the shell here rather than letting the next step do it as a side
+    # effect, so a failed evaluation or download fails on a step that names it.
+    - name: Realize the CI shell
+      shell: bash
+      run: '"$GITHUB_WORKSPACE/scripts/ci-env.sh" true'
+
     - name: Locate pnpm store
       id: pnpm-store
       shell: bash
+      # A composite `run:` is `bash -e`, not `bash -eo pipefail`, so without
+      # `pipefail` the substitution below takes `tail`'s exit status: a failed
+      # shell realization would leave `path` empty and surface later as
+      # actions/cache's opaque "Path Validation Error".
       run: |
+        set -o pipefail
         path="$("$GITHUB_WORKSPACE/scripts/ci-env.sh" pnpm store path | tail -n 1)"
+        case "$path" in
+          /*) ;;
+          *)
+            echo "pnpm store path did not print an absolute path: '$path'" >&2
+            exit 1
+            ;;
+        esac
         echo "path=$path" >> "$GITHUB_OUTPUT"
 
     - name: Restore pnpm store
+      if: inputs.pnpm-store-cache == 'read-only'
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Restore and save pnpm store
+      if: inputs.pnpm-store-cache == 'read-write'
       uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25
       with:
         path: ${{ steps.pnpm-store.outputs.path }}

@@ -80,6 +80,13 @@ GitHub Actions installs Nix through
 [`setup-ci`](.github/actions/setup-ci/action.yml). Add a CI tool to
 `ciPackages` in `flake.nix` instead of downloading it in a workflow.
 
+Biome comes from the shell rather than from `node_modules`, so anything that
+runs it needs the shell on its PATH. The pre-commit hook skips with a message
+when it is missing, which is what a commit from a GUI git client that never
+loaded direnv will hit. Point the Biome editor extension at the shell's binary
+(`biome.lsp.bin`, from `command -v biome` inside `nix develop`) or launch the
+editor from a shell that has already entered it.
+
 Docker remains a host prerequisite because it must connect to the host's
 container engine. The flake does not replace or shadow the host Docker client.
 

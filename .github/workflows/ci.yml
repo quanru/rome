@@ -29,8 +29,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
+      # `nix flake check` builds every derivation-valued output for this
+      # system, which includes the developer shell and the browser only
+      # developers need. Evaluate the whole flake, then build the one output
+      # that states the toolchain contract.
       - name: Check the pinned toolchain
-        run: nix flake check --print-build-logs
+        run: |
+          nix flake check --no-build
+          nix build --print-build-logs '.#checks.x86_64-linux.toolchain'
 
       # Squash-and-merge uses the PR title as the merge commit subject on main,
       # and release-please reads those subjects to decide the next version +
@@ -87,6 +95,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
       - run: scripts/ci-env.sh pnpm install --frozen-lockfile
       - run: scripts/ci-env.sh scripts/check-db-schema.sh
 
@@ -232,6 +242,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
       - run: scripts/ci-env.sh pnpm install --frozen-lockfile
       - run: scripts/ci-env.sh pnpm test:integration
 
@@ -290,9 +302,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v5
-      # The image already ships node 24, but the toolchain is pinned here the
-      # same way every other job pins it, so this job's node moves when CI's
-      # does and not when the image's does.
+      # The one job outside the flake shell: it runs in Playwright's image for
+      # the browsers, which ships no Nix. Its Node comes from the runner tool
+      # cache at a floating major and its pnpm from `packageManager`, so this
+      # job's toolchain can drift from the flake's pins in a way no other job's
+      # can. `node-version` is the major the flake's nodejs_24 tracks; the
+      # suites here exercise a browser rather than the Node runtime.
       #
       # No `cache: pnpm`, unlike every other job here. The store cache is keyed
       # on the lockfile hash alone, so this job would share one entry with jobs
@@ -391,5 +406,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
       - run: scripts/ci-env.sh pnpm install --frozen-lockfile
       - run: scripts/ci-env.sh pnpm test:e2e

@@ -20,6 +20,17 @@ test("a change confined to core's own package leaves the other shards idle", () 
   });
 });
 
+test("a change to either suite launcher runs every shard", () => {
+  // Both wrappers sit in the execution path of every suite: test-env.sh fixes
+  // the environment a suite runs with, ci-env.sh is the shell CI launches it
+  // from. `scripts/` alone claims only core and rest, so the web shard has to
+  // name them or a wrapper-only change reports a green web check over a suite
+  // that never ran.
+  for (const launcher of ["scripts/test-env.sh", "scripts/ci-env.sh"]) {
+    assert.deepEqual(areasForFiles([launcher]), allAreas(), `${launcher} skips a shard`);
+  }
+});
+
 test("a kit change runs the web shard and the token gates that walk the kit", () => {
   assert.deepEqual(areasForFiles(["packages/ui/src/styles.css"]), {
     core: false,
@@ -240,6 +251,91 @@ test("each shard job guards its steps on its own detection output", async () => 
     );
   }
 });
+
+// The flake shell is entered per step, not per job, so the invariant "CI runs
+// the toolchain flake.nix declares" is carried by a prefix on every `run:`.
+// A step that omits it still passes — ubuntu-latest ships its own node, npm,
+// and corepack pnpm — and reintroduces the dev/CI divergence silently. Assert
+// the prefix rather than trusting review to catch a missing one.
+//
+// Two things are allowed to run outside the shell: `nix` itself, which is what
+// enters it, and the shell builtins the no-verdict guards use, which need no
+// toolchain at all.
+const WRAPPER_PREFIXES = ["scripts/ci-env.sh ", '"$GITHUB_WORKSPACE/scripts/ci-env.sh" '];
+const OUTSIDE_SHELL = [/^nix\s/, /^echo\s/, /^exit\s/, /^set\s/];
+
+/** Strips the single quotes YAML needs around a command that starts with `"`. */
+function unquote(value) {
+  return value.startsWith("'") && value.endsWith("'") ? value.slice(1, -1) : value;
+}
+
+/** Every `run:` command in ci.yml-shaped workflows, grouped by job. */
+async function jobRunCommands(workflow) {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const lines = readFileSync(join(REPO_ROOT, ".github", "workflows", workflow), "utf8").split("\n");
+
+  const jobs = new Map();
+  let current = null;
+  let block = null;
+
+  for (const line of lines) {
+    if (block) {
+      // A block scalar runs until the indentation returns to the `run:` key.
+      const indent = line.search(/\S/);
+      if (line.trim() === "" || indent > block.indent) {
+        if (line.trim() !== "" && !line.trim().startsWith("#")) block.commands.push(line.trim());
+        continue;
+      }
+      block = null;
+    }
+
+    const header = line.match(/^ {2}([\w-]+):\s*$/);
+    if (header) {
+      current = header[1];
+      jobs.set(current, { setsUpFlake: false, commands: [] });
+      continue;
+    }
+    if (!current) continue;
+
+    const job = jobs.get(current);
+    if (line.includes("./.github/actions/setup-ci")) job.setsUpFlake = true;
+
+    // Both spellings of the key: `- run:` opens a step, `run:` continues one.
+    const run = line.match(/^(\s*(?:-\s+)?)run: (.*)$/);
+    if (!run) continue;
+    if (run[2].trim() === "|" || run[2].trim() === ">") {
+      block = { indent: run[1].length, commands: job.commands };
+      continue;
+    }
+    job.commands.push(unquote(run[2].trim()));
+  }
+
+  return jobs;
+}
+
+for (const workflow of ["ci.yml", "mobile-ci.yml", "nightly.yml"]) {
+  test(`every ${workflow} step in a flake job runs through scripts/ci-env.sh`, async () => {
+    const jobs = await jobRunCommands(workflow);
+    assert.ok(
+      [...jobs.values()].some((job) => job.setsUpFlake),
+      `${workflow} sets up the flake environment in no job`,
+    );
+
+    for (const [name, job] of jobs) {
+      if (!job.setsUpFlake) continue;
+      for (const command of job.commands) {
+        const wrapped = WRAPPER_PREFIXES.some((prefix) => command.startsWith(prefix));
+        const bootstrap = OUTSIDE_SHELL.some((pattern) => pattern.test(command));
+        assert.ok(
+          wrapped || bootstrap,
+          `${workflow} job ${name} runs \`${command}\` outside the flake shell — ` +
+            "prefix it with scripts/ci-env.sh, or it takes the runner's own toolchain",
+        );
+      }
+    }
+  });
+}
 
 /**
  * Trees a shard collects tests from that lie outside the packages it filters

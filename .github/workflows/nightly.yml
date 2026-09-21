@@ -11,6 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
       - run: scripts/ci-env.sh pnpm install --frozen-lockfile
       - run: scripts/ci-env.sh pnpm test:ci
 
@@ -20,6 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-ci
+        with:
+          pnpm-store-cache: read-write
       - run: scripts/ci-env.sh pnpm install --frozen-lockfile
       - run: scripts/ci-env.sh pnpm test:coverage
       - uses: actions/upload-artifact@v7

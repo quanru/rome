@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    # flake-parts pulls its own nixpkgs.lib by default, which adds a second
+    # fetched input that can drift from the nixpkgs pinned above. Follow it so
+    # the lib always matches the packages the shells are built from.
+    flake-parts.inputs.nixpkgs-lib.follows = "nixpkgs";
   };
 
   outputs =
@@ -47,10 +51,7 @@
             pkgs.agent-browser
             pkgs.vultr-cli
           ] ++ nixpkgs.lib.optional pkgs.stdenv.isLinux pkgs.chromium;
-          mkShell = packages: pkgs.mkShell {
-            inherit packages;
-            ROME_DEV_ENV = "1";
-          };
+          mkShell = packages: pkgs.mkShell { inherit packages; };
         in
         {
           devShells = {
@@ -66,11 +67,19 @@
               command -v "$command" >/dev/null
             done
             test "$(node --version)" = "v${pkgs.nodejs_24.version}"
-            test "$(pnpm --version)" = "11.6.0"
-            test "$(biome --version | awk '{ print $2 }')" = "2.3.6"
-            test "$(shfmt --version)" = "v3.12.0"
-            test "$(vale --version)" = "vale version 3.19.0"
-            test "$(shellcheck --version | awk '/version:/ { print $2 }')" = "0.11.0"
+            test "$(pnpm --version)" = "${tools.pnpm.version}"
+            test "$(biome --version | awk '{ print $2 }')" = "${tools.biome.version}"
+            test "$(shfmt --version)" = "v${tools.shfmt.version}"
+            test "$(vale --version)" = "vale version ${tools.vale.version}"
+            test "$(shellcheck --version | awk '/version:/ { print $2 }')" = "${pkgs.shellcheck.version}"
+
+            # pnpm reads `packageManager` and downloads that version at runtime
+            # when it differs from the one on PATH, so a bump there without a
+            # bump in nix/dev-tools.nix silently runs a pnpm the flake never
+            # pinned. Biome's `$schema` decides which rule set the config is
+            # validated against. Both are copies of a version declared above.
+            grep -qF '"packageManager": "pnpm@${tools.pnpm.version}"' ${./package.json}
+            grep -qF '/schemas/${tools.biome.version}/schema.json' ${./biome.json}
             touch "$out"
           '';
         };
