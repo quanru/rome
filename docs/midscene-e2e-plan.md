@@ -139,17 +139,24 @@ reasons behind them.
   `tests/midscene/**`, all of `packages/web/**`, the workspace packages
   rebuilt by `build:kit` — `packages/ui`, `packages/web-content`,
   `packages/api-types`, `packages/app-runtime-sdk` — and `pnpm-lock.yaml`),
-  plus manual `workflow_dispatch`. Both paths are bound to the main ref by
-  `if: github.ref == 'refs/heads/main'`. **There is no `pull_request`
-  trigger**: model calls are billable and a PR job checks out
-  contributor-controlled code. Note that merely naming a protected environment
-  in the workflow does **not** create its reviewer gate — an absent
-  environment is provisioned open — so until a maintainer actually configures a
-  protected environment with required reviewers (ideally with environment-scoped
-  secrets), the secret-bearing path stays fail-closed and runs only against
-  code on the protected default branch. To enable PR runs later, create the
-  protected environment in Settings first, then add an environment-gated
-  `pull_request` trigger back to the workflow.
+  the same paths on `pull_request`, plus manual `workflow_dispatch`. A PR
+  runs only the **secret-free `harness-validation` job** (`npm ci` with the
+  Playwright browser download skipped, `tsc --noEmit`, and a YAML case
+  collection step that parses every case and resolves node references
+  exactly like the runner — no browser, mock server, or model calls), so a
+  broken custom node or malformed case fails before merge without exposing
+  any credentials. The model-backed `midscene` matrix stays bound to the
+  main ref by `if: github.ref == 'refs/heads/main'`. The matrix does not
+  run on `pull_request`: model calls are billable and a PR job checks out
+  contributor-controlled code. Note that merely naming a protected
+  environment in the workflow does **not** create its reviewer gate — an
+  absent environment is provisioned open — so until a maintainer actually
+  configures a protected environment with required reviewers (ideally with
+  environment-scoped secrets), the secret-bearing matrix stays fail-closed
+  and runs only against code on the protected default branch. To enable
+  model-backed PR runs later, create the protected environment in Settings
+  first, then add an environment-gated `pull_request` matrix job back to
+  the workflow.
 - **Runtime**: Ubuntu + Node.js 24; pnpm is enabled (reading the root
   `packageManager` version) **before** `setup-node`, whose `cache: pnpm`
   requires pnpm to already exist on a clean runner. Product dependencies
