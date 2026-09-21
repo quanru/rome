@@ -1,8 +1,10 @@
 // @rstest-environment jsdom
 import { fireEvent, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { useLocation, MemoryRouter } from "react-router-dom";
+import type { InstalledAppCard } from "@rome/api-types/apps";
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import i18n from "@/i18n";
 import type { ChatSearchMessageMatch, ChatSession } from "@/lib/chat-types";
@@ -46,7 +48,44 @@ function chatSession(
   };
 }
 
-function mockSessionSearch(sessions: ChatSession[], contentMatches: ChatSearchMessageMatch[] = []) {
+function installedApp(
+  id: string,
+  displayName: string,
+  overrides: Partial<InstalledAppCard> = {},
+): InstalledAppCard {
+  return {
+    id,
+    version: "1.0.0",
+    description: "",
+    displayName,
+    status: "active",
+    phase: "installed",
+    hasFrontend: true,
+    href: `/apps/${encodeURIComponent(id)}`,
+    fullHref: `/full/apps/${encodeURIComponent(id)}`,
+    capabilities: [],
+    capabilityDetails: { agents: [], actions: [], skills: [], hooks: [] },
+    isEnabled: true,
+    canToggle: true,
+    canUninstall: true,
+    canPublish: false,
+    accessMode: "private",
+    isPublic: false,
+    cloudAllowedEmails: [],
+    canManagePublicAccess: true,
+    source: { mode: "bundle", path: `/tmp/${id}.tar.gz` },
+    projectPath: null,
+    origin: "local",
+    iconUrl: null,
+    ...overrides,
+  };
+}
+
+function mockSessionSearch(
+  sessions: ChatSession[],
+  contentMatches: ChatSearchMessageMatch[] = [],
+  apps: InstalledAppCard[] = [],
+) {
   return rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === "/api/chat/sessions?status=all") {
@@ -55,6 +94,7 @@ function mockSessionSearch(sessions: ChatSession[], contentMatches: ChatSearchMe
     if (url.startsWith("/api/chat/sessions/search?q=")) {
       return Response.json(contentMatches);
     }
+    if (url === "/api/apps") return Response.json({ apps });
     return Response.json({}, { status: 404 });
   }) as typeof fetch);
 }
@@ -74,10 +114,15 @@ function SearchHarness({ initialOpen = false }: { initialOpen?: boolean }) {
 }
 
 function renderSearch(initialEntry = "/chat", initialOpen = false) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <SearchHarness initialOpen={initialOpen} />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <SearchHarness initialOpen={initialOpen} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -111,14 +156,15 @@ describe("chat search shortcut", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
-    expect(screen.getByRole("dialog", { name: "Search chats" })).toBeTruthy();
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
+    expect(screen.getByRole("dialog", { name: "Search apps and chats" })).toBeTruthy();
     expect(document.activeElement).toBe(input);
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledWith("/api/apps", expect.any(Object));
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     await waitFor(() =>
-      expect(screen.queryByRole("combobox", { name: "Search chats" })).toBeNull(),
+      expect(screen.queryByRole("combobox", { name: "Search apps and chats" })).toBeNull(),
     );
   });
 });
@@ -156,13 +202,17 @@ describe("ChatSearchDialog", () => {
       const url = String(input);
       if (url === "/api/chat/sessions?status=all") return Response.json([titled]);
       if (url.startsWith("/api/chat/sessions/search?q=")) return new Promise(() => {});
+      if (url === "/api/apps") return Response.json({ apps: [] });
       return Response.json({}, { status: 404 });
     }) as typeof fetch);
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    await user.type(await screen.findByRole("combobox", { name: "Search chats" }), "roadmap");
-    expect(await screen.findByRole("status", { name: "Searching messages…" })).toBeTruthy();
+    await user.type(
+      await screen.findByRole("combobox", { name: "Search apps and chats" }),
+      "roadmap",
+    );
+    expect(await screen.findByRole("status", { name: "Searching apps and chats…" })).toBeTruthy();
     expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
@@ -179,7 +229,7 @@ describe("ChatSearchDialog", () => {
 
     renderSearch("/chat/current", true);
 
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     expect(fetchSpy).toHaveBeenCalledWith("/api/chat/sessions?status=all", {
       credentials: "include",
     });
@@ -214,7 +264,7 @@ describe("ChatSearchDialog", () => {
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     const option = (await screen.findAllByRole("option"))[0];
     expect(
       within(option).getByText(formatMessageTimestamp("2026-07-15T09:00:00.000Z")),
@@ -240,7 +290,7 @@ describe("ChatSearchDialog", () => {
     ]);
     renderSearch("/settings?hideSidebar=1", true);
 
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     const options = await screen.findAllByRole("option");
     expect(options[0].getAttribute("aria-selected")).toBe("true");
 
@@ -259,11 +309,16 @@ describe("ChatSearchDialog", () => {
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    await user.type(await screen.findByRole("combobox", { name: "Search chats" }), "missing");
+    await user.type(
+      await screen.findByRole("combobox", { name: "Search apps and chats" }),
+      "missing",
+    );
 
     // The no-results state waits for the debounced message search to settle.
-    expect(await screen.findByText("No chats found")).toBeTruthy();
-    expect(screen.getByText("Try another chat title, project, or message text.")).toBeTruthy();
+    expect(await screen.findByText("No apps or chats found")).toBeTruthy();
+    expect(
+      screen.getByText("Try another app name, app id, chat title, project, or message text."),
+    ).toBeTruthy();
     expect(screen.queryByRole("option")).toBeNull();
   });
 
@@ -274,9 +329,9 @@ describe("ChatSearchDialog", () => {
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     await user.type(input, "missing");
-    expect(await screen.findByText("No chats found")).toBeTruthy();
+    expect(await screen.findByText("No apps or chats found")).toBeTruthy();
 
     const controls = input.getAttribute("aria-controls");
     expect(controls).toBeTruthy();
@@ -304,7 +359,7 @@ describe("ChatSearchDialog", () => {
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    const input = await screen.findByRole("combobox", { name: "Search chats" });
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
     await user.type(input, "roadmap");
 
     // Title match shows immediately; the content match lands after the debounce.
@@ -343,10 +398,165 @@ describe("ChatSearchDialog", () => {
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
-    await user.type(await screen.findByRole("combobox", { name: "Search chats" }), "roadmap");
+    await user.type(
+      await screen.findByRole("combobox", { name: "Search apps and chats" }),
+      "roadmap",
+    );
 
     await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
     expect(screen.getByText("1 result")).toBeTruthy();
+  });
+
+  it("keeps apps out of the blank state, then groups them before matching chats", async () => {
+    mockSessionSearch(
+      [chatSession("road-chat", "Roadmap review", "work/rome")],
+      [],
+      [installedApp("road-app", "Roadmap")],
+    );
+    const user = userEvent.setup();
+    renderSearch("/settings", true);
+
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
+    const recentOptions = await screen.findAllByRole("option");
+    expect(recentOptions).toHaveLength(1);
+    expect(recentOptions[0].textContent).toContain("Roadmap review");
+    expect(screen.queryByRole("option", { name: "Roadmap" })).toBeNull();
+
+    await user.type(input, "road");
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options[0].getAttribute("aria-label")).toBe("Roadmap");
+    expect(options[1].textContent).toContain("Roadmap review");
+    expect(screen.getByText("Apps")).toBeTruthy();
+    expect(screen.getByText("Chats")).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/apps/road-app"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("ranks openable app matches and excludes apps that cannot be opened", async () => {
+    mockSessionSearch(
+      [],
+      [],
+      [
+        installedApp("exact", "Notes", { origin: "builtin", iconUrl: "/notes.svg" }),
+        installedApp("prefix", "Notes Hub", { origin: "appstore" }),
+        installedApp("contains", "My Notes"),
+        installedApp("notes-tool", "Writer"),
+        installedApp("disabled", "Notes Disabled", {
+          status: "disabled",
+          isEnabled: false,
+        }),
+        installedApp("failed", "Notes Failed", { status: "failed" }),
+        installedApp("installing", "Notes Installing", { phase: "installing" }),
+        installedApp("backend", "Notes Backend", {
+          hasFrontend: false,
+          href: null,
+          fullHref: null,
+        }),
+      ],
+    );
+    const user = userEvent.setup();
+    renderSearch("/chat", true);
+
+    await user.type(
+      await screen.findByRole("combobox", { name: "Search apps and chats" }),
+      "notes",
+    );
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.getAttribute("aria-label"))).toEqual([
+      "Notes",
+      "Notes Hub",
+      "My Notes",
+      "Writer",
+    ]);
+    const icon = options[0].querySelector("img");
+    expect(icon?.getAttribute("src")).toBe("/notes.svg");
+    expect(icon?.getAttribute("alt")).toBe("");
+    expect(options[1].textContent).toContain("N");
+  });
+
+  it("opens a registered host-owned app route", async () => {
+    mockSessionSearch(
+      [],
+      [],
+      [installedApp("inbox", "Inbox", { hasFrontend: false, href: null, fullHref: null })],
+    );
+    const user = userEvent.setup();
+    renderSearch("/chat", true);
+
+    await user.type(
+      await screen.findByRole("combobox", { name: "Search apps and chats" }),
+      "inbox",
+    );
+    await user.click(await screen.findByRole("option", { name: "Inbox" }));
+    expect(screen.getByTestId("location").textContent).toBe("/apps/inbox");
+  });
+
+  it("keeps app matches usable when chats fail", async () => {
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/chat/sessions?status=all") throw new Error("chat offline");
+      if (url.startsWith("/api/chat/sessions/search?q=")) return Response.json([]);
+      if (url === "/api/apps") return Response.json({ apps: [installedApp("road", "Roadmap")] });
+      return Response.json({}, { status: 404 });
+    }) as typeof fetch);
+    const user = userEvent.setup();
+    renderSearch("/chat", true);
+
+    expect(await screen.findByText("Chats couldn't be loaded")).toBeTruthy();
+    const input = screen.getByRole("combobox", { name: "Search apps and chats" });
+    await user.type(input, "road");
+    expect(await screen.findByRole("option", { name: "Roadmap" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry loading chats" })).toBeTruthy();
+  });
+
+  it("keeps chat matches usable while apps load", async () => {
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/chat/sessions?status=all") {
+        return Response.json([chatSession("road", "Roadmap review", "work/rome")]);
+      }
+      if (url.startsWith("/api/chat/sessions/search?q=")) return Response.json([]);
+      if (url === "/api/apps") return new Promise(() => {});
+      return Response.json({}, { status: 404 });
+    }) as typeof fetch);
+    const user = userEvent.setup();
+    renderSearch("/chat", true);
+
+    await user.type(await screen.findByRole("combobox", { name: "Search apps and chats" }), "road");
+    expect((await screen.findAllByRole("option"))[0].textContent).toContain("Roadmap review");
+    expect(screen.getByRole("status", { name: "Searching apps and chats…" })).toBeTruthy();
+    expect(screen.queryByText("No apps or chats found")).toBeNull();
+  });
+
+  it("retries an app failure without clearing the query or hiding chat matches", async () => {
+    let appCalls = 0;
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/chat/sessions?status=all") {
+        return Response.json([chatSession("beta-chat", "Beta plan", "work")]);
+      }
+      if (url.startsWith("/api/chat/sessions/search?q=")) return Response.json([]);
+      if (url === "/api/apps") {
+        appCalls += 1;
+        if (appCalls === 1) throw new Error("app offline");
+        return Response.json({ apps: [installedApp("beta-app", "Beta App")] });
+      }
+      return Response.json({}, { status: 404 });
+    }) as typeof fetch);
+    const user = userEvent.setup();
+    renderSearch("/chat", true);
+
+    const input = await screen.findByRole("combobox", { name: "Search apps and chats" });
+    await user.type(input, "beta");
+    expect((await screen.findAllByRole("option"))[0].textContent).toContain("Beta plan");
+    await user.click(await screen.findByRole("button", { name: "Retry loading apps" }));
+
+    expect(await screen.findByRole("option", { name: "Beta App" })).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe("beta");
+    expect(appCalls).toBe(2);
   });
 
   it("retries a failed request without clearing the query", async () => {
@@ -363,15 +573,16 @@ describe("ChatSearchDialog", () => {
       if (url.startsWith("/api/chat/sessions/search?q=")) {
         return Response.json([]);
       }
+      if (url === "/api/apps") return Response.json({ apps: [] });
       return Response.json({}, { status: 404 });
     }) as typeof fetch);
     const user = userEvent.setup();
     renderSearch("/chat", true);
 
     expect(await screen.findByText("Chats couldn't be loaded")).toBeTruthy();
-    const input = screen.getByRole("combobox", { name: "Search chats" });
+    const input = screen.getByRole("combobox", { name: "Search apps and chats" });
     await user.type(input, "beta");
-    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Retry loading chats" }));
 
     const [retried] = await screen.findAllByRole("option");
     expect(retried.textContent).toContain("Beta plan");
@@ -395,6 +606,7 @@ describe("ChatSearchDialog", () => {
       if (url.startsWith("/api/chat/sessions/search?q=")) {
         return Response.json([]);
       }
+      if (url === "/api/apps") return Response.json({ apps: [] });
       return Response.json({}, { status: 404 });
     }) as typeof fetch);
     const user = userEvent.setup();

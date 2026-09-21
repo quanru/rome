@@ -26,19 +26,22 @@ const UPDATES_QUERY_KEY = ["apps", "updates"] as const;
 export interface AppsListResult {
   apps: InstalledAppCard[] | null;
   error: Error | null;
+  loading: boolean;
+  retry: () => void;
 }
 
 // The authoritative installed list on its own — for surfaces that never read
 // upgrade candidates (e.g. the app details page), so mounting them doesn't
 // kick off the expensive per-app Rome Cloud updates probe. Shares
 // LIST_QUERY_KEY with useApps, so the two stay one cache entry.
-export function useAppsList(): AppsListResult {
+export function useAppsList(options: { enabled?: boolean } = {}): AppsListResult {
   const { t } = useTranslation("apps");
   // staleTime: 0 keeps this page eager — every mount/focus revalidates against
   // the server, so revisiting after a background app transition or an out-of-band
   // change shows current truth rather than a cached snapshot.
   const list = useQuery({
     queryKey: LIST_QUERY_KEY,
+    enabled: options.enabled,
     staleTime: 0,
     queryFn: ({ signal }) =>
       fetchJson<AppListResponse>("/api/apps", {
@@ -51,7 +54,17 @@ export function useAppsList(): AppsListResult {
   // default) rather than blanking the page: a transient failure on a focus
   // refetch shouldn't wipe usable cards. Staleness is signaled by surfacing
   // `error` (consumers show a load-error banner above the still-rendered cards).
-  return { apps: list.data?.apps ?? null, error: list.error };
+  return {
+    apps: list.data?.apps ?? null,
+    error: list.error,
+    // A background refresh must not replace usable app cards with a loading
+    // state. This flag is only for consumers that have no catalog yet (for
+    // example, the command switcher on its first open or while retrying).
+    loading: list.data === undefined && list.isFetching,
+    retry: () => {
+      void list.refetch();
+    },
+  };
 }
 
 // The advisory upgrade probe on its own. The probe is expensive (fans out to

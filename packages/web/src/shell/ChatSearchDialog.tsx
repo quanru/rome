@@ -3,9 +3,12 @@ import { Spinner } from "@rome-os/ui/spinner";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { InstalledAppCard } from "@rome/api-types/apps";
+import { TileIcon } from "@/components/app-tile-icon";
 import { Button } from "@/components/ui/button";
 import {
   Command,
+  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
@@ -13,6 +16,8 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
+import { useAppsList } from "@/hooks/use-apps";
+import { getHostAppRoute } from "@/lib/auth-routing";
 import { listSessions, searchChatMessages } from "@/lib/chat-api";
 import type { ChatSearchMessageMatch, ChatSession } from "@/lib/chat-types";
 import { formatMessageTimestamp } from "@/lib/message-timestamp";
@@ -26,6 +31,11 @@ const CONTENT_SEARCH_DEBOUNCE_MS = 200;
 interface SearchEntry {
   session: ChatSession;
   match?: ChatSearchMessageMatch["message"];
+}
+
+interface AppSearchEntry {
+  app: InstalledAppCard;
+  href: string;
 }
 
 function currentPlatform(): string {
@@ -67,6 +77,31 @@ function activityTime(session: ChatSession): number {
 
 function normalizeSearchText(value: string): string {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").trim().toLocaleLowerCase();
+}
+
+function openableAppHref(app: InstalledAppCard): string | null {
+  if (!app.isEnabled || app.status !== "active" || app.phase !== "installed") return null;
+  return (app.hasFrontend && app.href ? app.href : null) ?? getHostAppRoute(app.id);
+}
+
+/** Catalog matching is intentionally narrower than chat matching: the whole
+ * query is a case-insensitive substring of the app's display name or id. */
+function matchingOpenableApps(apps: InstalledAppCard[], normalizedQuery: string): AppSearchEntry[] {
+  if (!normalizedQuery) return [];
+
+  return apps
+    .map((app, originalIndex) => {
+      const href = openableAppHref(app);
+      if (!href) return null;
+      const name = normalizeSearchText(app.displayName);
+      const id = normalizeSearchText(app.id);
+      if (!name.includes(normalizedQuery) && !id.includes(normalizedQuery)) return null;
+      const rank = name === normalizedQuery ? 3 : name.startsWith(normalizedQuery) ? 2 : 1;
+      return { app, href, originalIndex, rank };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((a, b) => b.rank - a.rank || a.originalIndex - b.originalIndex)
+    .map(({ app, href }) => ({ app, href }));
 }
 
 interface MatchRange {
@@ -167,7 +202,16 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [contentMatches, setContentMatches] = useState<ChatSearchMessageMatch[]>([]);
+  const [contentSearchQuery, setContentSearchQuery] = useState("");
   const [contentLoading, setContentLoading] = useState(false);
+  const {
+    apps,
+    error: appsError,
+    loading: appsLoading,
+    retry: retryApps,
+  } = useAppsList({
+    enabled: open,
+  });
   const shortcut = chatSearchShortcutForPlatform();
   const currentSessionId = activeSessionFromPath(location.pathname);
 
@@ -209,6 +253,7 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
   useEffect(() => {
     if (!open || !trimmedQuery) {
       setContentMatches([]);
+      setContentSearchQuery("");
       setContentLoading(false);
       return;
     }
@@ -219,11 +264,13 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
         .then((matches) => {
           if (cancelled) return;
           setContentMatches(matches);
+          setContentSearchQuery(trimmedQuery);
           setContentLoading(false);
         })
         .catch(() => {
           if (cancelled) return;
           setContentMatches([]);
+          setContentSearchQuery(trimmedQuery);
           setContentLoading(false);
         });
     }, CONTENT_SEARCH_DEBOUNCE_MS);
@@ -234,6 +281,10 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
   }, [open, trimmedQuery]);
 
   const normalizedQuery = normalizeSearchText(query);
+  const matchingApps = useMemo(
+    () => matchingOpenableApps(apps ?? [], normalizedQuery),
+    [apps, normalizedQuery],
+  );
   const matchingSessions = useMemo(() => {
     if (!sessions) return [];
     return sessions
@@ -259,8 +310,9 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
     if (!normalizedQuery) {
       return matchingSessions.slice(0, RECENT_CHAT_LIMIT).map((session) => ({ session }));
     }
+    const currentContentMatches = contentSearchQuery === trimmedQuery ? contentMatches : [];
     const matchBySession = new Map(
-      contentMatches.map((match) => [match.session.id, match.message] as const),
+      currentContentMatches.map((match) => [match.session.id, match.message] as const),
     );
     const entries: SearchEntry[] = matchingSessions.map((session) => ({
       session,
@@ -271,13 +323,13 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
     // otherwise append a duplicate row — same React key, and two cmdk options
     // sharing a value.
     const seen = new Set(matchingSessions.map((session) => session.id));
-    for (const match of contentMatches) {
+    for (const match of currentContentMatches) {
       if (seen.has(match.session.id)) continue;
       seen.add(match.session.id);
       entries.push({ session: match.session, match: match.message });
     }
     return entries;
-  }, [contentMatches, matchingSessions, normalizedQuery]);
+  }, [contentMatches, contentSearchQuery, matchingSessions, normalizedQuery, trimmedQuery]);
 
   const queryTerms = useMemo(
     () => (normalizedQuery ? normalizedQuery.split(/\s+/) : []),
@@ -295,22 +347,116 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
     [location.search, navigate, onOpenChange],
   );
 
-  // Single source for what the body shows. The result count and the list rows
-  // are rendered in different places, so deciding this twice would let them
-  // disagree.
-  const viewState: "loading" | "error" | "no-sessions" | "searching" | "no-results" | "results" =
-    sessions === null && !loadError
-      ? "loading"
-      : loadError
-        ? "error"
-        : sessions && sessions.length === 0
-          ? "no-sessions"
-          : visibleEntries.length > 0
-            ? "results"
-            : contentLoading
-              ? "searching"
-              : "no-results";
-  const loading = viewState === "loading";
+  const openApp = useCallback(
+    (entry: AppSearchEntry) => {
+      onOpenChange(false);
+      navigate(entry.href);
+    },
+    [navigate, onOpenChange],
+  );
+
+  // The blank state remains chat-only. Once the guardian types, each source
+  // settles independently: one source loading or failing must never hide
+  // selectable matches from the other.
+  const isSearching = normalizedQuery.length > 0;
+  const chatLoading = sessions === null && !loadError;
+  const contentPending = isSearching && contentSearchQuery !== trimmedQuery;
+  const resultCount = visibleEntries.length + matchingApps.length;
+  const relevantLoading = isSearching
+    ? chatLoading || appsLoading || contentLoading || contentPending
+    : chatLoading;
+  const hasResults = resultCount > 0;
+  const hasPartialFailure = isSearching && (loadError || Boolean(appsError));
+
+  const appItems = matchingApps.map((entry) => (
+    <CommandItem
+      key={`app:${entry.app.id}`}
+      value={`app:${entry.app.id}`}
+      aria-label={entry.app.displayName}
+      onSelect={() => openApp(entry)}
+      className="group min-h-14 gap-3 rounded-8 px-2 py-2 text-left data-[selected=true]:bg-surface-hover data-[selected=true]:text-inherit"
+    >
+      <TileIcon
+        kind="image"
+        displayName={entry.app.displayName}
+        iconUrl={entry.app.iconUrl}
+        size="md"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-ui text-foreground">
+          <HighlightedText text={entry.app.displayName} terms={queryTerms} />
+        </span>
+        <span aria-hidden className="mt-1 block truncate text-aux text-muted-foreground">
+          <HighlightedText text={entry.app.id} terms={queryTerms} />
+        </span>
+      </span>
+    </CommandItem>
+  ));
+
+  const chatItems = visibleEntries.map((entry) => {
+    const session = entry.session;
+    const archived = Boolean(session.archivedAt);
+    const current = session.id === currentSessionId;
+    const project = session.projectPath || session.projectName;
+    const timestamp = formatMessageTimestamp(session.activityAt || session.createdAt);
+    return (
+      <CommandItem
+        key={`chat:${session.id}`}
+        value={`chat:${session.id}`}
+        onSelect={() => openSession(session)}
+        className="group min-h-14 gap-3 rounded-8 px-2 py-2 text-left data-[selected=true]:bg-surface-hover data-[selected=true]:text-inherit"
+      >
+        <span
+          className={cn(
+            "inline-flex size-9 shrink-0 items-center justify-center rounded-8 border border-border",
+            "bg-surface-muted text-muted-foreground",
+            "group-data-[selected=true]:bg-background group-data-[selected=true]:text-foreground",
+          )}
+        >
+          <MessageSquare className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-ui text-foreground">
+            <HighlightedText text={session.name} terms={queryTerms} />
+          </span>
+          {entry.match ? (
+            <span className="mt-1 block truncate text-aux text-muted-foreground">
+              <span className="text-foreground/80">
+                {entry.match.role === "user"
+                  ? t("recentChats.searchMatchUser")
+                  : t("recentChats.searchMatchAssistant")}
+                {": "}
+              </span>
+              <HighlightedText text={entry.match.snippet} terms={queryTerms} />
+            </span>
+          ) : null}
+          <span className="mt-1 flex min-w-0 items-center gap-1 text-aux text-muted-foreground">
+            <Folder className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">
+              <HighlightedText text={project} terms={queryTerms} />
+            </span>
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {archived ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-1 text-aux text-muted-foreground">
+              <Archive className="size-3" aria-hidden />
+              {t("recentChats.statusArchived")}
+            </span>
+          ) : null}
+          {current ? (
+            <span className="inline-flex items-center gap-1 text-aux text-foreground">
+              <Check className="size-3" aria-hidden />
+              {t("recentChats.searchCurrent")}
+            </span>
+          ) : null}
+          {timestamp ? (
+            <span className="text-aux tabular-nums text-muted-foreground">{timestamp}</span>
+          ) : null}
+        </span>
+      </CommandItem>
+    );
+  });
 
   return (
     <Dialog
@@ -340,7 +486,7 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
         <CommandInput
           ref={inputRef}
           aria-label={t("recentChats.search")}
-          aria-busy={loading}
+          aria-busy={relevantLoading}
           value={query}
           onValueChange={setQuery}
           placeholder={t("recentChats.searchPlaceholder")}
@@ -365,148 +511,139 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
         </CommandInput>
 
         <div className="min-h-52">
-          {viewState === "loading" ? (
-            <div className="flex min-h-52 items-center justify-center gap-2 text-ui text-muted-foreground">
-              <Spinner label={t("recentChats.searchLoading")} />
-              <span aria-hidden>{t("recentChats.searchLoading")}</span>
-            </div>
-          ) : viewState === "error" ? (
-            <div
-              className="flex min-h-52 flex-col items-center justify-center px-6 text-center"
-              role="alert"
-            >
-              <span className="mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive-bg text-destructive-fg">
-                <AlertCircle className="size-5" aria-hidden />
-              </span>
-              <p className="text-ui text-foreground">{t("recentChats.searchLoadError")}</p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setLoadAttempt((attempt) => attempt + 1)}
-                // Not a list item, so its own activation has to survive the
-                // command root's Enter handling.
-                onKeyDown={stopEnterPropagation}
-                className="mt-3"
-              >
-                {t("recentChats.searchRetry")}
-              </Button>
-            </div>
-          ) : viewState === "no-sessions" ? (
-            <div
-              className="flex min-h-52 flex-col items-center justify-center px-6 text-center"
-              role="status"
-            >
-              <MessageSquare className="mb-3 size-6 text-muted-foreground" aria-hidden />
-              <p className="text-ui text-muted-foreground">{t("recentChats.empty")}</p>
-            </div>
-          ) : viewState !== "results" ? (
-            viewState === "searching" ? (
+          {!isSearching ? (
+            chatLoading ? (
               <div className="flex min-h-52 items-center justify-center gap-2 text-ui text-muted-foreground">
-                <Spinner label={t("recentChats.searchingMessages")} />
-                <span aria-hidden>{t("recentChats.searchingMessages")}</span>
+                <Spinner label={t("recentChats.searchLoading")} />
+                <span aria-hidden>{t("recentChats.searchLoading")}</span>
               </div>
-            ) : (
+            ) : loadError ? (
+              <div
+                className="flex min-h-52 flex-col items-center justify-center px-6 text-center"
+                role="alert"
+              >
+                <span className="mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive-bg text-destructive-fg">
+                  <AlertCircle className="size-5" aria-hidden />
+                </span>
+                <p className="text-ui text-foreground">{t("recentChats.searchChatLoadError")}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+                  onKeyDown={stopEnterPropagation}
+                  className="mt-3"
+                >
+                  {t("recentChats.searchRetry")}
+                </Button>
+              </div>
+            ) : sessions?.length === 0 ? (
               <div
                 className="flex min-h-52 flex-col items-center justify-center px-6 text-center"
                 role="status"
               >
-                <SearchX className="mb-3 size-6 text-muted-foreground" aria-hidden />
-                <p className="text-ui text-foreground">{t("recentChats.searchNoResults")}</p>
-                <p className="mt-1 text-aux text-muted-foreground">
-                  {t("recentChats.searchNoResultsDescription")}
-                </p>
+                <MessageSquare className="mb-3 size-6 text-muted-foreground" aria-hidden />
+                <p className="text-ui text-muted-foreground">{t("recentChats.searchEmpty")}</p>
+              </div>
+            ) : (
+              <div className="px-4 pb-1 pt-3 text-aux text-muted-foreground">
+                {t("recentChats.searchRecent")}
               </div>
             )
           ) : (
-            <div
-              className="flex items-center gap-2 px-4 pb-1 pt-3 text-aux text-muted-foreground"
-              role={contentLoading ? undefined : "status"}
-              aria-live={contentLoading ? undefined : "polite"}
-            >
-              {normalizedQuery
-                ? t("recentChats.searchResultsCount", { count: visibleEntries.length })
-                : t("recentChats.searchRecent")}
-              {normalizedQuery && contentLoading ? (
-                <Spinner size="sm" label={t("recentChats.searchingMessages")} />
+            <>
+              {hasResults ? (
+                <div
+                  className="flex items-center gap-2 px-4 pb-1 pt-3 text-aux text-muted-foreground"
+                  role={relevantLoading ? undefined : "status"}
+                  aria-live={relevantLoading ? undefined : "polite"}
+                >
+                  {t("recentChats.searchResultsCount", { count: resultCount })}
+                  {relevantLoading ? (
+                    <Spinner size="sm" label={t("recentChats.searchingResults")} />
+                  ) : null}
+                </div>
               ) : null}
-            </div>
+
+              {loadError ? (
+                <div
+                  className="mx-4 mt-2 flex items-center gap-2 rounded-8 bg-destructive-bg px-3 py-2 text-ui text-destructive-fg"
+                  role="alert"
+                >
+                  <AlertCircle className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1">{t("recentChats.searchChatLoadError")}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("recentChats.searchRetryChats")}
+                    onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+                    onKeyDown={stopEnterPropagation}
+                  >
+                    {t("recentChats.searchRetry")}
+                  </Button>
+                </div>
+              ) : null}
+              {appsError ? (
+                <div
+                  className="mx-4 mt-2 flex items-center gap-2 rounded-8 bg-destructive-bg px-3 py-2 text-ui text-destructive-fg"
+                  role="alert"
+                >
+                  <AlertCircle className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1">{t("recentChats.searchAppLoadError")}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("recentChats.searchRetryApps")}
+                    onClick={retryApps}
+                    onKeyDown={stopEnterPropagation}
+                  >
+                    {t("recentChats.searchRetry")}
+                  </Button>
+                </div>
+              ) : null}
+
+              {!hasResults ? (
+                relevantLoading ? (
+                  <div className="flex min-h-40 items-center justify-center gap-2 text-ui text-muted-foreground">
+                    <Spinner label={t("recentChats.searchingResults")} />
+                    <span aria-hidden>{t("recentChats.searchingResults")}</span>
+                  </div>
+                ) : (
+                  <div
+                    className="flex min-h-40 flex-col items-center justify-center px-6 text-center"
+                    role="status"
+                  >
+                    <SearchX className="mb-3 size-6 text-muted-foreground" aria-hidden />
+                    <p className="text-ui text-foreground">
+                      {hasPartialFailure
+                        ? t("recentChats.searchNoAvailableResults")
+                        : t("recentChats.searchNoResults")}
+                    </p>
+                    <p className="mt-1 text-aux text-muted-foreground">
+                      {hasPartialFailure
+                        ? t("recentChats.searchNoAvailableResultsDescription")
+                        : t("recentChats.searchNoResultsDescription")}
+                    </p>
+                  </div>
+                )
+              ) : null}
+            </>
           )}
 
-          {/* Mounted in every state, matching the project picker: cmdk's input
-              points aria-controls at this list unconditionally, so unmounting
-              it in the loading, error and empty branches would leave that
-              reference dangling. Empty here is the ordinary no-results shape. */}
+          {/* cmdk's input emits aria-controls unconditionally, so the listbox
+              remains mounted in loading, failure, and empty states. */}
           <CommandList
             label={t("recentChats.searchResultsLabel")}
-            className={`max-h-[55vh] sm:max-h-96 ${viewState === "results" ? "px-2 pb-2" : ""}`}
+            className={`max-h-[55vh] sm:max-h-96 ${hasResults ? "px-2 pb-2" : ""}`}
           >
-            {viewState === "results" &&
-              visibleEntries.map((entry) => {
-                const session = entry.session;
-                const archived = Boolean(session.archivedAt);
-                const current = session.id === currentSessionId;
-                const project = session.projectPath || session.projectName;
-                const timestamp = formatMessageTimestamp(session.activityAt || session.createdAt);
-                return (
-                  <CommandItem
-                    key={session.id}
-                    value={session.id}
-                    onSelect={() => openSession(session)}
-                    className="group min-h-14 gap-3 rounded-8 px-2 py-2 text-left data-[selected=true]:bg-surface-hover data-[selected=true]:text-inherit"
-                  >
-                    <span
-                      className={cn(
-                        "inline-flex size-9 shrink-0 items-center justify-center rounded-8 border border-border",
-                        "bg-surface-muted text-muted-foreground",
-                        "group-data-[selected=true]:bg-background group-data-[selected=true]:text-foreground",
-                      )}
-                    >
-                      <MessageSquare className="size-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-ui text-foreground">
-                        <HighlightedText text={session.name} terms={queryTerms} />
-                      </span>
-                      {entry.match ? (
-                        <span className="mt-1 block truncate text-aux text-muted-foreground">
-                          <span className="text-foreground/80">
-                            {entry.match.role === "user"
-                              ? t("recentChats.searchMatchUser")
-                              : t("recentChats.searchMatchAssistant")}
-                            {": "}
-                          </span>
-                          <HighlightedText text={entry.match.snippet} terms={queryTerms} />
-                        </span>
-                      ) : null}
-                      <span className="mt-1 flex min-w-0 items-center gap-1 text-aux text-muted-foreground">
-                        <Folder className="size-3 shrink-0" aria-hidden />
-                        <span className="truncate">
-                          <HighlightedText text={project} terms={queryTerms} />
-                        </span>
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      {archived ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-1 text-aux text-muted-foreground">
-                          <Archive className="size-3" aria-hidden />
-                          {t("recentChats.statusArchived")}
-                        </span>
-                      ) : null}
-                      {current ? (
-                        <span className="inline-flex items-center gap-1 text-aux text-foreground">
-                          <Check className="size-3" aria-hidden />
-                          {t("recentChats.searchCurrent")}
-                        </span>
-                      ) : null}
-                      {timestamp ? (
-                        <span className="text-aux tabular-nums text-muted-foreground">
-                          {timestamp}
-                        </span>
-                      ) : null}
-                    </span>
-                  </CommandItem>
-                );
-              })}
+            {hasResults && isSearching && matchingApps.length > 0 ? (
+              <CommandGroup heading={t("recentChats.searchAppsGroup")}>{appItems}</CommandGroup>
+            ) : null}
+            {hasResults && isSearching && visibleEntries.length > 0 ? (
+              <CommandGroup heading={t("recentChats.searchChatsGroup")}>{chatItems}</CommandGroup>
+            ) : null}
+            {hasResults && !isSearching ? chatItems : null}
           </CommandList>
         </div>
       </Command>
