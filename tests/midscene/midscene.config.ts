@@ -405,6 +405,10 @@ const expectTextsInput = z.strictObject({
   all: z.array(z.string().min(1)).default([]),
   // None of the strings may appear.
   none: z.array(z.string().min(1)).default([]),
+  // Each entry is a case-insensitive regular expression that must match the
+  // visible text — use for date-dependent text that must not pin a month,
+  // e.g. a calendar heading /(January|…|December) 20\\d\\d/.
+  matches: z.array(z.string().min(1)).default([]),
   // Where to read text: the <main> content (default) or the whole document
   // body. "body" is required for toasts, which sonner renders in a portal
   // outside <main> and auto-dismisses after a few seconds.
@@ -421,12 +425,14 @@ const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>
     'first two questions and its "Answered" footer. Set scope:"body" to ' +
     'catch toasts, which render in a portal outside <main>. Vision aiAssert ' +
     'is for how things look; this node is for "all of these words exist ' +
-    'somewhere on the page".',
+    'somewhere on the page". Use "matches" for regex patterns (e.g. ' +
+    'date-dependent headings that must stay independent of the run month).',
   inputSchema: expectTextsInput,
   async execute({ context, input }) {
     const { page } = context;
     if (!page) throw new Error('No page is open; call app.open first');
     const root = input.scope === 'body' ? page.locator('body') : page.locator('main').first();
+    const patterns = input.matches.map((source) => new RegExp(source, 'i'));
     // The transcript renders after the messages fetch resolves (and toasts
     // appear briefly after an action); poll for the text instead of requiring
     // it to be present on the first read.
@@ -436,7 +442,8 @@ const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>
       text = (await root.innerText().catch(() => '')).toLowerCase();
       const missing = input.all.filter((needle) => !text.includes(needle.toLowerCase()));
       const present = input.none.filter((needle) => text.includes(needle.toLowerCase()));
-      if ((missing.length === 0 && present.length === 0) || Date.now() >= deadline) {
+      const unmatched = patterns.filter((pattern) => !pattern.test(text)).map(String);
+      if ((missing.length === 0 && present.length === 0 && unmatched.length === 0) || Date.now() >= deadline) {
         if (!text) throw new Error(`app.expectTexts: no ${input.scope} text found`);
         if (missing.length > 0) {
           throw new Error(`app.expectTexts: missing expected text: ${JSON.stringify(missing)}`);
@@ -445,6 +452,9 @@ const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>
           throw new Error(
             `app.expectTexts: text expected absent was found: ${JSON.stringify(present)}`,
           );
+        }
+        if (unmatched.length > 0) {
+          throw new Error(`app.expectTexts: text did not match: ${JSON.stringify(unmatched)}`);
         }
         return;
       }

@@ -22,7 +22,7 @@ This table lists all available Nodes. See [Node Details](#node-details) below fo
 | app.expectControl | Assert a button or radio-segment control state deterministically via Playwright instead of a screenshot: whether it exists/is visible, whether it is disabled, and (for role:"radio") whether it is checked. Use for disabled-vs-enabled distinctions that look identical in a screenshot (e.g. a question card Send button), for transient aria-label swaps such as "Copied" or "Feedback recorded", and for segmented-control selection whose checked fill is visually ambiguous. |
 | app.expectDom | Assert structural/state facts about the main content via a CSS selector and the DOM, instead of a screenshot: how many visible elements match, whether they are disabled, and whether they carry an attribute such as aria-pressed. Use for state that is invisible or ambiguous in an image (a <fieldset disabled> locking an answered card, pressed option buttons, absence of a footer action). |
 | app.expectMenuItem | Assert the state of an open dropdown-menu item deterministically via Playwright: whether it is visible, and whether it carries the selected check icon (the current choice). Use for option menus such as the composer "Reasoning effort" picker, whose current value is marked only with a small check tick instead of aria-checked. Open the menu first (e.g. app.clickByLabel). |
-| app.expectTexts | Assert that text contains (or does not contain) the given strings, deterministically via the DOM instead of a screenshot. Use for long cards or transcripts whose complete contents are taller than one viewport — e.g. a five-question card where a screenshot shows only the first two questions and its "Answered" footer. Set scope:"body" to catch toasts, which render in a portal outside <main>. Vision aiAssert is for how things look; this node is for "all of these words exist somewhere on the page". |
+| app.expectTexts | Assert that text contains (or does not contain) the given strings, deterministically via the DOM instead of a screenshot. Use for long cards or transcripts whose complete contents are taller than one viewport — e.g. a five-question card where a screenshot shows only the first two questions and its "Answered" footer. Set scope:"body" to catch toasts, which render in a portal outside <main>. Vision aiAssert is for how things look; this node is for "all of these words exist somewhere on the page". Use "matches" for regex patterns (e.g. date-dependent headings that must stay independent of the run month). |
 | app.expectUrl | Assert the current URL matches the given substring or re: regex. |
 | app.goBack | Go back one entry in browser history (client-side navigation), keeping the in-memory mock state of the current browser context. |
 | app.monacoEdit | Edit the currently open Monaco file editor (Projects/Memory file view) deterministically via the monaco editor API, instead of steering the editor with vision actions. The file must already be open in Edit mode (click the Preview/Edit segmented control first). Appends text at the end by default; set append:false to replace the whole file, and save:true to press Save and wait for the write to finish. |
@@ -944,7 +944,7 @@ Assert the state of an open dropdown-menu item deterministically via Playwright:
 
 ### `app.expectTexts`
 
-Assert that text contains (or does not contain) the given strings, deterministically via the DOM instead of a screenshot. Use for long cards or transcripts whose complete contents are taller than one viewport — e.g. a five-question card where a screenshot shows only the first two questions and its "Answered" footer. Set scope:"body" to catch toasts, which render in a portal outside <main>. Vision aiAssert is for how things look; this node is for "all of these words exist somewhere on the page".
+Assert that text contains (or does not contain) the given strings, deterministically via the DOM instead of a screenshot. Use for long cards or transcripts whose complete contents are taller than one viewport — e.g. a five-question card where a screenshot shows only the first two questions and its "Answered" footer. Set scope:"body" to catch toasts, which render in a portal outside <main>. Vision aiAssert is for how things look; this node is for "all of these words exist somewhere on the page". Use "matches" for regex patterns (e.g. date-dependent headings that must stay independent of the run month).
 
 **String shorthand:** Not supported by this Node.
 
@@ -956,6 +956,14 @@ Assert that text contains (or does not contain) the given strings, deterministic
   "additionalProperties": false,
   "properties": {
     "all": {
+      "default": [],
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "matches": {
       "default": [],
       "items": {
         "minLength": 1,
