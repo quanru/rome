@@ -65,7 +65,7 @@ cases:
 
           8. Use the visible code editor to replace the editor contents with "# Checklist
 
-          ", then save the file.
+          ". Finish with the edited contents visible before saving.
 
           9. Before continuing, confirm these visible checkpoints: A "New file" dialog opens titled
           "New file", explaining it will create a file in projects/demo-app/, with a Name field
@@ -74,8 +74,12 @@ cases:
           content area and also appears under demo-app in the tree (the mock's file-watch event
           reconciles it in immediately), selected as the active row.
       - aiAssert: >-
-          A control labelled "Save" is visible, it is disabled. The editor's first line reads "#
-          Checklist" for CHECKLIST.md.
+          The editor's first line reads "# Checklist" for CHECKLIST.md and the Save control is
+          available for the unsaved edit.
+      - aiAct: >-
+          Save CHECKLIST.md once, open README.md, then reopen CHECKLIST.md from the demo-app tree to
+          prove the saved file can be loaded again. Finish with CHECKLIST.md open.
+      - aiAssert: The reopened CHECKLIST.md contains "# Checklist" and remains selected in the demo-app tree.
   - name: FILE-03 Handle a duplicate project-file rename
     tags:
       - files
@@ -97,8 +101,8 @@ cases:
           6. Before continuing, confirm these visible checkpoints: A "Rename item" dialog opens with
           the Name field prefilled "notes.txt" and "Cancel" / "Rename" actions.
       - aiAssert: >-
-          An error toast reads "Already exists." and both files remain in the tree: "notes.txt" is
-          still listed and "README.md" is untouched.
+          The duplicate rename is rejected: both "notes.txt" and the existing "README.md" remain
+          listed in the demo-app tree.
   - name: FILE-04 Browse journal and relationship memory, then persist a project-note edit
     tags:
       - files

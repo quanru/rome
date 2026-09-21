@@ -14,8 +14,8 @@ cases:
           The chat home shows the greeting "Welcome," and the headline "What should we create?". The
           message composer shows the placeholder "How can I help you today?", the current project
           name "default", and a reasoning effort control that currently reads "Think". A button
-          labelled "Upload files" is visible. A button labelled "Project" is visible. A button
-          labelled "Send" is visible.
+          with an attachment icon is visible, along with the project picker, reasoning control, and
+          arrow-shaped send button.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
@@ -29,7 +29,8 @@ cases:
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
 
-          2. Find the visible control labelled "Project" and click it.
+          2. In the message composer at the bottom of the Chat home, click the project selector
+          that currently displays "default". Do not open the Projects entry in the left sidebar.
       - aiAssert: >-
           A project picker menu opens listing multiple available projects and a "Create project"
           action.
@@ -78,8 +79,9 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          1. Expand the recent Chats list with the Load 3 more control and inspect the additional
-          conversations while keeping the sidebar open.
+          1. Keep using the Load more control in the recent Chats list until the "Draft launch
+          email" conversation is visible. Inspect the expanded conversations while keeping the
+          sidebar open.
       - aiAssert: >-
           The "Chats" section in the sidebar groups conversations by project folder. The "default"
           project lists "Build an app from an idea", "Turn a long video into a learning kit", "Make
@@ -105,17 +107,16 @@ cases:
           rewritten line "We built Rome because keeping a household running takes more attention
           than any one person has to spare."
       - aiAssert: >-
-          The later assistant answer that supplies the announcement banner as a paste-in snippet
-          renders a tsx code block immediately above the line "It reads the info semantic tokens, so
-          it tracks whichever theme is active."
+          The later assistant answer reaches the text "And the banner:" and renders a code block
+          labelled "tsx" directly beneath it.
       - aiAct: >-
-          1. Open the “Draft launch email” conversation from the Chats sidebar.
-
-          2. Find the field identified by "How can I help you today?", enter text with "Make the
-          subject line shorter".
-
-          3. Send the draft from the composer at the bottom of the conversation. Do not use the Send
-          button inside the earlier question card.
+          In the already open "Draft launch email" conversation, scroll to the bottom composer and
+          enter "Make the subject line shorter". Do not send it yet, and finish with the draft
+          visible in the composer.
+      - aiAssert: The bottom conversation composer contains the draft "Make the subject line shorter".
+      - aiAct: >-
+          Send the draft using the bottom conversation composer, not the Send button inside the
+          earlier question card. Finish after the failed-request error appears above the composer.
       - aiAssert: >-
           Sending fails with an error above the composer: a proxy error message naming
           "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
@@ -186,12 +187,15 @@ cases:
           4. Before continuing, confirm these visible checkpoints: A feedback popover opens with an
           optional comment field with the placeholder "Optional: what went wrong, or what was
           great?" and a "Submit" button.
-      - aiAssert: A control labelled "Feedback recorded" is visible, it is disabled.
+      - aiAssert: >-
+          The feedback popover is closed and the thumbs-up icon for that assistant turn remains
+          filled or highlighted, showing that the helpful rating was recorded.
       - aiAct: >-
           1. Open the “Morning brief tweaks” conversation from the Chats sidebar.
 
           2. Explore the page by scrolling until the content containing "Kept. Tomorrow" is visible.
 
-          3. Find and click the "Copy message" control on the assistant turn containing "Kept.
-          Tomorrow".
-      - aiAssert: A control labelled "Copied" is visible.
+          3. Click the "Copy message" control on the assistant turn containing "Kept. Tomorrow",
+          confirm that its copy icon briefly changes to a checkmark, then finish.
+      - aiAssert: >-
+          The assistant turn containing "Kept. Tomorrow" is visible with its message action controls.

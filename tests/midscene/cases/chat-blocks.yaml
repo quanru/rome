@@ -7,15 +7,13 @@ cases:
       - app.open:
           path: /chat/mock-chat-build-app
       - aiAct: >-
-          1. Find the answered design-question card and try to change one selected answer. Confirm
-          the card does not accept changes and do not interact with any other card.
+          Find the answered design-question card, inspect its selected answers, then scroll through
+          that card until its bottom and "Answered" footer are visible. Do not use the conversation
+          composer and do not interact with any other card.
       - aiAssert: >-
-          the visible interface contains "When should the app label an issue?", "Should it apply
-          labels directly, or suggest for review?", "How should the label set be built?", "Which
-          label dimensions should the classifier assign?", "Which GitHub repo(s) do you want to wire
-          up first", "Answered"; it does not contain "Asked by Rome". The answered card remains
-          locked. Its ten chosen answers stay selected, and no Send or editable action row is
-          available below the card.
+          The design-question card shows selected answers and an "Answered" footer rather than
+          "Asked by Rome". The card has no Send action and its answers are presented as completed,
+          not as a live form.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.

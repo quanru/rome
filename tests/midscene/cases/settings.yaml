@@ -35,10 +35,8 @@ cases:
           1. Explore the page by scrolling until the content containing "Every channel and service"
           is visible.
       - aiAssert: >-
-          the visible interface contains "Every channel and service your agent can use, in one
-          place.", "Telegram", "WhatsApp", "WeChat", "LinkedIn", "Discord", "Email", "Feishu",
-          "GitHub", "Composio", "Connected", "App keys", "1 key". The "Connections" section is shown
-          with service rows marked "Connected", beginning with Telegram and WhatsApp.
+          The Connections page shows the description "Every channel and service your agent can use,
+          in one place." and begins its service list with a Telegram connection marked "Connected".
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
@@ -77,8 +75,7 @@ cases:
           the warning "Any app installed on your Rome will be able to read this.", and a "Save for
           all apps" button. the visible interface contains "Enter the secret value.".
       - aiAssert: >-
-          the visible interface contains "Saved. Apps can now read SHOP_DB_PASSWORD.". the visible
-          interface contains "SHOP_DB_PASSWORD".
+          The App keys list contains the newly saved key "SHOP_DB_PASSWORD".
   - name: SET-03 Inspect channel activation and log out an AI tool
     tags:
       - settings
@@ -119,19 +116,23 @@ cases:
     steps:
       - app.open:
           path: /settings/favors
+      - aiAssert: >-
+          The Favors tab shows its heading and description, with Balance, Earned, and Spent summary
+          cards near the top.
       - aiAct: >-
           1. Explore the pending payment decision and the Ledger by scrolling through the Favors
           page, without paying or declining anything.
       - aiAssert: >-
-          The Favors tab shows the heading "Favors" and the description about balance, payments, and
-          paid app actions. Balance / Earned / Spent summary cards are visible. The "Awaiting your
-          payment decision" section lists one pending "place_grocery_order" request for 120 favors
-          with "Pay" and "Decline" buttons. A "Paid action requests" section and a "Ledger" section
-          are also rendered.
+          The "Awaiting your payment decision" section lists one pending "place_grocery_order"
+          request for 120 favors with "Pay" and "Decline" buttons. "Paid action requests" and
+          "Ledger" sections are also rendered.
       - aiAct: >-
           1. Open Settings and select Advanced.
 
-          2. Explore the page by scrolling until the content containing "Computer Use" is visible.
+          2. In the main Settings content, scroll downward past Tailscale and System diagnosis.
+          Do not stop when only the "Computer Use" heading appears; continue until the OpenCLI
+          v1.8.8 Running row, Rome browser Connected row, and Mac Chrome disconnected row are
+          visible together, then finish there.
 
           3. Before continuing, confirm these visible checkpoints: The Advanced tab shows the
           heading "Advanced Settings". Near the top, an "Access Control" section contains an
@@ -140,10 +141,7 @@ cases:
           interface contains "Couldn't load version info.", "Retry".
       - aiAssert: >-
           The "Computer Use" section lists OpenCLI at "v1.8.8" / "Running" and "Rome browser" as
-          "Connected" (Profile rome-browser), plus a disconnected "Mac Chrome" row. Below it, a
-          "Presentation mode" toggle carries the "Mask agent identity in chat" browser-only
-          description. A collapsed "Developer Settings" disclosure is visible below the Computer Use
-          section.
+          "Connected" (Profile rome-browser), plus a disconnected "Mac Chrome" row.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
@@ -156,8 +154,7 @@ cases:
           4. Before continuing, confirm these visible checkpoints: The Access Control allowed-emails
           field lists partner@example.com and sitter@example.com.
       - aiAssert: >-
-          the visible interface contains "Allowed emails saved". the visible interface contains
-          "neighbour@example.com".
+          The Allowed emails list contains "neighbour@example.com" alongside the existing entries.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.

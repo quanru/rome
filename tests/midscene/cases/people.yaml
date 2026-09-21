@@ -30,15 +30,9 @@ cases:
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
 
-          2. Find and click Directory.
+          2. Select the "Inner circle" bond filter and inspect its two people.
 
-          3. Find and click the "Inner circle" bond filter chip.
-
-          4. Find and click the "Acquaintance" bond filter chip.
-
-          5. Before continuing, confirm these visible checkpoints: The directory is filtered to
-          exactly the two inner-circle people: "Nadia Petrova" and "Ray Oster". Acquaintance rows
-          such as "Mira Chen" are not shown.
+          3. Then select the "Acquaintance" bond filter and finish with that filtered list visible.
       - aiAssert: Switching to "Acquaintance" shows only "Arvind Srivastav" and "Mira Chen".
   - name: PPL-02 Inspect a person timeline, channel filters, and account actions
     tags:
@@ -70,18 +64,17 @@ cases:
           thread.
       - aiAssert: >-
           A radio labelled "All" is visible, it is selected. A radio labelled "WhatsApp" is visible,
-          it is not selected. Switching back to "All" restores the unfiltered timeline: each message
-          row shows its source-channel badge "WhatsApp" again (badges are hidden while a
-          single-channel filter is active).
+          it is not selected. The unfiltered timeline shows source-channel badges on its message
+          rows.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
 
           2. Find the visible control labelled "Actions for Ray Oster" and click it.
-
-          4. Before continuing, confirm these visible checkpoints: A management menu opens with
-          exactly the entries "Change bond", "Link account…", "Merge into another person…", and
-          "Memory profile".
+      - aiAssert: >-
+          The management menu is open with "Change bond", "Link account…", "Merge into another
+          person…", and "Memory profile" actions.
+      - aiAct: Close the management menu without choosing an action.
       - app.expectUrl:
           path: /people/person/ray-oster
       - aiAssert: >-

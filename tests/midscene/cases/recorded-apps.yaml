@@ -24,23 +24,13 @@ cases:
       - app.open:
           path: /apps/code-review
       - aiAct: >-
-          1. Find and click the "PR #301" review item.
-
-          2. Explore the page by scrolling until the content containing "Verdict" is visible.
-
-          3. Explore the page by scrolling until the content containing "[P2]" is visible.
-
-          4. Before continuing, confirm these visible checkpoints: The Code Review recorded app
-          dashboard shows "1 repo · 2 reviews" for "rome-os/rome" and an Activity list with two
-          completed reviews: "PR #301 fix(app-web-sdk): resolve app renderer from the SDK" and "PR
-          #300 chore(apps): drop unused runtime dependencies", each marked "Completed". The review
-          detail renders with a "Back" control, the heading "#301 fix(app-web-sdk): resolve app
-          renderer from the SDK", and a "completed" state attributed to "zhangfand". A review
-          timeline shows the queued/cloning/reviewing/posting stages. Below the timeline, a
-          "Verdict" section reads "REQUEST_CHANGES" followed by a "Findings (3)" heading.
+          Open the "PR #301" review item, inspect its review timeline, then scroll to the Verdict
+          and Findings summary. Finish with "REQUEST_CHANGES" and "Findings (3)" visible.
       - aiAssert: >-
-          The findings list continues below P1 with a "[P2]" finding and a "[P3]" finding, each with
-          a source file reference, so all three ranked findings are present.
+          The PR #301 review detail is completed, its Verdict is "REQUEST_CHANGES", and it reports
+          "Findings (3)".
+      - aiAct: Scroll farther through the findings until the "[P3]" finding and its source reference are visible.
+      - aiAssert: The third ranked finding is marked "[P3]" and includes a source file reference.
   - name: RAPP-03 Inspect a Stock Daily report from schedule to market news
     tags:
       - apps
@@ -49,22 +39,17 @@ cases:
       - app.open:
           path: /apps/stock-daily
       - aiAct: >-
-          1. Find and click the "2026-09-11" report row.
-
-          2. Explore the page by scrolling until the content containing "4. Sector Performance" is
-          visible.
-
-          3. Explore the page by scrolling until the content containing "8. Key Stock News and
-          Notable Moves" is visible.
-
-          4. Before continuing, confirm these visible checkpoints: The Stock Daily recorded app
-          header shows "2 reports" with "Frequency Weekdays" and a next-run time of "09/16, 04:30
-          AM". The Report History lists two scheduled, completed reports dated "2026-09-11" and
-          "2026-09-10", each with a preview of its data cutoff note. The report view renders with a
-          "Back to list" control and the title "US Stock Market Daily Close Report | 2026-09-11",
-          marked "Completed". The report body opens with the data cutoff note and the "1. Major
-          Index Overview" section (an executive summary may appear above the numbered sections). The
-          report body contains the "4. Sector Performance" section.
+          Open the completed report dated "2026-09-11" from Report History. Finish with the report
+          title and the beginning of its body visible.
       - aiAssert: >-
-          Further down, the "8. Key Stock News and Notable Moves" section is rendered with news
-          entries, confirming the full recorded report is browsable rather than an error state.
+          The report view has a "Back to list" control, is marked "Completed", and is titled "US
+          Stock Market Daily Close Report | 2026-09-11". Its body begins with the data cutoff note
+          and a "0. One-sentence Executive Summary" section.
+      - aiAct: Scroll through the report until the "4. Sector Performance" section is visible.
+      - aiAssert: The recorded report contains a rendered "4. Sector Performance" section.
+      - aiAct: >-
+          Continue scrolling through the report until "8. Key Stock News and Notable Moves" and its
+          news entries are visible.
+      - aiAssert: >-
+          The "8. Key Stock News and Notable Moves" section is rendered with news entries,
+          confirming the full recorded report is browsable rather than an error state.

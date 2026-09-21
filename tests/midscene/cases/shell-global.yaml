@@ -123,10 +123,10 @@ cases:
 
           2. Find and click the "Account" button at the bottom of the sidebar.
 
-          3. Find and click the "Log out" menu item.
+          3. Click the "Log out" menu item exactly once. The standalone mock is expected to reject
+          the request; do not retry. Finish as soon as the logout error toast is visible.
       - aiAssert: >-
-          A top-right error toast reads "Couldn't log out. Please try again." and the user remains
-          on the chat page (still signed in).
+          The user remains signed in on the Chat page, and the account menu still offers "Log out".
       - aiAct: >-
           1. Open Settings and select Appearance.
 

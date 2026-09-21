@@ -102,16 +102,13 @@ cases:
 
           3. Find and click All time.
 
-          4. Scroll the main content area to the bottom.
-
-          5. Before continuing, confirm these visible checkpoints: A time range control near the
-          page heading currently shows "7 days". The dropdown shows exactly the options "24 hours",
-          "7 days", "30 days", and "All time". The time range control now shows "All time" and the
-          table's first rows are still the recent sessions ("Leak follow-up with Dana" remains at
-          the top).
+          4. Find the older session titled "Invoice from the plumber" in the all-time results and
+          finish with that row visible.
       - aiAssert: >-
-          The pagination footer at the bottom reads "Showing 1-22 of 22" and the older thread titled
-          "Invoice from the plumber" is present in the all-time table (the 7-day list hid it).
+          The older session "Invoice from the plumber" is present in the results with a Channel
+          badge.
+      - aiAct: Scroll the main content area to the bottom until the pagination footer is visible.
+      - aiAssert: The pagination footer reads "Showing 1-22 of 22".
   - name: SES-03 Inspect channel and webchat session details, then reopen Chat
     tags:
       - sessions

@@ -62,13 +62,12 @@ cases:
           "send_message" requires guardian approval' (not the Reject buttons on the Alex channel
           connection requests).
 
-          3. Explore the page by scrolling until the content containing "pending approvals requiring
-          review" is visible.
+          3. Return to the top of the Activity page and finish with the summary cards visible.
 
           4. Before continuing, confirm these visible checkpoints: The send_message row resolves to
           a rejected state: its status pill reads "Rejected" and the row no longer offers
           Approve/Reject.
-      - aiAssert: The top banner now reads "3 pending approvals requiring review".
+      - aiAssert: The Activity summary shows a Pending count of 3.
   - name: ACT-03 Inspect an accepted webhook delivery payload
     tags:
       - activity

@@ -26,16 +26,9 @@ cases:
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.
 
-          2. Find and click Calendar.
+          2. Open Calendar and inspect the monthly grid, weekday headers, and routine markers.
 
-          3. Find and click List.
-
-          4. Before continuing, confirm these visible checkpoints: it contains text matching
-          "\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d\b".
-          The view switches to a monthly calendar headed with the current month name and four-digit
-          year, with weekday headers (Sun through Sat) and dated cells. A legend distinguishes
-          "recurring" and "one-time" runs, and days carrying scheduled routines show markers.
-          "Calendar" is the active view switcher button.
+          3. Return to List and finish with the grouped routine list and "Morning brief" visible.
       - aiAssert: Switching back to "List" restores the grouped routine list with "Morning brief" visible.
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
@@ -53,16 +46,11 @@ cases:
           continuing, without undoing saved changes.
 
           2. Find and click Create Routine.
-
-          3. Find and click Cancel.
-
-          4. Before continuing, confirm these visible checkpoints: A "Create Routine" dialog opens
-          with a "Trigger type" choice of three cards: "Schedule" ("Fires on a clock — once at a
-          date or on a recurring rule."), "Event" ("Fires when a matching event is emitted on the
-          internal bus."), and "Manual" ("Never fires on its own — you run it by hand from here.").
-          With Schedule selected, the form has Name, "one-time"/"recurring" schedule options,
-          Timezone, Date, Action Name ("Pick an action…"), and "Args (JSON object)" fields, plus
-          "Cancel" and "Create Routine" buttons.
+      - aiAssert: >-
+          A "Create Routine" dialog is open with Schedule, Event, and Manual trigger choices. With
+          Schedule selected, the form includes Name, schedule, Timezone, Date, Action Name, Args,
+          Cancel, and Create Routine controls.
+      - aiAct: Cancel routine creation and finish with the routine list visible again.
       - aiAssert: >-
           The dialog closes and no new routine is created: the totals still read "Total 6" and
           "Active 5".
@@ -74,12 +62,7 @@ cases:
       - app.open:
           path: /routines
       - aiAct: >-
-          1. Switch on the toggle switch on the "Archive old notes" row under "On demand".
-
-          2. Switch the "Archive old notes" toggle back off.
-
-          3. Before continuing, confirm these visible checkpoints: The summary cards read "Active 5"
-          and "Paused 1", and the "Archive old notes" row under "On demand" shows its toggle
-          switched off. The toggle is now switched on and the summary updates to "Active 6" and
-          "Paused 0".
+          Switch on the toggle for "Archive old notes" under "On demand" and confirm the summary
+          changes to Active 6 and Paused 0. Then switch that same toggle back off and finish only
+          after the summary returns to Active 5 and Paused 1.
       - aiAssert: The summary returns to "Active 5" and "Paused 1".

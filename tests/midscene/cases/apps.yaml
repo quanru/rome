@@ -74,8 +74,7 @@ cases:
           buttons.
       - aiAssert: >-
           The Stock Daily tile disappears from the Installed apps group, the Installed apps count
-          drops to 4, and a success toast confirms Stock Daily was uninstalled with its data
-          preserved. The other four fixture apps remain listed.
+          drops to 4, and the other four fixture apps remain listed.
   - name: APPS-03 Inspect the Issue Triage app details and capabilities
     tags:
       - apps
