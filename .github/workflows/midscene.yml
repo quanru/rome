@@ -19,6 +19,16 @@ on:
       - "packages/ui/**"
       - "packages/web-content/**"
       - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - ".github/workflows/midscene.yml"
+      - "tests/midscene/**"
+      - "packages/web/**"
+      - "packages/api-types/**"
+      - "packages/app-runtime-sdk/**"
+      - "packages/ui/**"
+      - "packages/web-content/**"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 # Credential trust model:
@@ -27,10 +37,12 @@ on:
 # protected environment in the workflow does not create its reviewer gate — an
 # absent environment is provisioned open — so until a maintainer actually
 # configures a protected environment with required reviewers, the secret-
-# bearing path is restricted to trusted refs only: pushes to main (merge-gated
-# code) and manual dispatches on main. PRs do not start this workflow. To opt
-# a PR into visual E2E later, add the protected environment back and gate the
-# pull_request event on an environment approval.
+# bearing path (the `midscene` matrix) is restricted to trusted refs only:
+# pushes to main (merge-gated code) and manual dispatches on main. Pull
+# requests only run the secret-free `harness-validation` job (npm ci,
+# type-check, YAML case collection). To opt a PR into visual E2E later, add
+# the protected environment back and gate a pull_request matrix job on an
+# environment approval.
 
 permissions:
   contents: read
@@ -40,6 +52,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  harness-validation:
+    name: Midscene harness validation (no secrets)
+    # Runs on every PR and on main: validates the standalone test package
+    # without model secrets, a browser download, the Rome workspace install,
+    # or the mock server. Loading the config and collecting YAML cases never
+    # calls chromium.launch or the model, so contributor-controlled PR code
+    # reaches no credentials here.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Activate Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tests/midscene/package-lock.json
+
+      - name: Install Midscene test dependencies
+        # This job never launches a browser; skip the playwright postinstall
+        # download. Importing the playwright package (for its types/API) does
+        # not require the browser binaries.
+        working-directory: tests/midscene
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci
+
+      - name: Type-check custom nodes
+        working-directory: tests/midscene
+        run: npm run typecheck
+
+      - name: Collect workflow cases
+        # Parses every cases/**/*.yaml and resolves node references exactly
+        # like the runner; fails on schema errors or unknown nodes.
+        working-directory: tests/midscene
+        run: npm run collect
+
   midscene:
     name: Midscene visual (${{ matrix.shard }})
     # Fail-closed trust gate: billable secrets only ever run against code on
@@ -51,7 +103,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 2
       matrix:
         # Shards are selected by YAML tags (MIDSCENE_INCLUDE_TAGS), see
         # tests/midscene/README.md and docs/midscene-e2e-plan.md.
@@ -131,6 +183,13 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+
+      - name: Type-check Midscene custom nodes
+        # npm test loads midscene.config.ts via tsx/esbuild without semantic
+        # TS checks, so run the standalone package's tsc before the expensive
+        # browser shards.
+        working-directory: tests/midscene
+        run: npm run typecheck
 
       # dev:mock runs build:kit before rsbuild dev, so first-request readiness
       # can take a few minutes after the job starts.

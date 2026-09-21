@@ -1,338 +1,483 @@
-# Rome Midscene 用例规划
+# Rome Midscene E2E Plan
 
-> 面向 Rome 维护者的接入方案附件。文末附英文摘要（English summary）。
+> Onboarding attachment for Rome maintainers.
 >
-> 状态：第 5 节目录中的 91 个 ✅ 用例已全部落为 `tests/midscene/cases/` 下的 YAML，按 6 个 CI 分片（14/15/14/20/17/11）组织，并已在本地 mock 模式**全量 91/91 跑通**（含 PoC：AUTH-01、E2E-01/02/03）。
+> Status: all 91 cases catalogued in section 5 are landed as YAML under
+> `tests/midscene/cases/`, split across 6 CI shards (14/15/14/20/17/11), and
+> pass **91/91 locally in mock mode** (including the PoC stories AUTH-01 and
+> E2E-01/02/03).
 
-## 1. 背景与目标
+## 1. Background and Goals
 
-Rome 是一个以对话为中心、集成例程（routines）、审批（approvals）、活动流（activity）、安装式应用（apps）等能力的个人 AI 操作系统。它的产品体验大量由**富交互卡片**与**跨页面状态联动**构成——例程从聊天里被提议、一键启用、落在 Routines 页；审批在聊天卡片里完成、同步到 Activity；聊天中的应用链接在工作区侧旁 tile 打开并出现在 Apps 安装列表。
+Rome is a conversation-centric personal AI OS that integrates routines,
+approvals, an activity feed and installed apps. Much of its product experience
+is made of **rich interactive cards** and **cross-page state coupling**: a
+routine is proposed in chat, enabled with one click, and lands on the Routines
+page; an approval is completed on a chat card and syncs to Activity; an app
+link in chat opens in a workspace tile beside the conversation and shows up in
+the installed Apps list.
 
-这类体验有两个特点：
+This kind of experience has two testing problems:
 
-1. **传统选择器测试脆弱**：卡片结构、动画、流式渲染、虚拟布局变化频繁；
-2. **真实后端不可测**：功能依赖个人账号、IM 渠道（telegram/whatsapp）、第三方服务，CI 中无法稳定复现。
+1. **Selector-based tests are brittle**: card markup, animations, streaming
+   renders and virtualized layouts change often.
+2. **The real backend is not testable**: features depend on personal accounts,
+   IM channels (Telegram/WhatsApp) and third-party services, none of which can
+   be reproduced reliably in CI.
 
-本方案用 [Midscene](https://midscenejs.com/) 的视觉语义驱动解决第 1 点，用 Rome 自带的 **MSW mock 模式**（`pnpm dev:mock`）解决第 2 点：所有用例只针对仓库内合成 fixture 运行，无需真实账号、无外部副作用、可在 fork PR 上复现。
+This proposal uses [Midscene](https://midscenejs.com/) visual-semantic driving
+for problem 1, and Rome's built-in **MSW mock mode** (`pnpm dev:mock`) for
+problem 2: every case runs only against in-repo synthetic fixtures, with no
+real accounts and no external side effects, and is reproducible on a fork PR.
 
-目标：
+Goals:
 
-- 为 Rome 的核心产品故事建立**可长期守护**的视觉 E2E 基线；
-- 作为 Midscene CI 向开源项目推广的参考实现（确定性夹具 + 视觉语义断言 + 分片 CI）；
-- 全部用例可离线、重复运行，单次执行互不污染。
+- Establish a **long-lived guard** visual E2E baseline for Rome's core product
+  stories.
+- Serve as a reference implementation for offering Midscene CI to open-source
+  projects (deterministic fixtures + visual-semantic assertions + sharded CI).
+- Keep every case offline-runnable, repeatable and mutually non-polluting.
 
-## 2. 总体架构
+## 2. Architecture
 
 ```
 GitHub Actions (6 shards)
-  └─ pnpm --filter rome-web dev:mock        # MSW mock 模式，localhost:3200
-       └─ tests/midscene (独立 npm package)
-            ├─ midscene.config.ts           # Playwright + Midscene 项目配置
-            ├─ cases/**.yaml                # 用例（套件 + tag 分片）
+  └─ pnpm --filter rome-web dev:mock        # MSW mock mode, localhost:3200
+       └─ tests/midscene (standalone npm package)
+            ├─ midscene.config.ts           # Playwright + Midscene config
+            ├─ cases/**.yaml                # cases (suite + shard tags)
             └─ Playwright Chromium (1440×900, en-US)
-                 └─ 每用例全新 BrowserContext
+                 └─ fresh BrowserContext per case
                       ├─ localStorage: rome.lang=en
-                      ├─ localStorage: rome-sidebar-pins=<全集>
-                      └─ MSW 内存态随上下文复位
+                      ├─ localStorage: rome-sidebar-pins=<full set>
+                      └─ in-memory MSW state reset with the context
 ```
 
-### 2.1 为什么是独立 npm package
+### 2.1 Why a standalone npm package
 
-`tests/midscene` 位于 pnpm workspace glob（`packages/*`、`rome_apps/*`、`example_apps/*`）之外，使用独立 `package-lock.json` 安装 `@midscene/test`、`@midscene/web` 与 `playwright`：
+`tests/midscene` sits outside the pnpm workspace globs (`packages/*`,
+`rome_apps/*`, `example_apps/*`) and installs `@midscene/test`,
+`@midscene/web` and `playwright` via its own `package-lock.json`:
 
-- Midscene 的依赖树不进入 Rome 产品依赖，不影响线上构建；
-- CI 中测试依赖与产品依赖分开缓存；
-- `npm ci` 非交互安装，`esbuild`/`sharp` 的安装脚本已通过 package.json `allowScripts` 显式批准。
+- Midscene's dependency tree never enters Rome's product dependencies or
+  affects production builds.
+- CI caches test dependencies and product dependencies separately.
+- `npm ci` installs non-interactively; the `esbuild`/`sharp` install scripts
+  are explicitly approved via the package's `allowScripts`.
 
-### 2.2 测试基座（midscene.config.ts）
+### 2.2 Test Harness (`midscene.config.ts`)
 
-- **每用例全新 BrowserContext**：MSW handler 挂在 Service Worker 风格的 `setupWorker` 上，写操作保存在内存；新上下文 = 冷启动 = fixture 复位。用例之间零共享状态。
-- **语言固定英文**：初始化脚本写入 `rome.lang=en`，避免中文 CI 机器探测出 zh-CN 导致文案漂移。另设 `zh` tag 的中文界面专用用例。
-- **侧栏 pin 全集注入**：mock guardian 默认只 pin Apps/Chat/Projects，其余入口藏在 "all apps" 弹层里。用例通过写入 `rome-sidebar-pins`（shell 自身的 localStorage 契约）展开全部内建入口，跨页故事的侧栏点击因此确定可用。
-- **AI 节点 + 确定性节点分层**：导航、URL、滚动等机械操作使用 10 个自定义 Playwright 节点，视觉语义判断才交给 `aiTap`/`aiAssert`，显著降低耗时与波动。
-- **环境变量驱动选择执行**：`MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`（逗号分隔，OR 语义）、`MIDSCENE_RETRY`、`HEADLESS`，本地单用例迭代与 CI 分片共用同一入口。
+- **Fresh BrowserContext per case**: MSW handlers run in a Service Worker
+  (`setupWorker`) and keep writes in memory; a new context is a cold start with
+  fixtures reset. Zero shared state between cases.
+- **Pinned English UI**: an init script writes `rome.lang=en`, so a zh-CN CI
+  machine locale cannot drift the copy. A dedicated `zh`-tagged case covers the
+  localized Chinese shell.
+- **Full sidebar-pin injection**: the mock guardian pins only Apps/Chat/
+  Projects by default; other entries live behind the "all apps" popover. Cases
+  write `rome-sidebar-pins` (the shell's own localStorage contract) so every
+  built-in entry is expanded and cross-page sidebar clicks are deterministic.
+- **Layered AI and deterministic nodes**: mechanical operations (navigation,
+  URLs, scrolling) use the custom Playwright nodes; only visual-semantic
+  judgments go to `aiTap`/`aiAssert`, which cuts both runtime and flakiness.
+- **Env-driven selection**: `MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`
+  (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
+  entry point serves local single-case iteration and CI sharding.
 
-自定义节点（完整清单与参数见 `midscene-node-reference.md`）：
+The custom nodes (full list and parameters in `midscene-node-reference.md`):
 
-| 节点 | 作用 |
+| Node | Purpose |
 | --- | --- |
-| `app.open` | 新上下文打开路由，注入语言/pin，等待侧栏或登录页就绪 |
-| `app.reload` | 硬刷新（内存态复位为默认 fixture，用于验证"刷新后"行为） |
-| `app.goBack` | 浏览器后退（客户端导航，**保留**内存态） |
-| `app.expectUrl` | URL 子串/`re:` 正则断言 |
-| `app.clickContentLink` | 在侧栏之外按链接文本确定性点击（规避侧栏同名链接歧义） |
-| `app.clickByLabel` | 按 accessible name 确定性点击重复的图标按钮（tile kebab、chip 清除等，穿透 open shadow DOM） |
-| `app.pressKey` | 确定性键盘快捷键（`mod` 在 macOS→⌘、其他→Ctrl，兼容本地与 Linux CI） |
-| `app.typeText` | 按 placeholder/label 定位字段后键盘输入，支持只清空（`clear: true` 无 `text`） |
-| `app.scrollContent` | 主内容区（含 shadow DOM 录制应用与窗口级滚动页如 Sessions）滚到顶/底，二次设定 |
-| `app.scrollTextIntoView` | 先发送可信 wheel 手势解除聊天吸底，再把含指定文本的元素滚到视口中央；穿透 shadow DOM |
+| `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
+| `app.reload` | Hard reload (in-memory state resets to the default fixtures; for "after refresh" behavior) |
+| `app.goBack` | Browser back (client navigation, **keeps** in-memory state) |
+| `app.expectUrl` | URL substring / `re:` regex assertion |
+| `app.clickContentLink` | Deterministically click a link by text outside the sidebar (avoids same-name sidebar ambiguity) |
+| `app.clickByLabel` | Deterministically click repeated icon buttons by accessible name (tile kebab, chip clear), piercing open shadow DOM |
+| `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere; works locally and on Linux CI) |
+| `app.typeText` | Locate a field by placeholder/label and type; supports clear-only (`clear: true` without `text`) |
+| `app.scrollContent` | Scroll the main content area (including shadow-DOM recorded apps and window-level pages like Sessions) to top/bottom, idempotent |
+| `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport; pierces shadow DOM |
 
-## 3. Mock 模式契约（用例作者必读）
+## 3. Mock-Mode Contract (for Case Authors)
 
-所有用例都依赖以下行为事实；这些是**对现有实现的记录**，若实现改变，用例需同步。
+Every case relies on the behavioral facts below. They **document the current
+implementation**; if the implementation changes, the cases must change with it.
 
-1. **冷启动状态固定**：`/api/health`、`/api/bootstrap`、`/api/auth/me` 使应用直接进入已登录 shell，guardian 为合成用户；浏览器一打开就是认证态。
-2. **写操作只在内存**：POST/PATCH 类操作（如启用 routine、批准审批、安装应用）写入 MSW 内存，在**同一 BrowserContext 的客户端路由之间保持**；硬刷新、关闭上下文或新开上下文即恢复 fixture 默认值。
-3. **未被 handler 匹配的请求 bypass MSW**：访问未 mock 的能力会打到网络并失败，用例不得依赖此类能力（列入第 6 节缺口）。
-4. **用例只允许使用合成 fixture 数据**：不得引入真实人名、账号、token、聊天内容。
-5. **等待策略**：`app.open` 的 shell 等待（侧栏 `a[href="/chat"]` 出现）同时表示 mock 就绪；卡片挂载后的异步 settle（如 routine 卡片重新 `GET /api/routines`）用显式 `wait` 等待。
-6. **聊天吸底**：transcript 默认吸附最新消息，程序化滚动会被 `useStickToBottom` 弹回；只有可信手势（wheel/touch/键盘）后 300ms 窗口内的 scroll 能解除吸底——这一封装已内置于 `app.scrollTextIntoView`。
-7. **聊天内应用链接**：markdown 中 `/apps/<id>` 链接由 `ChatLink` 拦截，在工作区侧旁 tile 打开，URL 保持在 `/chat/...`；这是真实产品行为，用例按 tile 断言而非路由跳转。
+1. **Fixed cold-start state**: `/api/health`, `/api/bootstrap` and
+   `/api/auth/me` drop the app straight into an authenticated shell with the
+   synthetic guardian user; the browser is authenticated on open.
+2. **Writes are in-memory only**: POST/PATCH operations (enabling a routine,
+   approving an approval, installing an app) land in MSW memory and **persist
+   across client routes within the same BrowserContext**; a hard reload,
+   closing the context, or opening a new one restores fixture defaults.
+3. **Unmatched requests bypass MSW**: touching an unmocked capability hits the
+   network and fails; cases must not depend on such capabilities (listed as
+   gaps in section 6).
+4. **Synthetic fixture data only**: no real names, accounts, tokens or chat
+   content may be introduced.
+5. **Waiting strategy**: `app.open` waits for the shell (`a[href="/chat"]` in
+   the sidebar), which doubles as mock-readiness; async settling after a card
+   mounts (e.g. a routine card re-running `GET /api/routines`) uses explicit
+   `wait` steps.
+6. **Chat stick-to-bottom**: the transcript snaps to the latest message and
+   programmatic scrolling is pushed back by `useStickToBottom`; only a scroll
+   within 300 ms of a trusted gesture (wheel/touch/keyboard) releases it. This
+   is encapsulated in `app.scrollTextIntoView`.
+7. **In-chat app links**: `/apps/<id>` links in markdown are intercepted by
+   `ChatLink` and open in a workspace tile beside the chat while the URL stays
+   at `/chat/...`. This is real product behavior; assert on the tile, not on a
+   route change.
 
-## 4. CI 设计（.github/workflows/midscene.yml）
+## 4. CI Design (`.github/workflows/midscene.yml`)
 
-- **触发**：仅 push main / 手动 dispatch（dispatch 也通过 `if: github.ref == 'refs/heads/main'` 限 main ref）运行，路径覆盖 `tests/midscene/**`、整个 `packages/web/**` 以及 build:kit 会重建的 workspace 依赖 `packages/ui`、`packages/web-content`、`packages/api-types`、`packages/app-runtime-sdk`。**不监听 pull_request**：模型密钥计费且 PR 作业检出的是贡献者可控代码；workflow 里声明一个不存在的受保护 environment 并不会自动创建审批门（缺省会被无门创建），所以在维护者真正配置好「required reviewers 受保护 environment + environment 级密钥」之前，密钥路径保持 fail-closed，只对受保护默认分支上的代码开放。将来要给 PR 开启，需先在 Settings 配好受保护 environment，再在 workflow 加回带审批门的 `pull_request`。
-- **运行环境**：`ubuntu-24.04` + Node 24；先用 `pnpm/action-setup@v5`（读根 `packageManager` 的 11.6.0）启用 pnpm，**再**跑 `setup-node`（其 `cache: pnpm` 要求 pnpm 已就位，顺序反了会在干净 runner 上找不到 pnpm）；`pnpm install --frozen-lockfile --ignore-scripts` 安装产品依赖，`tests/midscene` 下 `npm ci`（lockfile 全部 resolved 指向公共 `registry.npmjs.org`，干净 runner 可直接安装）+ `npx playwright install --with-deps chromium`。
-- **服务**：`pnpm --filter rome-web dev:mock` 后台启动（先跑 `build:kit`，就绪探测最长 360s 轮询 `http://localhost:3200/`），日志落 `/tmp/rome-devmock.log`，失败时随 artifact 上传。
-- **密钥与信任边界**：`MIDSCENE_MODEL_API_KEY/NAME/BASE_URL/FAMILY` 经 secrets 注入，且只挂在「配置校验 / 连通性预检 / 跑用例」三个步骤上（安装与起服务不接触密钥）。PR 检出的是贡献者可控代码，作业走受保护环境 **`midscene-e2e-review`**——维护者批准该 environment deployment 后 runner 才启动、密钥才暴露；push main 与手动触发走 **`midscene-e2e`** 环境（无需审批）。仓库需预先配置这两个 environment 与四个 secret。作业开头做非空校验与一次 `/chat/completions` 连通性预检（90s 超时），密钥/端点问题在 30 秒内失败而不是跑满 45 分钟。
-- **分片**：6 个 matrix shard，通过 `MIDSCENE_INCLUDE_TAGS=shard-N` 选择；每个用例恰好携带一个 `shard-N` tag。`fail-fast: false`、`max-parallel: 6`、单作业 45 分钟、用例级重试 2 次。
-- **证据**：每个分片始终上传 `midscene_run/` 与 `.midscene/` 报告 artifact（保留 14 天）；失败时附加 mock server 日志。
-- **网络稳定性**：`NODE_OPTIONS=--dns-result-order=ipv4first --no-network-family-autoselection`（模型端点仅 IPv4 稳定，规避 runner 侧 IPv6 竞速超时）。
-- **可选项（后续）**：报告汇聚后发布 GitHub Pages 历史报告——可复用 Midscene 官方/参考实现的 report-bundle + deploy reusable workflow，需要 Rome 侧另加报告构建脚本，本期不纳入。
+The workflow file is the source of truth for step-level details (action pins,
+timeouts, cache flags); this section records the design decisions and the
+reasons behind them.
 
-分片划分（按实测耗时与模块聚合，6 片并行墙钟约 8–12 分钟）：
+- **Triggers**: pushes to `main` on a scoped path set (the workflow itself,
+  `tests/midscene/**`, all of `packages/web/**`, the workspace packages
+  rebuilt by `build:kit` — `packages/ui`, `packages/web-content`,
+  `packages/api-types`, `packages/app-runtime-sdk` — and `pnpm-lock.yaml`),
+  the same paths on `pull_request`, plus manual `workflow_dispatch`. A PR
+  runs only the **secret-free `harness-validation` job** (`npm ci` with the
+  Playwright browser download skipped, `tsc --noEmit`, and a YAML case
+  collection step that parses every case and resolves node references
+  exactly like the runner — no browser, mock server, or model calls), so a
+  broken custom node or malformed case fails before merge without exposing
+  any credentials. The model-backed `midscene` matrix stays bound to the
+  main ref by `if: github.ref == 'refs/heads/main'`. The matrix does not
+  run on `pull_request`: model calls are billable and a PR job checks out
+  contributor-controlled code. Note that merely naming a protected
+  environment in the workflow does **not** create its reviewer gate — an
+  absent environment is provisioned open — so until a maintainer actually
+  configures a protected environment with required reviewers (ideally with
+  environment-scoped secrets), the secret-bearing matrix stays fail-closed
+  and runs only against code on the protected default branch. To enable
+  model-backed PR runs later, create the protected environment in Settings
+  first, then add an environment-gated `pull_request` matrix job back to
+  the workflow.
+- **Runtime**: Ubuntu + Node.js 24; pnpm is enabled (reading the root
+  `packageManager` version) **before** `setup-node`, whose `cache: pnpm`
+  requires pnpm to already exist on a clean runner. Product dependencies
+  install with `pnpm install --frozen-lockfile --ignore-scripts`; the
+  `tests/midscene` package installs with `npm ci` against a lockfile whose
+  `resolved` URLs all point at the public `registry.npmjs.org`, followed by
+  `playwright install --with-deps chromium`.
+- **Secret handling and trust boundary**: the four `MIDSCENE_MODEL_*` values
+  come from repository secrets and are scoped only to the steps that actually
+  call the model (configuration check, connectivity preflight, shard run);
+  dependency installation and the mock server never see them. The job starts
+  with a non-empty check and a `/chat/completions` connectivity preflight
+  (90-second timeout) so a missing secret or bad endpoint fails in seconds
+  instead of burning the full 45-minute budget.
+- **Network reachability (important)**: the preflight dials
+  `MIDSCENE_MODEL_BASE_URL` directly from the runner. Hosted GitHub runners can
+  only reach public endpoints. If the model gateway lives on an intranet (for
+  example a corporate-internal hostname), the preflight fails with a connect
+  timeout; the workflow then requires a **self-hosted runner** that can reach
+  that intranet (change the `runs-on` label) or a publicly reachable model
+  endpoint. Correct credentials with no network route fail at the preflight
+  just as quickly.
+- **Mock server**: `pnpm --filter rome-web dev:mock` starts in the background
+  (it runs `build:kit` first, so first-request readiness is polled for several
+  minutes); its log is uploaded as an artifact on failure.
+- **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
+  every case carries exactly one `shard-N` tag. `fail-fast: false`,
+  `max-parallel: 6`, a 45-minute per-job timeout, and 2 case-level retries.
+- **Evidence**: every shard always uploads the `midscene_run/` and
+  `.midscene/` report artifacts (14-day retention); the mock server log is
+  attached on failure.
+- **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
+  --no-network-family-autoselection` works around runner-side IPv6 racing when
+  the model endpoint is only stable over IPv4.
+- **Possible follow-up**: aggregate reports and publish a GitHub Pages history,
+  reusing Midscene's report-bundle + deploy reusable workflow. That needs an
+  extra Rome-side report build script and is out of scope for this iteration.
 
-| Shard | 用例数 | 内容 |
+Shard split (grouped by measured runtime and module; six parallel shards take
+roughly 8–12 minutes of wall time):
+
+| Shard | Cases | Contents |
 | --- | --- | --- |
-| shard-1 | 14 | chat 核心：首页、会话列表、composer、基础 transcript |
-| shard-2 | 15 | chat 富卡片（7）+ apps（7）+ E2E-03 安装故事 |
-| shard-3 | 14 | sessions（7）+ routines（5）+ E2E-01/02 故事线 |
-| shard-4 | 20 | activity（6）+ people（6）+ files/memory（8） |
-| shard-5 | 17 | settings（11）+ auth（3）+ SHELL-01/04/06 |
-| shard-6 | 11 | recorded apps 深度走查（5）+ SHELL-02/03/05/07 + GLOBAL-01/02（含 i18n、mobile） |
+| shard-1 | 14 | Chat core: home, conversation list, composer, basic transcript |
+| shard-2 | 15 | Chat rich cards (7) + apps (7) + E2E-03 install story |
+| shard-3 | 14 | Sessions (7) + routines (5) + E2E-01/02 stories |
+| shard-4 | 20 | Activity (6) + people (6) + files/memory (8) |
+| shard-5 | 17 | Settings (11) + auth (3) + SHELL-01/04/06 |
+| shard-6 | 11 | Recorded apps deep walkthrough (5) + SHELL-02/03/05/07 + GLOBAL-01/02 (i18n, mobile) |
 
-PoC 故事线同时携带所属分片 tag（E2E-01/02→shard-3，E2E-03→shard-2，AUTH-01→shard-5）。
+The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
+shard-2, AUTH-01 → shard-5).
 
-## 5. 用例目录
+## 5. Case Catalog
 
-> 用例 ID 规则：`<套件>-<序号>`；✅ = mock 可驱动（本期全部起草），⚠️ = 依赖第 6 节的 mock 缺口（仅登记，不落 YAML）。
+> Case ID convention: `<SUITE>-<number>`; ✅ = mock-drivable (all drafted in
+> this iteration), ⚠️ = blocked by a mock gap from section 6 (registered only,
+> no YAML).
 
 <!-- CASE-CATALOG -->
-本期共落地 **91 个** ✅ mock 可驱动用例（15 个 YAML 文件），按套件分组；Shard 列为 CI 分片归属。
+This iteration lands **91** ✅ mock-drivable cases (15 YAML files), grouped by
+suite. The Shard column shows CI ownership.
 
-### auth-shell（12，shard-5/6）
+### auth-shell (12, shard-5/6)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| AUTH-01 | Mock guardian 打开根路由直接进入聊天首页 |
-| AUTH-02 | `/dev/login` 本地登录表单渲染与必填校验 |
-| AUTH-03 | 登录表单提交命中通用错误 "Login failed"（未 mock 的 login 写接口） |
-| SHELL-01 | 侧栏入口可导航到每一个内建页面 |
-| SHELL-02 | ⌘/Ctrl+K 打开聊天搜索并命中会话 |
-| SHELL-03 | ⌘/Ctrl+B 折叠/展开侧栏 |
-| SHELL-04 | 编辑模式移除 pin、Add 恢复 pin |
-| SHELL-05 | 移动视口下侧栏变为可关闭抽屉（`mobile`） |
-| SHELL-06 | 账号菜单展示身份与账号操作 |
-| SHELL-07 | mock 模式不支持登出，给出错误 toast |
-| GLOBAL-01 | 未知路由静默跳转聊天首页 |
-| GLOBAL-02 | 切换中文后整个 shell 本地化（`zh`） |
+| AUTH-01 | Mock guardian opens the root route and lands on the chat home |
+| AUTH-02 | `/dev/login` renders the local sign-in form with required-field validation |
+| AUTH-03 | Submitting the login form hits the generic "Login failed" error (unmocked login write endpoint) |
+| SHELL-01 | Sidebar entries navigate to every built-in page |
+| SHELL-02 | ⌘/Ctrl+K opens chat search and matches a conversation |
+| SHELL-03 | ⌘/Ctrl+B collapses/expands the sidebar |
+| SHELL-04 | Edit mode removes a pin and Add restores it |
+| SHELL-05 | The sidebar becomes a closable drawer at mobile viewport (`mobile`) |
+| SHELL-06 | The account menu shows identity and account actions |
+| SHELL-07 | Logout is unsupported in mock mode and reports an error toast |
+| GLOBAL-01 | Unknown routes silently redirect to the chat home |
+| GLOBAL-02 | Switching to Chinese localizes the whole shell (`zh`) |
 
-### chat（21，shard-1/2）
+### chat (21, shard-1/2)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| CHAT-01 | 首页 composer 的 placeholder、上传、项目与 reasoning 控件 |
-| CHAT-02 | Reasoning effort 菜单含 Fast / Think / Ultrathink |
-| CHAT-03 | 项目选择器列出项目与新建入口 |
-| CHAT-04 | 首页 composer 发送在无后端时给出明确失败 |
-| CHAT-05 | 会话内发送失败且不丢失草稿 |
-| CHAT-06 | 斜杠 skill 菜单加载并报告不可用状态 |
-| CHAT-07 | @ agent 选择器提供两个 fixture agent |
-| CHAT-08 | 最近会话按日期分组（curated + older） |
-| CHAT-09 | 从侧栏打开会话加载 transcript |
-| CHAT-10 | 成功 tool trace 可从折叠摘要展开 |
-| CHAT-11 | 失败 turn trace 展示模型供应商错误 |
-| CHAT-12 | 子 agent 委派 trace 展示其 recorded-not-available 状态 |
-| CHAT-13 | 有用反馈可提交并记录 |
-| CHAT-14 | Copy message 复制纯文本助手消息 |
-| CHAT-15 | 已回答的设计问题卡锁定所选答案 |
-| CHAT-16 | 建应用最终回复的章节与可折叠 mermaid 图 |
-| CHAT-17 | 学习包链接在工作区 tile 打开 YouTube Distill |
-| CHAT-18 | 训练计划链接在 tile 打开 Fitness Tracker |
-| CHAT-19 | 市场复盘链接在 tile 打开 Stock Daily 指定报告 |
-| CHAT-20 | 实时问题卡答全前 Send 禁用，提交给出设计内失败 |
-| CHAT-21 | 拒绝 plumber 审批后卡片变为 rejected |
+| CHAT-01 | Home composer placeholder, upload, project and reasoning controls |
+| CHAT-02 | Reasoning effort menu offers Fast / Think / Ultrathink |
+| CHAT-03 | Project selector lists projects and a create entry |
+| CHAT-04 | Sending from the home composer fails clearly without a backend |
+| CHAT-05 | In-conversation send fails without losing the draft |
+| CHAT-06 | Slash skill menu loads and reports its unavailable state |
+| CHAT-07 | @ agent picker offers the two fixture agents |
+| CHAT-08 | Recent conversations are grouped by date (curated + older) |
+| CHAT-09 | Opening a conversation from the sidebar loads its transcript |
+| CHAT-10 | A successful tool trace expands from its collapsed summary |
+| CHAT-11 | A failed turn trace surfaces the model provider error |
+| CHAT-12 | A subagent delegation trace shows its recorded-not-available state |
+| CHAT-13 | Helpful feedback can be submitted and is recorded |
+| CHAT-14 | Copy message copies a plain-text assistant turn |
+| CHAT-15 | An answered design-question card locks the chosen answers |
+| CHAT-16 | The built-app final reply renders sections and a collapsible mermaid diagram |
+| CHAT-17 | A learning-kit link opens YouTube Distill in a workspace tile |
+| CHAT-18 | A workout-plan link opens Fitness Tracker in a tile |
+| CHAT-19 | A market-recap link opens a specific Stock Daily report in a tile |
+| CHAT-20 | The live question card keeps Send disabled until all answers are in, then submits to the designed failure |
+| CHAT-21 | Rejecting the plumber approval turns the card rejected |
 
-### apps（13，shard-2/6）
+### apps (13, shard-2/6)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| APPS-01 | Installed apps 网格列出 5 个 fixture 应用与内建应用 |
-| APPS-02 | 搜索收窄网格（"1 result"） |
-| APPS-03 | 无匹配搜索的空状态文案 |
-| APPS-04 | tile 菜单 Disable/Enable 即时切换 |
-| APPS-05 | Uninstall 确认对话框与卸载后计数/toast |
-| APPS-06 | 应用详情页 manage 行与 capability 卡片 |
-| APPS-07 | 未知 store handle 的安装页 not-found 态 |
-| RAPP-01 | Issue Triage 录制面板（Repos/Triaged/Succeeded/Failed + #363） |
-| RAPP-02 | YouTube Distill 录制记录与 15 节思维导图 |
-| RAPP-03 | Code Review 录制 PR 评审（timeline + Verdict + Findings P1–P3） |
-| RAPP-04 | Fitness Tracker 周计划与 beginner/20min 设置 |
-| RAPP-05 | Stock Daily 周频调度与完整日报（章节 1/4/8） |
-| E2E-03 | 从聊天链接打开已建应用并在 Apps 中找到它（`story`） |
+| APPS-01 | Installed apps grid lists the five fixture apps and built-in entries |
+| APPS-02 | Search narrows the grid ("1 result") |
+| APPS-03 | Empty-state copy for a search with no matches |
+| APPS-04 | Tile-menu Disable/Enable toggles instantly |
+| APPS-05 | Uninstall confirmation dialog and post-uninstall count/toast |
+| APPS-06 | App details page manage rows and capability cards |
+| APPS-07 | Install page not-found state for an unknown store handle |
+| RAPP-01 | Issue Triage recorded panel (Repos/Triaged/Succeeded/Failed + #363) |
+| RAPP-02 | YouTube Distill recorded session and 15-section mind map |
+| RAPP-03 | Code Review recorded PR review (timeline + Verdict + Findings P1–P3) |
+| RAPP-04 | Fitness Tracker weekly plan and beginner/20-min settings |
+| RAPP-05 | Stock Daily weekday schedule and full daily report (sections 1/4/8) |
+| E2E-03 | Open a built app from its chat link and find it in Apps (`story`) |
 
-### sessions（7，shard-3）
+### sessions (7, shard-3)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| SES-01 | 列表列、类型徽章与分页（7 天窗口 13 行） |
-| SES-02 | 跨标题/上下文搜索（All time 下 plumber 命中 3 行） |
-| SES-03 | Type facet 过滤为 Channel 并显示可清除 chip |
-| SES-04 | 时间范围切到 All time 后扩为 22 行 |
-| SES-05 | 无匹配搜索的 "No sessions found" 空状态 |
-| SES-06 | Channel 会话只读详情与 Details 抽屉（Technical details） |
-| SES-07 | Webchat 会话详情的 Open chat 回到对话 |
+| SES-01 | List columns, type badges and pagination (13 rows in the 7-day window) |
+| SES-02 | Search across title/context (three plumber hits under All time) |
+| SES-03 | Type facet filters to Channel and shows a clearable chip |
+| SES-04 | Switching the time range to All time expands the list to 22 rows |
+| SES-05 | "No sessions found" empty state for an unmatched search |
+| SES-06 | Channel session read-only detail and Details sheet (Technical details) |
+| SES-07 | Webchat session detail offers Open chat back to the conversation |
 
-### routines（6，shard-3）
+### routines (6, shard-3)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| ROUT-01 | 汇总卡（Total/Active/Paused/Next up）、分组、计划与开关 |
-| ROUT-02 | Calendar 月视图与 recurring/one-time 图例 |
-| ROUT-03 | Timeline 按时间轴排列即将到来的运行与动作名 |
-| ROUT-04 | Create Routine 对话框的三种 trigger 类型 |
-| ROUT-05 | 开关 on-demand routine 即时更新 Active/Paused 计数 |
-| E2E-01 | 聊天里启用 routine 并在 Routines 页验证（`story`） |
+| ROUT-01 | Summary cards (Total/Active/Paused/Next up), groups, schedules and switches |
+| ROUT-02 | Calendar month view with recurring/one-time legend |
+| ROUT-03 | Timeline orders upcoming runs and action names on a time axis |
+| ROUT-04 | Create Routine dialog presents the three trigger types |
+| ROUT-05 | Toggling an on-demand routine updates the Active/Paused counts instantly |
+| E2E-01 | Enable a routine in chat and verify it on the Routines page (`story`) |
 
-### activity（7，shard-3/4*）
+### activity (7, shard-3/4*)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| ACT-01 | Live 指示、计数 chips、待审批横幅与状态筛选 |
-| ACT-02 | 三个渠道接入请求与验证码配对指引 |
-| ACT-03 | Running 筛选隔离唯一执行中的动作并可 Cancel |
-| ACT-04 | 在 Activity 拒绝 send_message 审批后横幅减一 |
-| ACT-05 | webhook 投递的 Payload JSON 可展开 |
-| ACT-06 | Error 筛选列出 3 个失败执行与 Details |
-| E2E-02 | 聊天批准 send_message 并在 Activity 验证（`story`） |
+| ACT-01 | Live indicator, count chips, pending-approval banner and status filters |
+| ACT-02 | Three channel connection requests with pairing-code guidance |
+| ACT-03 | Running filter isolates the single in-flight action and offers Cancel |
+| ACT-04 | Rejecting a send_message approval in Activity decrements the banner |
+| ACT-05 | A webhook delivery's payload JSON can be expanded |
+| ACT-06 | Error filter lists the three failed executions with Details |
+| E2E-02 | Approve send_message in chat and verify it in Activity (`story`) |
 
-> *E2E-02 同时挂 `activity` 主题 tag，分片在 shard-3（与 E2E-01 同片）。
+> *E2E-02 also carries the `activity` topic tag but is sharded to shard-3
+> alongside E2E-01.
 
-### people（6，shard-4）
+### people (6, shard-4)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| PPL-01 | Latest 最近会话预览 |
-| PPL-02 | Directory 按 bond 分组（Inner circle/Acquaintance/Other）与计数 |
-| PPL-03 | bond 筛选 chip 收窄目录 |
-| PPL-04 | 人物详情的消息时间线、渠道标签与 composer |
-| PPL-05 | 时间线渠道筛选（WhatsApp / All） |
-| PPL-06 | 人物操作菜单（Change bond / Link account / Merge / Memory profile） |
+| PPL-01 | Latest recent-conversation previews |
+| PPL-02 | Directory grouped by bond (Inner circle/Acquaintance/Other) with counts |
+| PPL-03 | Bond filter chip narrows the directory |
+| PPL-04 | Person detail message timeline, channel labels and composer |
+| PPL-05 | Timeline channel filter (WhatsApp / All) |
+| PPL-06 | Person actions menu (Change bond / Link account / Merge / Memory profile) |
 
-### files / memory（8，shard-4）
+### files / memory (8, shard-4)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| FILE-01 | projects 文件树根目录与右栏 dashboard 的未 mock 错误态 |
-| FILE-02 | 只读查看 demo-app/README.md |
-| FILE-03 | 编辑 todo.md 后内存态跨文件切换保持 |
-| FILE-04 | 新建文件出现在树中 |
-| FILE-05 | 重名重命名命中 409 "Already exists." |
-| FILE-06 | memory 树的 journal/projects/relationship 与 BONDS.md |
-| FILE-07 | 今日 journal 按日期路径存在 |
-| FILE-08 | memory 笔记编辑后跨文件保持 |
+| FILE-01 | Projects file-tree root and the unmocked error state of the right-hand dashboard |
+| FILE-02 | Read-only viewing of demo-app/README.md |
+| FILE-03 | Editing todo.md stays in memory across file switches |
+| FILE-04 | A newly created file appears in the tree |
+| FILE-05 | Renaming onto a duplicate name hits 409 "Already exists." |
+| FILE-06 | Memory tree with journal/projects/relationship and BONDS.md |
+| FILE-07 | Today's journal entry exists at its dated path |
+| FILE-08 | Memory-note edits persist across file switches |
 
-### settings（11，shard-5）
+### settings (11, shard-5)
 
-| ID | 用例 |
+| ID | Case |
 | --- | --- |
-| SET-01 | /settings 跳转 Appearance 并暴露六个标签页 |
-| SET-02 | Appearance 即时切换深色 |
-| SET-03 | Connections 列出九个 fixture 连接 |
-| SET-04 | 断开连接授权后卡片即时变化（刷新复位） |
-| SET-05 | App keys 新建的输入校验与保存 |
-| SET-06 | Channels 会话激活卡片与单个会话配置 |
-| SET-07 | AI Tools 显示 Claude 连接状态/用量与登出 |
-| SET-08 | Favors 余额、待决策与账本 |
-| SET-09 | Advanced 访问控制、computer use 与开发者开关 |
-| SET-10 | 添加允许的 dashboard 邮箱并 toast |
-| SET-11 | 开发者开关经 PUT /api/settings 保存并跨导航保持 |
+| SET-01 | /settings redirects to Appearance and exposes six tabs |
+| SET-02 | Appearance switches to dark mode instantly |
+| SET-03 | Connections lists the nine fixture connections |
+| SET-04 | Revoking a connection grant updates the card instantly (reset on refresh) |
+| SET-05 | App-key creation input validation and save |
+| SET-06 | Channels conversation activation cards and per-conversation configuration |
+| SET-07 | AI Tools shows the Claude connection status/usage and supports logout |
+| SET-08 | Favors balance, pending decisions and ledger |
+| SET-09 | Advanced access control, computer use and developer toggles |
+| SET-10 | Adding an allowed dashboard email saves and toasts |
+| SET-11 | Developer toggles save via PUT /api/settings and persist across navigation |
 
-### ⚠️ 依赖第 6 节 mock 缺口、暂不落 YAML 的候选
+### ⚠️ Candidates blocked by section 6 mock gaps (no YAML yet)
 
-| 主题 | 候选用例 | 阻塞 handler |
+| Topic | Candidate cases | Blocking handler |
 | --- | --- | --- |
-| chat | 真实发消息往返、流式回复、问题卡提交成功态 | turn SSE |
-| sessions | /sessions Overview 指标页（成功率/耗时图表） | sessions metrics |
-| projects | 项目右栏 dashboard 汇总渲染 | projects dashboard |
-| chat/sessions | 会话 fork、分享链接、归档/删除成功路径 | fork/share/archive |
-| settings/activity | 新渠道连接向导、连接请求 Approve 成功态 | connection setup |
+| chat | Real send round-trip, streaming replies, question-card submit success state | turn SSE |
+| sessions | `/sessions` Overview metrics page (success-rate/duration charts) | sessions metrics |
+| projects | Right-hand projects dashboard summary rendering | projects dashboard |
+| chat/sessions | Session fork, share links, archive/delete success paths | fork/share/archive |
+| settings/activity | New-channel connection wizard, connection-request Approve success state | connection setup |
 
-## 6. Mock 缺口与建议上游补充的 handler
+## 6. Mock Gaps and Suggested Upstream Handlers
 
-下列产品能力当前 mock 未覆盖，是 ⚠️ 用例的阻塞点。建议 Rome 在 `packages/web/mock/handlers/` 补充 5 个 handler（合成数据、内存态，与现有风格一致）：
+The product capabilities below are not covered by the mock today and block the
+⚠️ cases. They suggest five new handlers under `packages/web/mock/handlers/`,
+matching the existing house style:
 
 <!-- MOCK-GAPS -->
-以下均建议沿用现有 handler 风格：**合成 fixture + 内存写入 + 冷启动复位**，与真实外部服务零交互。
+All of them should follow the existing handler conventions: **synthetic
+fixtures + in-memory writes + cold-start reset**, with zero interaction with
+real external services.
 
-### 1. Chat turn 流式接口（SSE）
+### 1. Chat turn streaming endpoint (SSE)
 
-- **现状**：发送消息与提交问题/审批卡片共用 `POST /api/.../turns`，mock 未提供；前端只能走到 "Failed to send message"。CHAT-04/05/20 因此断言的是设计内失败态。
-- **建议**：新增 turn handler，接收合成 prompt 后以 SSE 返回一段固定的合成回复流（message-start → 若干 content delta → tool/卡片 block → done），支持一个预置「问题卡答复」和「审批执行完成」分支。
-- **解锁**：发送成功往返、流式打字过程断言、问题卡提交后的锁定成功态、发送中/停止按钮状态。
+- **Today**: sending a message and submitting a question/approval card share
+  `POST /api/.../turns`, which the mock does not serve; the UI can only reach
+  "Failed to send message". CHAT-04/05/20 therefore assert the designed failure
+  state.
+- **Suggested**: a turn handler that accepts a synthetic prompt and returns a
+  fixed synthetic reply over SSE (message-start → content deltas → tool/card
+  block → done), with preset branches for an answered question card and a
+  completed approval execution.
+- **Unblocks**: successful send round-trips, streaming-typing assertions, the
+  locked success state after question submission, sending/stop button states.
 
-### 2. Sessions Overview 指标接口
+### 2. Sessions Overview metrics endpoint
 
-- **现状**：`/sessions`（Overview 分段）依赖 `POST /api/sessions/metrics`，未 mock 时整页不可用；所有 sessions 用例只能落在 `/sessions/all`。
-- **建议**：基于现有 sessions fixture 聚合返回固定窗口指标（运行数、成功率、token/费用合计、按天/按类型分布）。
-- **解锁**：Overview 页图表/汇总渲染、时间窗口联动、metrics 与列表一致性断言（约 3–4 个 ⚠️ 用例）。
+- **Today**: `/sessions` (the Overview segment) depends on
+  `POST /api/sessions/metrics`; unmocked, the whole page is unusable, so all
+  sessions cases land on `/sessions/all`.
+- **Suggested**: aggregate the existing sessions fixture into fixed-window
+  metrics (run counts, success rate, token/cost totals, per-day/per-type
+  distributions).
+- **Unblocks**: Overview charts/summary rendering, time-window linkage,
+  metrics-vs-list consistency assertions (roughly 3–4 ⚠️ cases).
 
-### 3. Projects dashboard 接口
+### 3. Projects dashboard endpoint
 
-- **现状**：`/projects` 左栏文件树全部可用，但右栏 dashboard 的汇总请求未 mock，固定显示 "Network error / Retry"（FILE-01 已把该现状固化为基线）。
-- **建议**：返回 fixture 项目的合成摘要（最近文件、活动、用量等静态聚合）。
-- **解锁**：dashboard 正常渲染、文件选择与摘要联动、Retry 在恢复后消失。
+- **Today**: the left-hand file tree on `/projects` is fully usable, but the
+  right-hand dashboard's summary request is unmocked and permanently shows
+  "Network error / Retry" (FILE-01 locks this current state in as a baseline).
+- **Suggested**: return a synthetic summary for fixture projects (recent files,
+  activity, usage and other static aggregates).
+- **Unblocks**: normal dashboard rendering, file-selection/summary linkage,
+  Retry disappearing after recovery.
 
-### 4. 会话 fork / 分享 / 归档
+### 4. Session fork / share / archive
 
-- **现状**：会话的创建（fork）、分享链接、归档/删除等写操作没有对应 handler，只能验证失败文案。
-- **建议**：为会话写操作补内存态 handler：fork 生成新 id 的会话副本；share 颁发合成只读链接（固定 token）；archive/delete 从列表移除并可在内存中恢复。
-- **解锁**：fork 后新会话内容继承、分享页只读渲染、归档后列表消失/视图筛选、删除确认链路。
+- **Today**: session writes — fork creation, share links, archive/delete — have
+  no handlers, so only failure copy can be verified.
+- **Suggested**: in-memory handlers for session writes: fork produces a copy
+  with a new id; share issues a synthetic read-only link (fixed token);
+  archive/delete removes the row from the list and can be restored in memory.
+- **Unblocks**: content inheritance after fork, read-only share rendering,
+  list disappearance/view filters after archiving, the delete confirmation
+  flow.
 
-### 5. 渠道连接 setup（接入向导与审批）
+### 5. Channel connection setup (onboarding wizard and approval)
 
-- **现状**：Activity 中三条渠道连接请求（Telegram/Discord/Feishu）可渲染、可 Reject，但 Approve 与设置内的「新渠道接入向导」没有成功路径 handler。
-- **建议**：连接请求 Approve 写入内存并返回配对码/成功态；补一个向导的多步 GET/POST（选渠道 → 生成验证码 → 验证 → 完成），全程合成。
-- **解锁**：Approve 成功后请求消失、横幅计数减少；新渠道向导完整走查；连接卡片出现在 Channels/Settings 中。
+- **Today**: the three channel connection requests in Activity
+  (Telegram/Discord/Feishu) render and can be rejected, but Approve and the
+  in-settings new-channel wizard have no success-path handlers.
+- **Suggested**: Approve writes to memory and returns a pairing code/success
+  state; add a multi-step GET/POST wizard (choose channel → generate code →
+  verify → complete), fully synthetic.
+- **Unblocks**: request disappearing and banner decrement after approval, a
+  full wizard walkthrough, the connection card appearing in Channels/Settings.
 
-### 已在本方案落地的 mock 基建补充
+### Mock infrastructure already added for this proposal
 
-- **文件浏览器 watch SSE**（`packages/web/mock/handlers/file-browser.ts`）：补了 `/events` SSE 流（subscribers/emit/ready，事件镜像前端的 chokidar watch 事件），mock 内 POST/PATCH/DELETE 写入后即时推送 `add`/`addDir`/`change`，前端文件树不再需要整页刷新就能看到写入结果（files/memory 用例依赖）。
-- **Desktop 工作区占位文档**（`packages/web/mock/public/desktop-vnc.html`）：Browser 工作区 iframe 嵌入的 noVNC 文档生产由 @rome/core 提供；mock 模式下该静态资源缺失会被 SPA fallback 成嵌套的 /chat。在 dev server 静态层补了一个空白深色占位页（MSW Service Worker 拦不住 iframe 初始文档导航，必须走静态层），SHELL-01 据此断言「空白嵌入式桌面」。
+- **File-browser watch SSE** (`packages/web/mock/handlers/file-browser.ts`): an
+  `/events` SSE stream (subscribers/emit/ready, events mirroring the frontend's
+  chokidar watch events). In-mock POST/PATCH/DELETE writes now push
+  `add`/`addDir`/`change` immediately, so the file tree reflects writes without
+  a full page reload (required by the files/memory cases).
+- **Desktop workspace placeholder**
+  (`packages/web/mock/public/desktop-vnc.html`): the noVNC document embedded by
+  the Browser workspace iframe is served by @rome/core in production; in mock
+  mode the missing static asset fell through the SPA fallback into a nested
+  /chat. A blank dark placeholder was added at the dev-server static layer (an
+  MSW browser Service Worker cannot intercept an iframe's initial document
+  navigation, because the new frame has not registered the worker yet).
+  SHELL-01 asserts against the blank embedded desktop.
 
-## 7. 本地运行
+## 7. Running Locally
 
-见 `tests/midscene/README.md`。简述：
+See `tests/midscene/README.md`. In short:
 
 ```bash
-pnpm dev:mock                    # 终端 1：localhost:3200
+pnpm dev:mock                    # terminal 1: localhost:3200
 cd tests/midscene
 npm install && npx playwright install chromium
-cp .env.example .env             # 填入模型凭据；.env 不入库
+cp .env.example .env             # fill in model credentials; .env is gitignored
 npm test
-MIDSCENE_INCLUDE_TAGS=poc npm test   # 只跑 PoC
+MIDSCENE_INCLUDE_TAGS=poc npm test   # PoC stories only
 ```
 
-## 8. 写作与维护约定
+## 8. Authoring and Maintenance Conventions
 
-1. 每个用例以 `app.open` 开始；只有验证"刷新后"行为才用 `app.reload`；验证跨页联动用 `aiTap` 侧栏 + `app.goBack`（保留内存态）。
-2. 机械操作（导航/URL/滚动/同名链接）一律用自定义节点；视觉语义才用 AI 节点。AI 断言引用英文界面原文，并写明元素的**有/无**（如"按钮消失"）。
-3. YAML 中无参自定义节点写成 `app.goBack: {}`。
-4. 一个用例恰好一个 `shard-N` tag；功能 tag（chat/routines/…）按需多个。
-5. 新增用例必须能在全新上下文重复通过；禁止用例间依赖。
-6. fixture 变更时同步更新用例断言；新增产品能力时先补 mock handler 再补 ⚠️ 用例。
-
----
-
-## English Summary
-
-This document proposes visual E2E for **Rome** using [Midscene](https://midscenejs.com/) YAML cases driven against Rome's built-in **MSW mock mode** (`pnpm dev:mock`, port 3200). Everything runs against synthetic in-repo fixtures: no real accounts, messaging channels, or personal data are used, and the suite is deterministic and repeatable on forks.
-
-Key design points:
-
-- Tests live in `tests/midscene/`, a standalone npm package outside the pnpm workspace globs, pinning `@midscene/test` and Playwright.
-- Each case gets a **fresh BrowserContext**, which resets in-memory MSW state; init scripts pin `rome.lang=en` and the full set of sidebar pins so every case starts identically.
-- Ten deterministic custom nodes (`app.open`, `app.reload`, `app.goBack`, `app.expectUrl`, `app.clickContentLink`, `app.clickByLabel`, `app.scrollContent`, `app.scrollTextIntoView`, `app.pressKey`, `app.typeText`) cover navigation, URL assertions, scrolling, keyboard and field input; AI nodes are reserved for visual-semantic checks.
-- CI is a 6-shard GitHub Actions matrix on Node 24 / pnpm 11.6, starts the mock dev server, validates model secrets and connectivity before running, and uploads per-shard HTML reports plus server logs.
-- The four PoC stories (AUTH-01, E2E-01 routines, E2E-02 approvals, E2E-03 built app) pass locally; the full catalog now holds 91 mock-drivable YAML cases across auth-shell, chat, apps, sessions, routines, activity, people, files/memory and settings.
-- Five mock handlers are suggested upstream (chat turn streaming, session metrics, projects dashboard, fork/share/archive, connection setup) to unblock the remaining backlog.
+1. Every case starts with `app.open`; use `app.reload` only to test "after
+   refresh" behavior. For cross-page linkage use `aiTap` on the sidebar plus
+   `app.goBack` (which keeps in-memory state).
+2. Mechanical operations (navigation/URL/scrolling/same-name links) always use
+   custom nodes; reserve AI nodes for visual semantics. AI assertions quote
+   the English UI copy and state element presence/absence explicitly (e.g.
+   "the button is gone").
+3. Parameter-less custom nodes are written `app.goBack: {}` in YAML.
+4. A case carries exactly one `shard-N` tag; functional tags
+   (chat/routines/…) are added as needed.
+5. New cases must pass repeatedly in a fresh context; inter-case dependencies
+   are forbidden.
+6. When fixtures change, update case assertions in lockstep; when a new product
+   capability is added, add the mock handler before the ⚠️ case.
