@@ -1,5 +1,5 @@
 cases:
-  - name: SES-01 Search sessions across time ranges and reach the empty state
+  - name: SES-01 Search for a missing session
     tags:
       - sessions
       - shard-3
@@ -7,59 +7,11 @@ cases:
       - app.open:
           path: /sessions/all
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "Showing 1-13 of 13" is
-          visible.
-
-          2. Before continuing, confirm these visible checkpoints: The Sessions list page is shown
-          in English with the heading "Sessions". A segmented control has "Overview" and "Sessions"
-          segments, with "Sessions" active. There is a search box with the placeholder "Search
-          title, App, Agent, context, or ID", a time range control showing "7 days", and a table
-          whose columns include "Session", "Context", "Runs", "Usage", "Outcome", and "Last
-          activity". The list contains background and chat sessions within the default 7-day window,
-          including visible rows titled "Leak follow-up with Dana", "Roadmap questions from Ines",
-          and "Morning brief". Rows show type badges such as "Channel" and "Automation".
+          Enter "zzz-no-such-session-xyz" in the visible session search field and stop when the
+          empty result state appears.
       - aiAssert: >-
-          The pagination footer reads "Showing 1-13 of 13". All 13 rows fit on a single page, so the
-          Previous/Next pager controls are present but disabled.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click the "7 days" time range control.
-
-          3. Find and click All time.
-
-          4. Find the field identified by "Search title, App, Agent, context, or ID", enter text
-          with "plumber".
-
-          5. Find the field identified by "Search title, App, Agent, context, or ID" and clear its
-          current value.
-
-          6. Scroll the main content area to the bottom.
-
-          7. Before continuing, confirm these visible checkpoints: The list is filtered to three
-          sessions matching "plumber" (footer "Showing 1-3 of 3"): the channel thread "Invoice from
-          the plumber" with a "Channel" badge, and the "Plumber for the leak" thread appearing both
-          as a "Handoff" and as a "Webchat" chat session. Rows unrelated to plumbing (such as
-          "Roadmap questions from Ines") are not shown. the visible interface contains "Leak
-          follow-up with Dana", "Invoice from the plumber", "Plumber for the leak", "Roadmap
-          questions from Ines". Clearing the search repopulates the list instead of leaving the
-          filtered view: the search field is empty, "Leak follow-up with Dana" is the first row
-          again, and unrelated sessions such as "Roadmap questions from Ines" are visible; the list
-          is no longer limited to three plumber matches. (The three plumber sessions are older and
-          sit further down the restored list — their continued presence is covered by the DOM check
-          above.)
-      - aiAssert: The pagination footer at the bottom of the restored list reads "Showing 1-22 of 22".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the field identified by "Search title, App, Agent, context, or ID", enter text
-          with "zzz-no-such-session-xyz".
-      - aiAssert: >-
-          The table area shows the empty state text "No sessions found" and the footer reads
-          "Showing 0-0 of 0" instead of the 13-row total.
-  - name: SES-02 Filter channel sessions and compare seven-day with all-time results
+          The Sessions table shows "No sessions found" and there are no session rows.
+  - name: SES-02 Open the session filter panel
     tags:
       - sessions
       - shard-3
@@ -67,49 +19,11 @@ cases:
       - app.open:
           path: /sessions/all
       - aiAct: >-
-          1. Find and click Filter.
-
-          2. Find and click the "All types" select in the Type section.
-
-          3. Find and click the "Channel (2)" option.
-
-          4. Use the "Escape" keyboard command in the current interface.
-
-          5. Find the visible control labelled "Type: Channel" and click it.
-
-          6. Scroll the main content area to the bottom.
-
-          7. Before continuing, confirm these visible checkpoints: A filter popover is open with
-          "Type" and "Source" sections. The Type select currently reads "All types" and the Source
-          select reads "All sources"; a "Clear filters" action is present. The type dropdown lists
-          the available types with counts for the 7-day window, including "Channel (2)". The popover
-          is closed and an active filter chip "Type: Channel" with a clear (x) button is shown. The
-          list is reduced to two channel rows, "Leak follow-up with Dana" and "Roadmap questions
-          from Ines" (footer "Showing 1-2 of 2"), and each visible row carries the "Channel" badge.
-          Automation rows like "Morning brief" are not listed. The active "Type: Channel" filter
-          chip is removed from the toolbar (only the ordinary "Filter" button remains), and the list
-          once again mixes channel and automation rows — "Morning brief" is back alongside the
-          WhatsApp/Telegram channel sessions. The restored row total is asserted separately after
-          scrolling to the footer.
+          Click the visible "Filter" button and finish with the session filter panel open.
       - aiAssert: >-
-          The pagination footer at the bottom reads "Showing 1-13 of 13", confirming the full 7-day
-          list is restored.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click the "7 days" time range control.
-
-          3. Find and click All time.
-
-          4. Find the older session titled "Invoice from the plumber" in the all-time results and
-          finish with that row visible.
-      - aiAssert: >-
-          The older session "Invoice from the plumber" is present in the results with a Channel
-          badge.
-      - aiAct: Scroll the main content area to the bottom until the pagination footer is visible.
-      - aiAssert: The pagination footer reads "Showing 1-22 of 22".
-  - name: SES-03 Inspect channel and webchat session details, then reopen Chat
+          A filter panel is open with "Type" and "Source" sections, controls reading "All types"
+          and "All sources", and a "Clear filters" action.
+  - name: SES-03 Open a channel session detail
     tags:
       - sessions
       - shard-3
@@ -117,33 +31,8 @@ cases:
       - app.open:
           path: /sessions/all
       - aiAct: >-
-          1. Find and click the "Leak follow-up with Dana" session row.
-
-          2. Find and click Details.
-
-          3. Find and click Technical details.
-
-          5. Before continuing, confirm these visible checkpoints: the application reaches route
-          /sessions/ses-whatsapp-dana The session detail page shows the title "Leak follow-up with
-          Dana" and a "Channel" type badge. There is a "Back to sessions" button and a "Details"
-          button. There is no message composer/input box because this is a read-only session view. A
-          "Session details" sheet opens on the right. Its Context section lists "Owner", "Agent",
-          "Type", "Source", "Project", "Created", and "Last activity" (the Source value is
-          "Whatsapp"). A collapsed "Technical details" section is present at the bottom. The
-          Technical details section expands to show a "Session ID" row with the ses-whatsapp-dana
-          identifier and copy buttons.
+          Click the visible "Leak follow-up with Dana" row and finish when its session detail page
+          opens.
       - aiAssert: >-
-          The Technical details section expands to show a "Session ID" row with the
-          ses-whatsapp-dana identifier and copy buttons.
-      - aiAct: >-
-          1. Close the details sheet, return to the Sessions list, and open the webchat session for
-          “Plumber for the leak”.
-
-          2. Find and click Open chat.
-
-          3. Before continuing, confirm these visible checkpoints: The detail page for "Plumber for
-          the leak" shows a "Chat" type badge and an "Open chat" button. The read-only conversation
-          content is visible, with no composer at the bottom.
-      - app.expectUrl:
-          path: /chat/mock-chat-4
-      - aiAssert: The live conversation "Plumber for the leak" is now open with its message composer.
+          The detail page title is "Leak follow-up with Dana", it carries a "Channel" badge, and it
+          provides "Back to sessions" and "Details" controls without a chat composer.

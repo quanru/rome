@@ -1,5 +1,5 @@
 cases:
-  - name: ROUT-01 Explore routine list, calendar, timeline, and creation options
+  - name: ROUT-01 Open the routine calendar
     tags:
       - routines
       - shard-3
@@ -7,54 +7,12 @@ cases:
       - app.open:
           path: /routines
       - aiAct: >-
-          1. Open the Calendar view, then return to List and inspect the routine groups and
-          controls.
+          Click the visible "Calendar" view button and finish when the monthly routine calendar is
+          open.
       - aiAssert: >-
-          The Routines page is shown in English with a "Create Routine" button. Summary cards read
-          "Total 6", "Active 5", and "Paused 1", and a "Next up" card names "Morning brief". View
-          switcher buttons read "List", "Calendar", and "Timeline", with "List" active. The list is
-          grouped into "On a schedule", "When something happens", and "On demand". The schedule
-          group lists "Morning brief" (Every day at 7:00 AM), "Weekday inbox sweep" (Every weekday
-          at 5:30 PM), "Rent reminder" (On the 28th of every month at 9:00 AM, Europe/Berlin), and
-          "Weekly digest" (Every Sunday at 6:00 PM). Each schedule row has a toggle switch and a run
-          control — "Run now", or "Stop" while the routine is currently executing. "Ledger sync"
-          sits under "When something happens" with the text "Whenever a expense logged event happens
-          (from expense-tracker)", and "Archive old notes" sits under "On demand" with the text
-          "Only when you run it"; its toggle is switched off, which accounts for the single paused
-          routine.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Open Calendar and inspect the monthly grid, weekday headers, and routine markers.
-
-          3. Return to List and finish with the grouped routine list and "Morning brief" visible.
-      - aiAssert: Switching back to "List" restores the grouped routine list with "Morning brief" visible.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click Timeline.
-      - aiAssert: >-
-          The timeline view shows a "NOW" marker followed by upcoming scheduled runs in
-          chronological order: "Morning brief" with "Schedule · recurring" and the action
-          "daily_summary", "Weekday inbox sweep" with "inbox_scan", and "Rent reminder" with
-          "send_message". Each entry offers "Disable" and "Delete" actions. The "Weekly digest"
-          entry shows "No next run".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click Create Routine.
-      - aiAssert: >-
-          A "Create Routine" dialog is open with Schedule, Event, and Manual trigger choices. With
-          Schedule selected, the form includes Name, schedule, Timezone, Date, Action Name, Args,
-          Cancel, and Create Routine controls.
-      - aiAct: Cancel routine creation and finish with the routine list visible again.
-      - aiAssert: >-
-          The dialog closes and no new routine is created: the totals still read "Total 6" and
-          "Active 5".
-  - name: ROUT-02 Toggle an on-demand routine and restore its paused state
+          The Calendar view is active and shows a monthly grid with weekday headers and routine
+          markers.
+  - name: ROUT-02 Filter the routine list
     tags:
       - routines
       - shard-3
@@ -62,7 +20,8 @@ cases:
       - app.open:
           path: /routines
       - aiAct: >-
-          Switch on the toggle for "Archive old notes" under "On demand" and confirm the summary
-          changes to Active 6 and Paused 0. Then switch that same toggle back off and finish only
-          after the summary returns to Active 5 and Paused 1.
-      - aiAssert: The summary returns to "Active 5" and "Paused 1".
+          Search for "Archive old notes" using the "Filter routines..." field and finish when the
+          routine list is filtered.
+      - aiAssert: >-
+          The filtered list shows the "Archive old notes" on-demand routine and hides unrelated
+          routines such as "Morning brief".

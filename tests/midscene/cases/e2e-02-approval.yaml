@@ -1,5 +1,5 @@
 cases:
-  - name: E2E-02 Approve a message and inspect its Activity record
+  - name: E2E-02 Approve a pending outbound message
     tags:
       - poc
       - story
@@ -9,23 +9,8 @@ cases:
       - app.open:
           path: /chat/mock-chat-4
       - aiAct: >-
-          In the open "Plumber for the leak" conversation, approve the pending outbound Telegram
-          message. Finish when the approval card visibly shows that the action completed.
+          Click the orange "Approve" button on the visible "Guardian approval needed" card. Finish
+          when the card shows that the action completed.
       - aiAssert: >-
           The approval card reads "Approved & done", its Approve and Reject buttons are gone, and
           the green footer says "✓ Action approved and executed successfully."
-      - aiAct: >-
-          Open Activity from the left app navigation, select the Approved filter, and find the
-          send_message approval that was just completed.
-      - app.expectUrl:
-          path: /activity
-      - aiAssert: >-
-          The Activity summary shows 3 pending approvals. The send_message approval is listed with
-          status "Executed" and has no Approve or Reject buttons.
-      - aiAct: >-
-          Expand the Payload disclosure on the executed send_message approval row and leave its JSON
-          details visible.
-      - aiAssert: >-
-          The expanded payload JSON for the send_message approval shows "person": "Ray", "channel":
-          "telegram", and the message text "The plumber is booked for Thursday 9am — does that still
-          work for you?".

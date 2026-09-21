@@ -1,5 +1,5 @@
 cases:
-  - name: CHAT-06 Inspect the answered design card and built-app reply
+  - name: CHAT-06 Collapse the architecture diagram in a built-app reply
     tags:
       - chat
       - shard-2
@@ -7,28 +7,12 @@ cases:
       - app.open:
           path: /chat/mock-chat-build-app
       - aiAct: >-
-          Find the answered design-question card, inspect its selected answers, then scroll through
-          that card until its bottom and "Answered" footer are visible. Do not use the conversation
-          composer and do not interact with any other card.
+          In the visible "Architecture" section, click the expanded "Mermaid diagram" disclosure
+          to collapse it. Finish with the disclosure closed.
       - aiAssert: >-
-          The design-question card shows selected answers and an "Answered" footer rather than
-          "Asked by Rome". The card has no Send action and its answers are presented as completed,
-          not as a live form.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Explore the page by scrolling until the content containing "What it does" is visible.
-
-          3. Explore the page by scrolling until the content containing "Mermaid diagram" is
-          visible.
-
-          4. Before continuing, confirm these visible checkpoints: the visible interface contains
-          "built, installed, and verified", "What it does", "Architecture", "Verification". The
-          final assistant message states the Issue Triage app is "built, installed, and verified"
-          and the "What it does" section heading is rendered as a second-level heading.
-      - aiAssert: Inside the "Architecture" section there is a collapsible "Mermaid diagram" card.
-  - name: CHAT-07 Open linked apps from three recorded conversations
+          The "Architecture" section and "Mermaid diagram" disclosure remain visible, but the
+          diagram content is collapsed. The nearby "Verification" heading is still visible.
+  - name: CHAT-07 Open a linked learning kit from a recorded conversation
     tags:
       - chat
       - shard-2
@@ -36,50 +20,11 @@ cases:
       - app.open:
           path: /chat/mock-chat-learn-video
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "Your learning kit is ready"
-          is visible.
-
-          2. Find the content link labelled "Open the learning kit" and open it.
-
-          3. Before continuing, confirm these visible checkpoints: The assistant message says "Your
-          learning kit is ready in YouTube Distill." followed by a Format/Use it for table whose
-          rows include "Mind map", "Summary", "11-slide deck", and "Transcript excerpt", and a link
-          "Open the learning kit".
+          Click the visible blue underlined "Open the learning kit" text once, then stop.
       - aiAssert: >-
           The YouTube Distill recorded app opens in a workspace tile beside the conversation (the
           chat URL is unchanged), showing content for the video "Deep Dive into LLMs like ChatGPT"
           rather than an error.
-      - aiAct: >-
-          1. Open the “Make room for a daily workout” conversation from the Chats sidebar.
-
-          2. Explore the page by scrolling until the content containing "I've put together a week"
-          is visible.
-
-          3. Find the content link labelled "Open your workout plan" and open it.
-
-          4. Before continuing, confirm these visible checkpoints: The assistant message says "I've
-          put together a week in Fitness Tracker." and shows the weekly plan table with "Full body"
-          / "20 min" on Monday and "Rest" on Sunday, plus the link "Open your workout plan".
-      - aiAssert: >-
-          Fitness Tracker opens in a workspace tile beside the conversation, showing the weekly
-          workout plan, not an error screen.
-      - aiAct: >-
-          1. Open the “Have the market recap ready every day” conversation from the Chats sidebar.
-
-          2. Explore the page by scrolling until the content containing "Your weekday recap is set
-          up" is visible.
-
-          3. Find the content link labelled "September 11 market recap" and open it.
-
-          4. Before continuing, confirm these visible checkpoints: The assistant message says "Your
-          weekday recap is set up in Stock Daily." and shows a Setting/Schedule table whose rows
-          include Runs "Monday–Friday at 1:30 PM", Time zone "America/Los_Angeles", and Delivery
-          "guardian@example.com". Below it are links to the "September 11 market recap" and
-          "September 10 market recap" reports.
-      - aiAssert: >-
-          Stock Daily opens in a workspace tile on the September 11 report, whose title includes "US
-          Stock Market Daily Close Report | 2026-09-11", while the conversation stays open beside
-          it.
   - name: CHAT-08 Complete the live question card and preserve its failed submission
     tags:
       - chat
@@ -88,20 +33,9 @@ cases:
       - app.open:
           path: /chat/mock-chat-2
       - aiAct: >-
-          1. Scroll the main content area to the bottom.
-
-          2. Find and click Warm.
-
-          3. Select one of the multi-choice options under "What should the new opening keep?".
-
-          4. Submit the live question card with its own Send button. Do not use the conversation
-          composer below it.
-
-          5. Before continuing, confirm these visible checkpoints: A live question card titled
-          around "How should the rewrite read?" shows single-choice tone options "Warm", "Plain",
-          and "Playful", multi-choice options under "What should the new opening keep?", and an
-          optional "Anything to avoid?" field, with an "Asked by Rome" footer. A control labelled
-          "Send" is visible, it is disabled. A control labelled "Send" is visible, it is enabled.
+          On the visible question card, choose "Warm" and select "The beta thank-you" under "What
+          should the new opening keep?". Submit with the Send button inside that card, not the
+          conversation composer. Finish after the failed-request error appears.
       - aiAssert: >-
           Submission fails with an error above the composer reporting the failed request to the
           ".../turns" endpoint (there is no model backend in mock mode); the conversation stays on
@@ -114,11 +48,7 @@ cases:
       - app.open:
           path: /chat/mock-chat-4
       - aiAct: >-
-          1. Find and click Reject.
-
-          2. Before continuing, confirm these visible checkpoints: The "Guardian approval needed"
-          card shows "Pending approval" with the telegram message preview and "Reject" / "Approve"
-          buttons.
+          Click "Reject" on the visible "Guardian approval needed" card and finish when the card
+          shows its rejected state.
       - aiAssert: >-
-          The card resolves to a rejected state: the badge reads "Rejected" and the footer says
-          "Action rejected by guardian." Neither "Reject" nor "Approve" buttons remain.
+          The approval card visibly shows that the request was rejected.

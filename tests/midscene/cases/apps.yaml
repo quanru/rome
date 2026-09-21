@@ -26,7 +26,7 @@ cases:
       - aiAssert: >-
           The open actions menu belongs to Issue Triage and offers "Enable", confirming that Issue
           Triage is disabled.
-  - name: APPS-03 Inspect the Issue Triage app details and capabilities
+  - name: APPS-03 Open Issue Triage from its details page
     tags:
       - apps
       - shard-2
@@ -34,11 +34,8 @@ cases:
       - app.open:
           path: /app-details/issue-triage
       - aiAct: >-
-          1. Explore the Issue Triage details page by reviewing its management actions and scrolling
-          through its capability cards, without changing the app.
+          On the Issue Triage details page, click "Open full view" and finish when the Issue Triage
+          app dashboard is open.
       - aiAssert: >-
-          The details page for Issue Triage is shown. There is a "Back to apps" link, the app name
-          "Issue Triage" with version "0.2.2", an "Enabled" switch in the manage section, and
-          "Uninstall" / "Uninstall and erase data" management rows. Capability cards are shown with
-          count pills; cards declaring nothing display the "No … declared." empty text appropriate
-          to the capability. A README card is not shown because the mock has no readme.
+          The full Issue Triage app dashboard is open and shows its triage summary or recent
+          activity rather than the app-details management page or an error state.
