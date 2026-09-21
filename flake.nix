@@ -32,14 +32,12 @@
             pkgs.nodejs_24
             tools.pnpm
             pkgs.git
-            pkgs.git-lfs
             pkgs.gh
             pkgs.jq
             pkgs.python3
             pkgs.gnumake
             pkgs.stdenv.cc
             pkgs.pkg-config
-            pkgs.go
             tools.biome
             pkgs.curl
             pkgs.openssl
@@ -47,9 +45,16 @@
             tools.shfmt
             tools.vale
           ];
+          # No job that enters the CI shell runs either: packages/host-helper is
+          # built by host-helper.yml, which brings its own Go, and the
+          # workflows that need LFS objects fetch them through
+          # actions/checkout. Moving them here takes 220 MiB off the closure
+          # every CI job restores, and developers still get both.
           developerPackages = [
             pkgs.agent-browser
             pkgs.vultr-cli
+            pkgs.go
+            pkgs.git-lfs
           ] ++ nixpkgs.lib.optional pkgs.stdenv.isLinux pkgs.chromium;
           mkShell = packages: pkgs.mkShell { inherit packages; };
         in
@@ -63,7 +68,7 @@
             nativeBuildInputs = ciPackages;
           } ''
             export HOME="$TMPDIR"
-            for command in git git-lfs gh jq python3 make cc pkg-config go curl openssl; do
+            for command in git gh jq python3 make cc pkg-config curl openssl; do
               command -v "$command" >/dev/null
             done
             test "$(node --version)" = "v${pkgs.nodejs_24.version}"

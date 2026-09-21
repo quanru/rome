@@ -16,7 +16,7 @@ inputs:
     description: >-
       `read-write` saves the Nix store at post-job. One job per run is enough:
       every job realizes the same `.#ci` closure, and a GitHub cache entry is
-      immutable, so further writers would upload ~1.2 GiB each to lose the
+      immutable, so further writers would upload ~1 GiB each to lose the
       race. The writer is the job that also builds the toolchain check, whose
       closure is the superset the others restore.
     required: false
@@ -25,6 +25,24 @@ inputs:
 runs:
   using: composite
   steps:
+    # Both inputs are compared against 'read-write' below, so a typo would
+    # read as 'read-only' and quietly stop saving the entry it was set to save.
+    - name: Check the cache inputs
+      shell: bash
+      env:
+        PNPM_STORE_CACHE: ${{ inputs.pnpm-store-cache }}
+        NIX_STORE_CACHE: ${{ inputs.nix-store-cache }}
+      run: |
+        for value in "$PNPM_STORE_CACHE" "$NIX_STORE_CACHE"; do
+          case "$value" in
+            read-only | read-write) ;;
+            *)
+              echo "setup-ci: cache inputs take read-only or read-write, got '$value'" >&2
+              exit 1
+              ;;
+          esac
+        done
+
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
 
@@ -39,8 +57,8 @@ runs:
         primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock', 'nix/**') }}
         restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
         save: ${{ inputs.nix-store-cache == 'read-write' }}
-        # The shell's closure measures 1.2 GiB. Collect above that so a job
-        # that pulled in anything else does not save it.
+        # The shell's closure measures just over 1 GiB. Collect above that so
+        # a job that pulled in anything else does not save it.
         gc-max-store-size-linux: 2147483648
         purge: ${{ inputs.nix-store-cache == 'read-write' }}
         purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-

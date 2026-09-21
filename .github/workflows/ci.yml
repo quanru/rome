@@ -41,7 +41,7 @@ jobs:
       - name: Check the pinned toolchain
         run: |
           nix flake check --no-build
-          nix build --print-build-logs '.#checks.x86_64-linux.toolchain'
+          nix build --print-build-logs ".#checks.$(nix config show system).toolchain"
 
       # Squash-and-merge uses the PR title as the merge commit subject on main,
       # and release-please reads those subjects to decide the next version +

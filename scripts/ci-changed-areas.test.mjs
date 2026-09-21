@@ -261,6 +261,12 @@ test("each shard job guards its steps on its own detection output", async () => 
 // Two things are allowed to run outside the shell: `nix` itself, which is what
 // enters it, and the shell builtins the no-verdict guards use, which need no
 // toolchain at all.
+// Jobs that run outside the flake shell on purpose, with the reason the file
+// itself documents. Checking only the jobs that set the shell up would let the
+// regression this test exists to catch — a job that forgot to — pass it.
+const JOBS_OUTSIDE_THE_SHELL = new Map([
+  ["layout-invariants", "runs in Playwright's image for the browsers, which ships no Nix"],
+]);
 const WRAPPER_PREFIXES = ["scripts/ci-env.sh ", '"$GITHUB_WORKSPACE/scripts/ci-env.sh" '];
 const OUTSIDE_SHELL = [/^nix\s/, /^echo\s/, /^exit\s/, /^set\s/];
 
@@ -278,6 +284,9 @@ async function jobRunCommands(workflow) {
   const jobs = new Map();
   let current = null;
   let block = null;
+  // `on:` nests keys at the same indentation jobs use, so only the `jobs:`
+  // mapping counts — otherwise `push:` and `schedule:` read as jobs.
+  let inJobs = false;
 
   for (const line of lines) {
     if (block) {
@@ -290,10 +299,16 @@ async function jobRunCommands(workflow) {
       block = null;
     }
 
+    if (/^\S/.test(line)) {
+      inJobs = line.startsWith("jobs:");
+      current = null;
+      continue;
+    }
+
     const header = line.match(/^ {2}([\w-]+):\s*$/);
     if (header) {
-      current = header[1];
-      jobs.set(current, { setsUpFlake: false, commands: [] });
+      current = inJobs ? header[1] : null;
+      if (current) jobs.set(current, { setsUpFlake: false, commands: [] });
       continue;
     }
     if (!current) continue;
@@ -323,7 +338,19 @@ for (const workflow of ["ci.yml", "mobile-ci.yml", "nightly.yml"]) {
     );
 
     for (const [name, job] of jobs) {
-      if (!job.setsUpFlake) continue;
+      if (!job.setsUpFlake) {
+        assert.ok(
+          JOBS_OUTSIDE_THE_SHELL.has(name),
+          `${workflow} job ${name} never sets up the flake environment, so every step ` +
+            "in it takes the runner's own toolchain. Add ./.github/actions/setup-ci, or " +
+            "record the job in JOBS_OUTSIDE_THE_SHELL with the reason it cannot.",
+        );
+        continue;
+      }
+      assert.ok(
+        !JOBS_OUTSIDE_THE_SHELL.has(name),
+        `${workflow} job ${name} is recorded as running outside the flake shell but sets it up`,
+      );
       for (const command of job.commands) {
         const wrapped = WRAPPER_PREFIXES.some((prefix) => command.startsWith(prefix));
         const bootstrap = OUTSIDE_SHELL.some((pattern) => pattern.test(command));

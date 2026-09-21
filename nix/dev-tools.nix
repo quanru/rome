@@ -52,6 +52,15 @@ let
     }
     .${system} or (throw "unsupported Rome development system: ${system}");
 
+  # One declaration per tool, read by both the derivation and the release URL
+  # it fetches, so a bump is a single edit rather than two that can disagree.
+  versions = {
+    biome = "2.3.6";
+    pnpm = "11.6.0";
+    shfmt = "3.12.0";
+    vale = "3.19.0";
+  };
+
   binary =
     {
       pname,
@@ -73,17 +82,17 @@ let
 
   biome = binary {
     pname = "biome";
-    version = "2.3.6";
-    url = "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%402.3.6/biome-${platform.biomeAsset}";
+    version = versions.biome;
+    url = "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${versions.biome}/biome-${platform.biomeAsset}";
     hash = platform.biomeHash;
     executable = "biome";
   };
 
   pnpm = pkgs.stdenvNoCC.mkDerivation {
     pname = "pnpm";
-    version = "11.6.0";
+    version = versions.pnpm;
     src = pkgs.fetchurl {
-      url = "https://registry.npmjs.org/pnpm/-/pnpm-11.6.0.tgz";
+      url = "https://registry.npmjs.org/pnpm/-/pnpm-${versions.pnpm}.tgz";
       hash = "sha512-mjZRgiQIDG/lFlr9z+eb+hGMKb5wPz9GKx4y7+HpjkfodQsUjggoYlCq1BE8x5k8pBPE4s1Ed1JwjC7ldRvJXw==";
     };
     nativeBuildInputs = [ pkgs.makeWrapper ];
@@ -104,17 +113,17 @@ let
 
   shfmt = binary {
     pname = "shfmt";
-    version = "3.12.0";
-    url = "https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_${platform.shfmtAsset}";
+    version = versions.shfmt;
+    url = "https://github.com/mvdan/sh/releases/download/v${versions.shfmt}/shfmt_v${versions.shfmt}_${platform.shfmtAsset}";
     hash = platform.shfmtHash;
     executable = "shfmt";
   };
 
   vale = pkgs.stdenvNoCC.mkDerivation {
     pname = "vale";
-    version = "3.19.0";
+    version = versions.vale;
     src = pkgs.fetchurl {
-      url = "https://github.com/vale-cli/vale/releases/download/v3.19.0/vale_3.19.0_${platform.valeAsset}.tar.gz";
+      url = "https://github.com/vale-cli/vale/releases/download/v${versions.vale}/vale_${versions.vale}_${platform.valeAsset}.tar.gz";
       hash = platform.valeHash;
     };
     nativeBuildInputs = [ pkgs.gnutar pkgs.gzip ]
