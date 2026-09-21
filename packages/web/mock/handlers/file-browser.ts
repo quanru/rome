@@ -279,8 +279,12 @@ export function fileBrowserHandlers({
     // initial rebaseline, and writes elsewhere in these handlers enqueue
     // `change` frames so the tree reconciles the way it does against core.
     http.get(`${apiBasePath}/events`, () => {
+      // `cancel()` receives the cancellation reason, not the controller, so
+      // keep the controller in the stream closure to unsubscribe reliably.
+      let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
       const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
+        start(c) {
+          controller = c;
           subscribers.add(controller);
           const ready = encoder.encode(
             `event: ready\ndata: ${JSON.stringify({ at: Date.now(), logicalRoot })}\n\n`,
@@ -291,8 +295,8 @@ export function fileBrowserHandlers({
             subscribers.delete(controller);
           }
         },
-        cancel(controller) {
-          subscribers.delete(controller);
+        cancel() {
+          if (controller) subscribers.delete(controller);
         },
       });
       return new HttpResponse(stream, {

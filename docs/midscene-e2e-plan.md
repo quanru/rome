@@ -81,10 +81,10 @@ GitHub Actions (6 shards)
 
 ## 4. CI 设计（.github/workflows/midscene.yml）
 
-- **触发**：push main / PR（限定 `tests/midscene/**`、`packages/web/mock/**`、`packages/web/src/**` 等路径）/ 手动；fork PR 因无模型密钥自动跳过。
-- **运行环境**：`ubuntu-24.04` + Node 24 + pnpm 11.6.0（corepack）；`pnpm install --frozen-lockfile --ignore-scripts` 安装产品依赖，`tests/midscene` 下 `npm ci` + `npx playwright install --with-deps chromium`。
+- **触发**：push main / PR（路径覆盖 `tests/midscene/**`、整个 `packages/web/**` 以及 build:kit 会重建的 workspace 依赖 `packages/ui`、`packages/web-content`、`packages/api-types`、`packages/app-runtime-sdk`）/ 手动；fork PR 与 Dependabot PR 不获取模型密钥，由显式的 `visual-e2e-skip` 作业标注跳过原因。
+- **运行环境**：`ubuntu-24.04` + Node 24 + pnpm 11.6.0（corepack）；`pnpm install --frozen-lockfile --ignore-scripts` 安装产品依赖，`tests/midscene` 下 `npm ci`（lockfile 全部 resolved 指向公共 `registry.npmjs.org`，干净 runner 可直接安装）+ `npx playwright install --with-deps chromium`。
 - **服务**：`pnpm --filter rome-web dev:mock` 后台启动（先跑 `build:kit`，就绪探测最长 360s 轮询 `http://localhost:3200/`），日志落 `/tmp/rome-devmock.log`，失败时随 artifact 上传。
-- **密钥**：`MIDSCENE_MODEL_API_KEY/NAME/BASE_URL/FAMILY` 全部经 repository secrets 注入；作业开头做非空校验与一次 `/chat/completions` 连通性预检（90s 超时），密钥/端点问题在 30 秒内失败而不是跑满 45 分钟。
+- **密钥与信任边界**：`MIDSCENE_MODEL_API_KEY/NAME/BASE_URL/FAMILY` 经 secrets 注入，且只挂在「配置校验 / 连通性预检 / 跑用例」三个步骤上（安装与起服务不接触密钥）。PR 检出的是贡献者可控代码，作业走受保护环境 **`midscene-e2e-review`**——维护者批准该 environment deployment 后 runner 才启动、密钥才暴露；push main 与手动触发走 **`midscene-e2e`** 环境（无需审批）。仓库需预先配置这两个 environment 与四个 secret。作业开头做非空校验与一次 `/chat/completions` 连通性预检（90s 超时），密钥/端点问题在 30 秒内失败而不是跑满 45 分钟。
 - **分片**：6 个 matrix shard，通过 `MIDSCENE_INCLUDE_TAGS=shard-N` 选择；每个用例恰好携带一个 `shard-N` tag。`fail-fast: false`、`max-parallel: 6`、单作业 45 分钟、用例级重试 2 次。
 - **证据**：每个分片始终上传 `midscene_run/` 与 `.midscene/` 报告 artifact（保留 14 天）；失败时附加 mock server 日志。
 - **网络稳定性**：`NODE_OPTIONS=--dns-result-order=ipv4first --no-network-family-autoselection`（模型端点仅 IPv4 稳定，规避 runner 侧 IPv6 竞速超时）。

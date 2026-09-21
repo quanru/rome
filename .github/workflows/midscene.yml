@@ -10,15 +10,28 @@ on:
     paths: &e2e-paths
       - ".github/workflows/midscene.yml"
       - "tests/midscene/**"
-      - "packages/web/mock/**"
-      - "packages/web/src/**"
-      - "packages/web/package.json"
-      - "packages/web/rsbuild.config.ts"
+      - "packages/web/**"
+      # Workspace dependencies rebuilt by `pnpm --filter rome-web^... build`
+      # (build:kit) before dev:mock serves the UI; changes there can alter
+      # every flow under test.
+      - "packages/api-types/**"
+      - "packages/app-runtime-sdk/**"
+      - "packages/ui/**"
+      - "packages/web-content/**"
       - "pnpm-lock.yaml"
   pull_request:
     branches: [main]
     paths: *e2e-paths
   workflow_dispatch:
+
+# Credential trust model:
+# - push to main / workflow_dispatch run trusted code and may use the model
+#   secrets directly (environment `midscene-e2e`, no reviewer gate).
+# - pull_request runs checkout PR-controlled code, so secret-backed jobs go
+#   through the protected environment `midscene-e2e-review`: a maintainer must
+#   approve the deployment before the runner starts or any secret is exposed.
+# - fork PRs have no secret access at all, and Dependabot PRs never receive
+#   secrets; visual-e2e-skip makes that outcome explicit in checks.
 
 permissions:
   contents: read
@@ -28,10 +41,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  visual-e2e-skip:
+    name: Visual E2E skipped (untrusted PR)
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.pull_request.head.repo.full_name != github.repository ||
+       github.actor == 'dependabot[bot]')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain why visual E2E does not run
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "Fork pull requests cannot receive the billable model secrets; visual E2E runs after a maintainer re-pushes the branch to the base repository."
+          else
+            echo "Dependabot pull requests never receive repository secrets; visual E2E runs for this change on merge to main."
+          fi
+
   midscene:
     name: Midscene visual (${{ matrix.shard }})
-    # Fork PRs have no access to the model secrets; skip them there.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: visual-e2e-skip
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]')
+    # PRs run PR-controlled code: require a maintainer's environment approval
+    # before any runner (and any secret) is provisioned.
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'midscene-e2e-review' || 'midscene-e2e' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -50,10 +88,6 @@ jobs:
     env:
       HEADLESS: "true"
       ROME_E2E_BASE_URL: http://localhost:3200
-      MIDSCENE_MODEL_API_KEY: ${{ secrets.MIDSCENE_MODEL_API_KEY }}
-      MIDSCENE_MODEL_NAME: ${{ secrets.MIDSCENE_MODEL_NAME }}
-      MIDSCENE_MODEL_BASE_URL: ${{ secrets.MIDSCENE_MODEL_BASE_URL }}
-      MIDSCENE_MODEL_FAMILY: ${{ secrets.MIDSCENE_MODEL_FAMILY }}
       # The model endpoint is reachable over IPv4; avoid family-race timeouts.
       NODE_OPTIONS: "--dns-result-order=ipv4first --no-network-family-autoselection"
     steps:
@@ -71,6 +105,13 @@ jobs:
         run: corepack prepare pnpm@11.6.0 --activate
 
       - name: Require Midscene model configuration
+        env: &model-env
+          # Scoped to the steps that actually call the model; install and the
+          # mock server never see these variables.
+          MIDSCENE_MODEL_API_KEY: ${{ secrets.MIDSCENE_MODEL_API_KEY }}
+          MIDSCENE_MODEL_NAME: ${{ secrets.MIDSCENE_MODEL_NAME }}
+          MIDSCENE_MODEL_BASE_URL: ${{ secrets.MIDSCENE_MODEL_BASE_URL }}
+          MIDSCENE_MODEL_FAMILY: ${{ secrets.MIDSCENE_MODEL_FAMILY }}
         run: |
           test -n "$MIDSCENE_MODEL_API_KEY"
           test -n "$MIDSCENE_MODEL_NAME"
@@ -78,6 +119,7 @@ jobs:
           test -n "$MIDSCENE_MODEL_FAMILY"
 
       - name: Check Midscene model connectivity
+        env: *model-env
         run: |
           node --input-type=module <<'NODE'
           const baseUrl = process.env.MIDSCENE_MODEL_BASE_URL.replace(/\/+$/, '');
@@ -130,6 +172,7 @@ jobs:
       - name: Run Midscene shard
         working-directory: tests/midscene
         env:
+          <<: *model-env
           MIDSCENE_INCLUDE_TAGS: ${{ matrix.shard }}
           MIDSCENE_RETRY: "2"
         run: timeout --signal=TERM --kill-after=10s 35m npm test
