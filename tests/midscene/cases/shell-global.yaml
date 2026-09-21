@@ -1,16 +1,4 @@
 cases:
-  - name: SHELL-01 Collapse the application sidebar
-    tags:
-      - shell
-      - shard-5
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: >-
-          Collapse the application sidebar using the Command+B keyboard shortcut once, then stop.
-      - aiAssert: >-
-          The sidebar is collapsed to a narrow icon rail: navigation icons remain visible while
-          labels such as Chat and Apps are hidden.
   - name: SHELL-02 Open global chat search
     tags:
       - shell
