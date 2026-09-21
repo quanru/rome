@@ -1,5 +1,5 @@
 name: Set up Rome CI environment
-description: Install Nix, realize the flake CI shell, and restore the pnpm store
+description: Install Nix, restore the Nix and pnpm stores, and realize the flake CI shell
 
 inputs:
   pnpm-store-cache:
@@ -12,12 +12,40 @@ inputs:
       restores for that lockfile.
     required: false
     default: read-only
+  nix-store-cache:
+    description: >-
+      `read-write` saves the Nix store at post-job. One job per run is enough:
+      every job realizes the same `.#ci` closure, and a GitHub cache entry is
+      immutable, so further writers would upload ~1.2 GiB each to lose the
+      race. The writer is the job that also builds the toolchain check, whose
+      closure is the superset the others restore.
+    required: false
+    default: read-only
 
 runs:
   using: composite
   steps:
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa
+
+    # Without this every job downloads the whole CI closure from
+    # cache.nixos.org and rebuilds the fetchurl derivations in nix/, which no
+    # binary cache carries. The key covers everything that decides the
+    # closure, so a toolchain bump gets a new entry and the old one is purged
+    # rather than left to sit against the repository's cache budget.
+    - name: Cache the Nix store
+      uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('flake.nix', 'flake.lock', 'nix/**') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-${{ runner.arch }}-
+        save: ${{ inputs.nix-store-cache == 'read-write' }}
+        # The shell's closure measures 1.2 GiB. Collect above that so a job
+        # that pulled in anything else does not save it.
+        gc-max-store-size-linux: 2147483648
+        purge: ${{ inputs.nix-store-cache == 'read-write' }}
+        purge-prefixes: nix-${{ runner.os }}-${{ runner.arch }}-
+        purge-created: 0
+        purge-primary-key: never
 
     # Realize the shell here rather than letting the next step do it as a side
     # effect, so a failed evaluation or download fails on a step that names it.

@@ -78,7 +78,10 @@ nix flake check
 
 GitHub Actions installs Nix through
 [`setup-ci`](.github/actions/setup-ci/action.yml). Add a CI tool to
-`ciPackages` in `flake.nix` instead of downloading it in a workflow.
+`ciPackages` in `flake.nix` instead of downloading it in a workflow. That
+action caches the Nix store between runs, keyed on `flake.nix`, `flake.lock`,
+and `nix/`, so a change to any of them makes the next run realize the closure
+from scratch.
 
 Biome comes from the shell rather than from `node_modules`, so anything that
 runs it needs the shell on its PATH. The pre-commit hook skips with a message

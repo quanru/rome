@@ -31,6 +31,9 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           pnpm-store-cache: read-write
+          # This job builds the toolchain check as well as entering the shell,
+          # so its store is the superset every other job restores.
+          nix-store-cache: read-write
       # `nix flake check` builds every derivation-valued output for this
       # system, which includes the developer shell and the browser only
       # developers need. Evaluate the whole flake, then build the one output
