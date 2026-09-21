@@ -112,4 +112,50 @@ describe("Pi SDK provider prototype", () => {
       },
     ]);
   });
+
+  it("emits one complete Rome thinking block rather than Pi thinking deltas", () => {
+    const bridge = new PiEventBridge("anthropic/claude-test");
+    const message = {
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "first second" }],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: "claude-test",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: 1,
+    } satisfies Extract<AgentSessionEvent, { type: "message_end" }>["message"];
+
+    expect(
+      bridge.accept({
+        type: "message_update",
+        message,
+        assistantMessageEvent: {
+          type: "thinking_delta",
+          contentIndex: 0,
+          delta: "first ",
+          partial: message,
+        },
+      }),
+    ).toEqual([]);
+    expect(
+      bridge.accept({
+        type: "message_update",
+        message,
+        assistantMessageEvent: {
+          type: "thinking_end",
+          contentIndex: 0,
+          content: "first second",
+          partial: message,
+        },
+      }),
+    ).toEqual([{ type: "thinking", content: "first second" }]);
+  });
 });

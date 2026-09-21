@@ -43,9 +43,15 @@ async function demo(): Promise<void> {
     );
     const runtime = await createPiModelRuntime({ agentDir });
     const discovery = await discoverPiModels(runtime);
+    const demoModel = discovery.models[0];
+    if (!demoModel) {
+      throw new Error(
+        "Pi prototype demo discovered no models; check the embedded models.json fixture and Pi SDK compatibility.",
+      );
+    }
     const sessionIsolation = await inspectPiSessionIsolation({
       runtime,
-      qualifiedModelId: discovery.models[0].qualifiedModelId,
+      qualifiedModelId: demoModel.qualifiedModelId,
     });
     console.log(JSON.stringify({ ...discovery, sessionIsolation }, null, 2));
   } finally {

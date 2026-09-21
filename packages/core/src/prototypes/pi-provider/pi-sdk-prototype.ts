@@ -171,8 +171,8 @@ export class PiEventBridge {
       if (event.assistantMessageEvent.type === "text_delta") {
         return [{ type: "text_delta", content: event.assistantMessageEvent.delta }];
       }
-      if (event.assistantMessageEvent.type === "thinking_delta") {
-        return [{ type: "thinking", content: event.assistantMessageEvent.delta }];
+      if (event.assistantMessageEvent.type === "thinking_end") {
+        return [{ type: "thinking", content: event.assistantMessageEvent.content }];
       }
       return [];
     }

@@ -12,6 +12,8 @@ riskiest seams in the Pi provider proposal:
 The prototype never starts the Pi CLI, a PTY, or a terminal. The live-run path
 uses an in-memory Pi session and disables Pi extensions, skills, prompt
 templates, context files, session files, and built-in file/shell tools.
+It remains source-only: Rome type-checks and runs it with `tsx`, while the core
+production build excludes `src/prototypes/**` from emitted `dist` artifacts.
 
 ## Try it
 
@@ -56,8 +58,10 @@ Pi's shell or file tools. The final accounting identifies the provider as
 - `createAgentSession()` accepts a caller-selected exact model, an isolated
   resource loader, in-memory settings/session state, a caller-owned system
   prompt, and caller-owned custom tools.
-- Pi streams text, thinking, tool start, tool result, terminal, and accounting
-  information with enough structure to adapt to Rome's provider contract.
+- Pi streams text, whole thinking blocks, tool start, tool result, terminal, and
+  accounting information with enough structure to adapt to Rome's provider
+  contract. The bridge waits for Pi's authoritative `thinking_end` instead of
+  misrepresenting individual thinking deltas as complete Rome blocks.
 - `AgentSession.abort()` is available for Rome cancellation. The prototype
   wires an optional `AbortSignal` to it.
 
