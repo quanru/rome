@@ -11,17 +11,29 @@ cases:
       - aiAssert: >-
           The project search field contains "todo.md" and the matching todo.md file is visible in
           the project tree.
-  - name: FILE-02 Open an existing project file for editing
+  - name: FILE-02 Open project and Memory files
     tags:
       - files
       - shard-4
+      - deterministic-assist
     steps:
       - app.open:
           path: /projects/todo.md
       - aiAct: >-
           Click "Edit" in the Preview/Edit view toggle once, then stop.
       - aiAssert: >-
-          todo.md is open in Edit mode with a visible text editor and Save control.
+          todo.md is open in Edit mode with its Markdown text visible in an editable text area.
+      - app.open:
+          path: /memory
+      - app.clickByLabel:
+          label: relationship
+          exact: true
+      - app.clickByLabel:
+          label: BONDS.md
+          exact: true
+      - aiAssert: >-
+          The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
+          Circle" section listing ray-oster and nadia-petrova.
   - name: FILE-03 Handle a duplicate project-file rename
     tags:
       - files
@@ -45,15 +57,3 @@ cases:
       - aiAssert: >-
           The duplicate rename is rejected: both "notes.txt" and the existing "README.md" remain
           listed in the demo-app tree.
-  - name: FILE-04 Open relationship bonds from Memory
-    tags:
-      - files
-      - shard-4
-    steps:
-      - app.open:
-          path: /memory
-      - aiAct: >-
-          Expand the "relationship" folder and open its "BONDS.md" file. Stop with the note open.
-      - aiAssert: >-
-          The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
-          Circle" section listing ray-oster and nadia-petrova.

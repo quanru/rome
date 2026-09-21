@@ -26,6 +26,8 @@ cases:
           error state.
       - app.open:
           path: /apps/stock-daily
+      - app.scrollTextIntoView:
+          text: 2026-09-11
       - app.clickByLabel:
           label: 2026-09-11
       - aiAssert: >-

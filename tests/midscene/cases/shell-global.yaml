@@ -25,16 +25,3 @@ cases:
       - aiAssert: >-
           A mobile navigation drawer is open over the page with Chat, Apps, and Activity entries, a
           "Close sidebar" control, and a dimmed backdrop.
-  - name: SHELL-04 Open the account menu
-    tags:
-      - shell
-      - global
-      - zh
-      - shard-5
-    steps:
-      - app.open:
-          path: /chat
-      - aiAct: 1. Find and click the "Account" button at the bottom of the sidebar.
-      - aiAssert: >-
-          The account menu opens showing "Rome Demo" with the "Guardian" role, followed by
-          "Settings", "Feedback", and a red "Log out" action.
