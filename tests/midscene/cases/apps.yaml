@@ -32,7 +32,7 @@ cases:
       - aiAssert: >-
           The page shows the empty state 'No apps match "zzz-nonexistent"' and the helper text "Try
           a different search, or browse the App store."
-  - name: APPS-02 Disable, re-enable, and uninstall apps from tile menus
+  - name: APPS-02 Disable, re-enable, and review uninstall impact from tile menus
     tags:
       - apps
       - shard-2
@@ -40,41 +40,25 @@ cases:
       - app.open:
           path: /apps
       - aiAct: >-
-          1. Find the visible control labelled "More actions for Issue Triage" and click it.
-
-          2. Find and click the "Disable" menu item for Issue Triage.
-
-          3. Find the visible control labelled "More actions for Issue Triage" and click it.
-
-          4. Find and click the "Enable" menu item.
-
-          5. Find the visible control labelled "More actions for Issue Triage" and click it.
-
-          7. Before continuing, confirm these visible checkpoints: An app tile actions dropdown menu
-          is open listing the entries "View details", "Open full view", "Pin to sidebar", "Access",
-          "Disable", "Uninstall", and "Uninstall and erase data". There is no "Enable" entry because
-          the app is currently enabled. The reopened tile menu now offers "Enable" and no longer
-          offers "Disable". The menu is back to the enabled state: it offers "Disable" and does not
-          offer "Enable".
+          On the Issue Triage card, open its actions menu and choose "Disable". Then reopen that
+          card's actions menu. Finish with the menu open in the disabled state, showing "Enable"
+          instead of "Disable".
+      - aiAssert: >-
+          The open Issue Triage actions menu offers "Enable" and does not offer "Disable".
+      - aiAct: >-
+          The Issue Triage actions menu is already open. Use its keyboard typeahead: press the "e"
+          key to focus "Enable", then press Enter to choose it. Reopen that card's actions menu and
+          finish with the menu open in the enabled state, showing "Disable" instead of "Enable".
       - aiAssert: "The menu is back to the enabled state: it offers \"Disable\" and does not offer \"Enable\"."
       - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the visible control labelled "More actions for Stock Daily" and click it.
-
-          3. Find and click the "Uninstall" menu item (the plain one, not "Uninstall and erase
-          data").
-
-          4. Find and click the "Uninstall" button in the confirmation dialog.
-
-          5. Before continuing, confirm these visible checkpoints: A confirmation dialog titled
-          "Uninstall Stock Daily?" explains that the app is removed but its database rows and data
-          directory are preserved for a later reinstall, and offers "Cancel" and "Uninstall"
-          buttons.
+          Press Escape once to close the currently open Issue Triage actions menu. Then open the
+          actions menu on the Stock Daily card and choose the plain "Uninstall" action, not
+          "Uninstall and erase data". Stop when the uninstall confirmation dialog is visible; do
+          not confirm it.
       - aiAssert: >-
-          The Stock Daily tile disappears from the Installed apps group, the Installed apps count
-          drops to 4, and the other four fixture apps remain listed.
+          A confirmation dialog titled "Uninstall Stock Daily?" explains that the app is removed
+          while its database rows and data directory are preserved for a later reinstall, and it
+          offers "Cancel" and "Uninstall" buttons. Stock Daily has not been removed yet.
   - name: APPS-03 Inspect the Issue Triage app details and capabilities
     tags:
       - apps

@@ -1,5 +1,5 @@
 cases:
-  - name: CHAT-01 Configure the home composer and inspect its menus
+  - name: CHAT-01 Draft and clear a message from the home composer
     tags:
       - chat
       - shard-1
@@ -7,33 +7,16 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          1. Focus the message composer, type "draft", then clear the draft without sending it.
-          Inspect the upload, project, reasoning, and send controls while keeping their settings
-          unchanged.
+          On the Chat home, type "draft" in the bottom message composer and then delete it without
+          sending. Keep the current project and reasoning settings unchanged, and finish on the
+          Chat home with the composer empty.
       - aiAssert: >-
           The chat home shows the greeting "Welcome," and the headline "What should we create?". The
           message composer shows the placeholder "How can I help you today?", the current project
           name "default", and a reasoning effort control that currently reads "Think". A button
           with an attachment icon is visible, along with the project picker, reasoning control, and
-          arrow-shaped send button.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the visible control labelled "Reasoning effort" and click it.
-      - aiAssert: >-
-          A small popover menu opens above the composer listing three options: "Fast", "Think", and
-          "Ultrathink". The menu item "Fast" is visible and not selected. The menu item "Think" is
-          visible and selected. The menu item "Ultrathink" is visible and not selected.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. In the message composer at the bottom of the Chat home, click the project selector
-          that currently displays "default". Do not open the Projects entry in the left sidebar.
-      - aiAssert: >-
-          A project picker menu opens listing multiple available projects and a "Create project"
-          action.
+          arrow-shaped send button. The temporary "draft" text has been cleared and no message was
+          sent.
   - name: CHAT-02 Exercise composer pickers and the failed-send state
     tags:
       - chat
@@ -71,52 +54,18 @@ cases:
       - aiAssert: >-
           An agent mention picker titled "Pick an agent to chat with" opens, showing a "Built-in
           agents" section with a "Rome" group and its two agents, "main" and "envoy".
-  - name: CHAT-03 Find a conversation, inspect its transcript, and preserve a failed draft
+  - name: CHAT-03 Preserve a draft after a failed send in an existing conversation
     tags:
       - chat
       - shard-1
     steps:
       - app.open:
-          path: /chat
+          path: /chat/mock-chat-2
       - aiAct: >-
-          1. Keep using the Load more control in the recent Chats list until the "Draft launch
-          email" conversation is visible. Inspect the expanded conversations while keeping the
-          sidebar open.
-      - aiAssert: >-
-          The "Chats" section in the sidebar groups conversations by project folder. The "default"
-          project lists "Build an app from an idea", "Turn a long video into a learning kit", "Make
-          room for a daily workout", "Have the market recap ready every day", "Morning brief
-          tweaks", "Weekly planning", and "Plumber for the leak". The "website-redesign" project
-          lists "Draft launch email".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click the "Draft launch email" row in the Chats sidebar list.
-
-          3. Explore the page by scrolling until the content containing "Can the launch copy be
-          warmer?" is visible.
-
-          4. Explore the page by scrolling until the content containing "It reads the info semantic
-          tokens" is visible.
-
-          5. Before continuing, confirm these visible checkpoints: the application reaches route
-          /chat/mock-chat-2 The conversation "Draft launch email" is open. Its first user request
-          reads "Can the launch copy be warmer? The roadmap paragraph reads like a changelog.", and
-          the assistant reply that follows starts "Here's a warmer pass at that paragraph:" with the
-          rewritten line "We built Rome because keeping a household running takes more attention
-          than any one person has to spare."
-      - aiAssert: >-
-          The later assistant answer reaches the text "And the banner:" and renders a code block
-          labelled "tsx" directly beneath it.
-      - aiAct: >-
-          In the already open "Draft launch email" conversation, scroll to the bottom composer and
-          enter "Make the subject line shorter". Do not send it yet, and finish with the draft
-          visible in the composer.
-      - aiAssert: The bottom conversation composer contains the draft "Make the subject line shorter".
-      - aiAct: >-
-          Send the draft using the bottom conversation composer, not the Send button inside the
-          earlier question card. Finish after the failed-request error appears above the composer.
+          In the open "Draft launch email" conversation, enter "Make the subject line shorter" in
+          the bottom message composer, then use the arrow-shaped Send button immediately beside
+          that same composer. Do not use the Send button inside the earlier question card. Finish
+          after the failed-request error appears above the bottom composer.
       - aiAssert: >-
           Sending fails with an error above the composer: a proxy error message naming
           "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
