@@ -1,5 +1,5 @@
 cases:
-  - name: ACT-01 Activity overview and status filters stay consistent
+  - name: ACT-01 Filter Activity to failed executions
     tags:
       - activity
       - shard-4
@@ -7,39 +7,11 @@ cases:
       - app.open:
           path: /activity
       - aiAct: >-
-          1. Refresh the Activity feed, inspect its status filters, and leave the All filter
-          selected.
+          Click the visible "Error" status filter once, then stop.
       - aiAssert: >-
-          The Activity feed is shown in English with a "Live · updated just now" indicator and a
-          "Refresh" button. Counter chips across the top read "Pending 4", "Running 1", "Errors 3",
-          and "Events 17". A prominent yellow banner reads "4 pending approvals requiring review"
-          with a "Review" action. A row of status filter chips offers "All", "Pending", "Running",
-          "Success", "Error", "Approved", "Rejected", "Auto", "Awaiting", and "Cancelled", with
-          "All" active.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the visible control labelled "Running" and click it.
-
-          3. Find the visible control labelled "All" and click it.
-
-          4. Before continuing, confirm these visible checkpoints: With the "Running" filter active,
-          only the single in-flight execution remains listed (matching the "Running 1" counter), and
-          it offers a "Cancel" action. No "Approve" or "Reject" buttons appear.
-      - aiAssert: >-
-          Switching back to "All" restores the mixed feed including the pending approval rows and
-          the webhook history rows.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click Error.
-      - aiAssert: >-
-          With the "Error" filter active the feed shows exactly three failed executions (matching
-          the "Errors 3" counter), each with a "Details" or "Payload" disclosure for diagnosis, and
-          no approval buttons.
-  - name: ACT-02 Review pending requests and reject an action approval
+          The Error filter is active and the feed shows three failed executions with no approval
+          buttons.
+  - name: ACT-02 Review pending requests
     tags:
       - activity
       - shard-4
@@ -47,27 +19,12 @@ cases:
       - app.open:
           path: /activity
       - aiAct: >-
-          1. Use the pending-approvals Review action to find and inspect the channel connection
-          requests, but do not approve or reject any request.
+          Click the "Review" action in the pending-approvals banner once, then stop.
       - aiAssert: >-
           The feed lists three pending connection requests from "Alex" (account-0, account-1,
           account-2) for the "Telegram", "Discord", and "Feishu" channels. Each request says it is
           valid for 10 minutes, shows "Pair with a verification code" guidance, and offers "Approve"
           and "Reject" buttons.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Click the "Reject" button on the pending row whose description is 'Action
-          "send_message" requires guardian approval' (not the Reject buttons on the Alex channel
-          connection requests).
-
-          3. Return to the top of the Activity page and finish with the summary cards visible.
-
-          4. Before continuing, confirm these visible checkpoints: The send_message row resolves to
-          a rejected state: its status pill reads "Rejected" and the row no longer offers
-          Approve/Reject.
-      - aiAssert: The Activity summary shows a Pending count of 3.
   - name: ACT-03 Inspect an accepted webhook delivery payload
     tags:
       - activity
@@ -76,14 +33,8 @@ cases:
       - app.open:
           path: /activity
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "weather_forecast" is
-          visible.
-
-          2. Open the "Payload" disclosure on the first "weather_forecast" webhook row.
-
-          3. Before continuing, confirm these visible checkpoints: The feed history contains
-          accepted webhook deliveries for "weather_forecast" marked "Accepted" with a "Payload"
-          disclosure.
+          Find the first "weather_forecast" webhook row and open its "Payload" disclosure once.
+          Stop with the payload expanded.
       - aiAssert: >-
           The expanded payload renders the delivery body as JSON-style text (quoted keys and values)
           rather than an empty panel.

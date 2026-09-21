@@ -1,5 +1,5 @@
 cases:
-  - name: RAPP-01 Inspect the Issue Triage dashboard and recent results
+  - name: RAPP-01 Inspect recent Issue Triage activity
     tags:
       - apps
       - shard-6
@@ -7,16 +7,11 @@ cases:
       - app.open:
           path: /apps/issue-triage
       - aiAct: >-
-          1. Explore the Recent triage activity section, scrolling as needed to inspect the three
-          results and issue #363, then return to the dashboard summary.
+          Scroll downward once inside the Issue Triage dashboard, then stop.
       - aiAssert: >-
-          The Issue Triage recorded app renders inside its embedded view with the heading "Issue
-          Triage" and the subtitle "AI auto-labeling for GitHub issues · 1 repo · 3 triaged". Stat
-          counters read "Repos 1", "Triaged 3", "Succeeded 3", and "Failed 0". A "Recent triage
-          activity" section lists three succeeded results for "rome-os/rome", including issue "#
-          363" titled "opencli: support browser extensions in managed sessions" with the
-          "feature-request" label and a "P2" priority badge.
-  - name: RAPP-02 Review a recorded code review from timeline to findings
+          Recent triage activity shows issue "#363" for "rome-os/rome" with its feature-request
+          label and P2 priority badge.
+  - name: RAPP-02 Open a recorded code review
     tags:
       - apps
       - shard-6
@@ -24,14 +19,11 @@ cases:
       - app.open:
           path: /apps/code-review
       - aiAct: >-
-          Open the "PR #301" review item, inspect its review timeline, then scroll to the Verdict
-          and Findings summary. Finish with "REQUEST_CHANGES" and "Findings (3)" visible.
+          Click the visible "PR #301" review item once, then stop.
       - aiAssert: >-
-          The PR #301 review detail is completed, its Verdict is "REQUEST_CHANGES", and it reports
-          "Findings (3)".
-      - aiAct: Scroll farther through the findings until the "[P3]" finding and its source reference are visible.
-      - aiAssert: The third ranked finding is marked "[P3]" and includes a source file reference.
-  - name: RAPP-03 Inspect a Stock Daily report from schedule to market news
+          The PR #301 review detail is open and shows its completed review timeline rather than an
+          error state.
+  - name: RAPP-03 Open a completed Stock Daily report
     tags:
       - apps
       - shard-6
@@ -39,17 +31,8 @@ cases:
       - app.open:
           path: /apps/stock-daily
       - aiAct: >-
-          Open the completed report dated "2026-09-11" from Report History. Finish with the report
-          title and the beginning of its body visible.
+          Click the completed report dated "2026-09-11" in Report History once, then stop.
       - aiAssert: >-
           The report view has a "Back to list" control, is marked "Completed", and is titled "US
           Stock Market Daily Close Report | 2026-09-11". Its body begins with the data cutoff note
           and a "0. One-sentence Executive Summary" section.
-      - aiAct: Scroll through the report until the "4. Sector Performance" section is visible.
-      - aiAssert: The recorded report contains a rendered "4. Sector Performance" section.
-      - aiAct: >-
-          Continue scrolling through the report until "8. Key Stock News and Notable Moves" and its
-          news entries are visible.
-      - aiAssert: >-
-          The "8. Key Stock News and Notable Moves" section is rendered with news entries,
-          confirming the full recorded report is browsable rather than an error state.

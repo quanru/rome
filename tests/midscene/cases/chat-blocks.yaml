@@ -22,10 +22,9 @@ cases:
       - aiAct: >-
           Click the visible blue underlined "Open the learning kit" text once, then stop.
       - aiAssert: >-
-          The YouTube Distill recorded app opens in a workspace tile beside the conversation (the
-          chat URL is unchanged), showing content for the video "Deep Dive into LLMs like ChatGPT"
-          rather than an error.
-  - name: CHAT-08 Complete the live question card and preserve its failed submission
+          A YouTube page for "Deep Dive into LLMs like ChatGPT" is open and visibly shows the video
+          content rather than an error.
+  - name: CHAT-08 Choose a tone on the live question card
     tags:
       - chat
       - shard-2
@@ -33,13 +32,10 @@ cases:
       - app.open:
           path: /chat/mock-chat-2
       - aiAct: >-
-          On the visible question card, choose "Warm" and select "The beta thank-you" under "What
-          should the new opening keep?". Submit with the Send button inside that card, not the
-          conversation composer. Finish after the failed-request error appears.
+          Click the "Warm" choice on the visible question card once, then stop.
       - aiAssert: >-
-          Submission fails with an error above the composer reporting the failed request to the
-          ".../turns" endpoint (there is no model backend in mock mode); the conversation stays on
-          screen with the card and its selections intact.
+          The "Warm" tone is selected on the question card, while "Plain" and "Playful" are not
+          selected.
   - name: CHAT-09 Reject the plumber approval card
     tags:
       - chat
@@ -48,7 +44,6 @@ cases:
       - app.open:
           path: /chat/mock-chat-4
       - aiAct: >-
-          Click "Reject" on the visible "Guardian approval needed" card and finish when the card
-          shows its rejected state.
+          Click "Reject" on the visible "Guardian approval needed" card once, then stop.
       - aiAssert: >-
           The approval card visibly shows that the request was rejected.

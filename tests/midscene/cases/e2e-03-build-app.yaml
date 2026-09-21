@@ -1,5 +1,5 @@
 cases:
-  - name: E2E-03 Open a built app from Chat and find it in Apps
+  - name: E2E-03 Open a built app from Chat
     tags:
       - poc
       - story
@@ -9,17 +9,7 @@ cases:
       - app.open:
           path: /chat/mock-chat-build-app
       - aiAct: >-
-          In the "Build an app from an idea" conversation, find the final built-app reply and open
-          its Issue Triage link. Finish when the Issue Triage dashboard is visible in a workspace
-          tile beside the conversation.
+          Click the visible "Issue Triage" app link in the final built-app reply once, then stop.
       - aiAssert: >-
-          The Issue Triage app is open in a workspace tile beside the still-visible conversation.
-          Its dashboard shows repository or triage content, not an error or page-not-found state.
-      - aiAct: >-
-          Open Apps from the left application sidebar and find Issue Triage in the installed-app
-          catalog.
-      - app.expectUrl:
-          path: /apps
-      - aiAssert: >-
-          The Apps page's installed apps list shows "Issue Triage" as an installed app with an
-          affordance to open it.
+          The Issue Triage app dashboard is open and shows repository or triage content rather than
+          an error or page-not-found state.

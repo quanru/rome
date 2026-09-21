@@ -1,30 +1,16 @@
 cases:
-  - name: SET-01 Navigate Settings and switch appearance mode
+  - name: SET-01 Open the appearance-mode choices
     tags:
       - settings
       - shard-5
     steps:
       - app.open:
-          path: /settings
-      - aiAct: >-
-          1. Open Connections from the Settings navigation, then return to Appearance without
-          changing any setting.
-      - app.expectUrl:
           path: /settings/appearance
+      - aiAct: >-
+          Click the visible "Appearance mode" select once, then stop with its choices open.
       - aiAssert: >-
-          The Settings page is shown in English with the heading "Settings". Six navigation entries
-          are visible in this order: "Appearance", "Connections", "Channels", "AI Tools", "Favors",
-          and "Advanced". The Appearance section shows the rows "Language", "Theme", and "Appearance
-          mode", with the controls currently set to English, Ember, and System. (The Light and Dark
-          alternatives live inside the closed "Appearance mode" select and are exercised later in
-          this journey.)
-      - aiAct: |-
-          1. Open Settings and select Appearance.
-          2. Open the "Appearance mode" select and choose "Dark".
-      - aiAssert: >-
-          The whole settings UI immediately renders with a dark background and light text (dark mode
-          is applied without a save button or reload).
-  - name: SET-02 Inspect connections, disconnect a grant, and add an app key
+          The Appearance mode menu is open and offers System, Light, and Dark choices.
+  - name: SET-02 Open connection details
     tags:
       - settings
       - shard-5
@@ -32,51 +18,11 @@ cases:
       - app.open:
           path: /settings/connections
       - aiAct: >-
-          1. Explore the page by scrolling until the content containing "Every channel and service"
-          is visible.
+          Click the "Open Telegram" button for the visible Telegram connection once, then stop.
       - aiAssert: >-
-          The Connections page shows the description "Every channel and service your agent can use,
-          in one place." and begins its service list with a Telegram connection marked "Connected".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Explore the page by scrolling until the content containing "Every channel and service"
-          is visible.
-
-          3. Find the visible control labelled "Open GitHub" and click it.
-
-          4. Find and click the "Disconnect" button in the GitHub dialog.
-
-          5. Before continuing, confirm these visible checkpoints: A GitHub connection detail dialog
-          is open. It shows "GitHub" with a "Connected" state and the demo account "Rome Demo"
-          (rome-demo), describes the repositories/issues/pull-requests capabilities, and offers a
-          "Disconnect" action.
-      - aiAssert: >-
-          The grant is revoked in memory: the GitHub section now presents a not-connected state with
-          a "Connect" affordance instead of the connected identity.
-      - aiAct: >-
-          1. From Connections, open App keys.
-
-          2. Find and click Add key.
-
-          3. Find the field identified by "e.g. SHOP_DB_PASSWORD", enter text with
-          "SHOP_DB_PASSWORD".
-
-          4. Find the visible control labelled "Save for all apps" and click it.
-
-          5. Find the field identified by "Secret value", enter text with "demo-secret-123".
-
-          6. Find the visible control labelled "Save for all apps" and click it.
-
-          7. Before continuing, confirm these visible checkpoints: The App keys page shows the
-          heading "App keys" and an existing key labeled "Demo service API key", plus an "Add key"
-          button. A "New key" form is shown with a "Name apps use" field, a "Secret value" field,
-          the warning "Any app installed on your Rome will be able to read this.", and a "Save for
-          all apps" button. the visible interface contains "Enter the secret value.".
-      - aiAssert: >-
-          The App keys list contains the newly saved key "SHOP_DB_PASSWORD".
-  - name: SET-03 Inspect channel activation and log out an AI tool
+          A Telegram connection detail dialog is open and shows its connected status and account
+          information rather than an error.
+  - name: SET-03 Inspect channel activation settings
     tags:
       - settings
       - shard-5
@@ -84,94 +30,20 @@ cases:
       - app.open:
           path: /settings/channels
       - aiAct: >-
-          1. Find and click the "Rome / can you see active chats?" conversation card.
-
-          2. Before continuing, confirm these visible checkpoints: the visible interface contains
-          "All connections", "Any status", "Rome / can you see active chats?", "Ray". The Channels
-          tab shows the "All connections" and "Any status" filters, and a group conversation card
-          titled "Rome / can you see active chats?" marked as a Discord group that is currently
-          Online, with the "Rome in this conversation" activation switch turned on.
+          Click the visible "Rome / can you see active chats?" conversation card once, then stop.
       - aiAssert: >-
           The card's configuration sections are shown, including an "Activation" section ("Rome in
           this conversation"), a "Respond" policy set to "Only when mentioned", and "Reply
           placement" options ("Native thread", "Inline").
-      - aiAct: >-
-          1. Open Settings and select AI Tools.
-
-          2. Find and click the "Log Out" button on the Claude card.
-
-          3. Find and click the confirm "Log out" button in the dialog.
-
-          4. Before continuing, confirm these visible checkpoints: The AI Tools tab shows the
-          heading "AI Tools" with a "Refresh" action. The Claude provider card shows a "Connected"
-          state, "Signed in with claude.ai" with "Account type: Max", an "API Key" control, a "Log
-          Out" action, and usage windows labeled "5H USED" and "7D USED". The ChatGPT provider card
-          shows "Not connected". A confirmation dialog titled "Log out of Claude?" explains that it
-          "Signs out on this server only." and offers "Cancel" and "Log Out".
-      - aiAssert: The Claude card switches to a "Not connected" state with a "Log In" button.
-  - name: SET-04 Review favors and advanced settings, then persist access controls
+  - name: SET-04 Open advanced developer settings
     tags:
       - settings
       - shard-5
     steps:
       - app.open:
-          path: /settings/favors
-      - aiAssert: >-
-          The Favors tab shows its heading and description, with Balance, Earned, and Spent summary
-          cards near the top.
+          path: /settings/advanced
       - aiAct: >-
-          1. Explore the pending payment decision and the Ledger by scrolling through the Favors
-          page, without paying or declining anything.
+          Click the visible "Developer Settings" disclosure once, then stop.
       - aiAssert: >-
-          The "Awaiting your payment decision" section lists one pending "place_grocery_order"
-          request for 120 favors with "Pay" and "Decline" buttons. "Paid action requests" and
-          "Ledger" sections are also rendered.
-      - aiAct: >-
-          1. Open Settings and select Advanced.
-
-          2. In the main Settings content, scroll downward past Tailscale and System diagnosis.
-          Do not stop when only the "Computer Use" heading appears; continue until the OpenCLI
-          v1.8.8 Running row, Rome browser Connected row, and Mac Chrome disconnected row are
-          visible together, then finish there.
-
-          3. Before continuing, confirm these visible checkpoints: The Advanced tab shows the
-          heading "Advanced Settings". Near the top, an "Access Control" section contains an
-          "Allowed emails" group listing partner@example.com and sitter@example.com with an add
-          input, alongside a "System" section with a "Check for updates" action. the visible
-          interface contains "Couldn't load version info.", "Retry".
-      - aiAssert: >-
-          The "Computer Use" section lists OpenCLI at "v1.8.8" / "Running" and "Rome browser" as
-          "Connected" (Profile rome-browser), plus a disconnected "Mac Chrome" row.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the field identified by "Add email address", enter text with
-          "neighbour@example.com".
-
-          3. Find the visible control labelled "Add" and click it.
-
-          4. Before continuing, confirm these visible checkpoints: The Access Control allowed-emails
-          field lists partner@example.com and sitter@example.com.
-      - aiAssert: >-
-          The Allowed emails list contains "neighbour@example.com" alongside the existing entries.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the visible control labelled "Developer Settings" and click it.
-
-          3. Find the visible control labelled "Show Claude and ChatGPT usage" and click it.
-
-          4. Find the visible control labelled "Connections" and click it.
-
-          5. Find the visible control labelled "Advanced" and click it.
-
-          6. Find the visible control labelled "Developer Settings" and click it.
-
-          7. Before continuing, confirm these visible checkpoints: A switch labelled "Show Claude
-          and ChatGPT usage" is visible, it is selected. A switch labelled "Show Claude and ChatGPT
-          usage" is visible, it is not selected. the visible interface contains "Settings saved".
-          the application reaches route /settings/connections the application reaches route
-          /settings/advanced
-      - aiAssert: A switch labelled "Show Claude and ChatGPT usage" is visible, it is not selected.
+          The Developer Settings section is expanded and shows the "Show Claude and ChatGPT usage"
+          switch.

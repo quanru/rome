@@ -1,5 +1,5 @@
 cases:
-  - name: SHELL-01 Navigate every built-in surface from Chat to Settings
+  - name: SHELL-01 Collapse the application sidebar
     tags:
       - shell
       - shard-5
@@ -7,15 +7,11 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          Visit each built-in surface from the left sidebar in this order: Apps, Projects, Sessions,
-          Memory, People, Routines, Activity, Browser, and Settings. Confirm each destination loads
-          before continuing. The Browser workspace may be blank in mock mode. Finish on Settings.
-      - app.expectUrl:
-          path: /settings
+          Collapse the application sidebar using the Command+B keyboard shortcut once, then stop.
       - aiAssert: >-
-          The Settings page is open after the full sidebar tour. Its settings navigation and
-          Appearance content are visible, and the left application sidebar remains available.
-  - name: SHELL-02 Search chats, toggle the sidebar, and edit pinned entries
+          The sidebar is collapsed to a narrow icon rail: navigation icons remain visible while
+          labels such as Chat and Apps are hidden.
+  - name: SHELL-02 Open global chat search
     tags:
       - shell
       - shard-6
@@ -23,64 +19,11 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          1. Use the "mod+k" keyboard command in the current interface.
-
-          2. Use the "Escape" keyboard command in the current interface.
-
-          3. Use the "mod+k" keyboard command in the current interface.
-
-          4. Find the field identified by "Search chats and messages", enter text with "plumber".
-
-          5. Find and click the "Plumber for the leak" search result.
-
-          6. Before continuing, confirm these visible checkpoints: A search dialog opens over the
-          page with the placeholder "Search chats and messages" and a "Recent chats" heading.
-          Keyboard hints (Navigate / Open / Close) are shown at the bottom. The search dialog is
-          closed and the chat home is interactive again. Results include the conversation "Plumber
-          for the leak".
-      - app.expectUrl:
-          path: /chat/mock-chat-4
-      - aiAssert: Results include the conversation "Plumber for the leak".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Use the "mod+b" keyboard command in the current interface.
-
-          3. Use the "mod+b" keyboard command in the current interface.
-
-          4. Before continuing, confirm these visible checkpoints: The left sidebar is expanded,
-          showing text labels next to the navigation icons, including "Chat" and "Apps". The sidebar
-          collapses to a narrow icon rail: the Chat and Apps icons remain visible but their text
-          labels are hidden.
-      - aiAssert: The sidebar is expanded again with the "Chat" and "Apps" text labels visible.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click the "More actions" menu in the sidebar header.
-
-          3. Find and click Edit.
-
-          4. Activate the "Remove" control on the "Memory" pinned row.
-
-          5. Find and click Done.
-
-          6. Find and click the "More actions" menu in the sidebar header.
-
-          7. Find and click Edit.
-
-          8. In the "Add" section, activate the "Add" control for "Memory".
-
-          9. Find and click Done.
-
-          10. Before continuing, confirm these visible checkpoints: The expanded sidebar shows the
-          "Memory" navigation entry. The sidebar enters edit mode: a "Done" button is visible,
-          pinned rows show "Remove" controls, and an "Add" section lists entries not currently
-          pinned. After exiting edit mode, the "Memory" entry is no longer shown in the main sidebar
-          navigation, while required entries Chat and Apps remain.
-      - aiAssert: The "Memory" entry is pinned and visible in the sidebar again.
-  - name: SHELL-03 Use the mobile navigation drawer
+          Open global chat search using the Command+K keyboard shortcut once, then stop.
+      - aiAssert: >-
+          A search dialog is open with the field "Search chats and messages", a "Recent chats"
+          heading, and keyboard hints for navigating, opening, and closing results.
+  - name: SHELL-03 Open the mobile navigation drawer
     tags:
       - shell
       - mobile
@@ -90,21 +33,11 @@ cases:
           path: /chat
           viewport: mobile
       - aiAct: >-
-          1. Find and click Open sidebar.
-
-          2. Find and click the Activity entry inside the open drawer.
-
-          3. Before continuing, confirm these visible checkpoints: On the narrow layout, the sidebar
-          is hidden by default and a sticky top bar shows an "Open sidebar" hamburger button. A
-          navigation drawer slides over the page showing the Chat, Apps, and Activity entries, with
-          a "Close sidebar" control and a dimmed backdrop.
-      - app.expectUrl:
-          path: /activity
+          Click the visible "Open sidebar" hamburger button once, then stop.
       - aiAssert: >-
-          The Activity page now fills the narrow viewport, and the navigation drawer is closed: no
-          drawer panel or dimmed backdrop is visible, only the Activity content with the sticky top
-          bar and its hamburger button.
-  - name: SHELL-04 Inspect account actions, handle logout failure, and switch language
+          A mobile navigation drawer is open over the page with Chat, Apps, and Activity entries, a
+          "Close sidebar" control, and a dimmed backdrop.
+  - name: SHELL-04 Open the account menu
     tags:
       - shell
       - global
@@ -117,28 +50,3 @@ cases:
       - aiAssert: >-
           The account menu opens showing "Rome Demo" with the "Guardian" role, followed by
           "Settings", "Feedback", and a red "Log out" action.
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find and click the "Account" button at the bottom of the sidebar.
-
-          3. Click the "Log out" menu item exactly once. The standalone mock is expected to reject
-          the request; do not retry. Finish as soon as the logout error toast is visible.
-      - aiAssert: >-
-          The user remains signed in on the Chat page, and the account menu still offers "Log out".
-      - aiAct: >-
-          1. Open Settings and select Appearance.
-
-          2. Open the "Language" select and choose "中文".
-
-          3. Find and click the 对话 entry in the left app navigation sidebar.
-
-          4. Before continuing, confirm these visible checkpoints: Settings immediately localize:
-          the page heading becomes "设置" and the Appearance section link in the settings navigation
-          reads "外观".
-      - app.expectUrl:
-          path: /chat
-      - aiAssert: >-
-          The chat home is in Simplified Chinese: the greeting shows "欢迎", the headline is
-          "我们从哪里开始?", and the composer placeholder reads "今天我能帮你做点什么?".

@@ -104,7 +104,9 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # The shared endpoint has a low tokens-per-minute ceiling. Serial visual
+      # shards prevent concurrent screenshots from causing HTTP 429 failures.
+      max-parallel: 1
       matrix:
         # Shards are selected by YAML tags (MIDSCENE_INCLUDE_TAGS), see
         # tests/midscene/README.md and docs/midscene-e2e-plan.md.

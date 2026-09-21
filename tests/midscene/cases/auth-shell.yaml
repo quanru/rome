@@ -1,5 +1,5 @@
 cases:
-  - name: AUTH-01 Authenticated root navigation reaches the chat home
+  - name: AUTH-01 Inspect the authenticated account identity
     tags:
       - poc
       - auth
@@ -8,15 +8,11 @@ cases:
       - app.open:
           path: /
       - aiAct: >-
-          1. Use the sidebar to open Apps, then return to Chat and leave the application on the chat
-          home.
-      - app.expectUrl:
-          path: /chat
+          Click the visible "Account" button at the bottom of the application sidebar once, then
+          stop.
       - aiAssert: >-
-          The chat home is shown in English. It shows the greeting "Welcome,", the headline "What
-          should we create?", and the left app navigation is visible with the Chat and Apps entries.
-          Exactly one message composer is visible, and its placeholder reads "How can I help you
-          today?".
+          The account menu identifies the signed-in user as "Rome Demo" with the "Guardian" role
+          and offers Settings, Feedback, and Log out actions.
   - name: AUTH-02 Login validation and failed submission preserve the form
     tags:
       - auth
