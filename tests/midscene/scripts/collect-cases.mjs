@@ -22,11 +22,7 @@ let fileCount = 0;
 let caseCount = 0;
 const failures = [];
 const atomicAiNode = /^ai(?:Tap|Scroll|Input|Hover|Keyboard)/;
-const infrastructureNodes = new Set([
-  "app.open",
-  "app.reload",
-  "app.expectUrl",
-]);
+const infrastructureNodes = new Set(["app.open", "app.reload", "app.expectUrl"]);
 
 const validateAiNativeCase = (testCase) => {
   const nodes = testCase.definition.steps.map((step) => step.node);
@@ -38,8 +34,7 @@ const validateAiNativeCase = (testCase) => {
 
   const forbidden = nodes.filter(
     (node) =>
-      atomicAiNode.test(node) ||
-      (node.startsWith("app.") && !infrastructureNodes.has(node)),
+      atomicAiNode.test(node) || (node.startsWith("app.") && !infrastructureNodes.has(node)),
   );
   if (forbidden.length > 0) {
     problems.push(`use aiAct instead of ${[...new Set(forbidden)].join(", ")}`);
@@ -57,9 +52,7 @@ for (const project of loaded.projects) {
 
   for (const absolutePath of files) {
     fileCount += 1;
-    const sourcePath = relative(projectRoot, absolutePath)
-      .split(sep)
-      .join("/");
+    const sourcePath = relative(projectRoot, absolutePath).split(sep).join("/");
     try {
       const document = collectWorkflowDocument(
         {
@@ -83,15 +76,11 @@ for (const project of loaded.projects) {
 }
 
 for (const { sourcePath, error } of failures) {
-  console.error(
-    `x ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`,
-  );
+  console.error(`x ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 if (failures.length > 0) {
-  console.error(
-    `\nCollection failed: ${failures.length} invalid workflow file(s).`,
-  );
+  console.error(`\nCollection failed: ${failures.length} invalid workflow file(s).`);
   process.exit(1);
 }
 

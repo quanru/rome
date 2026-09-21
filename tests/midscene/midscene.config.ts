@@ -1,19 +1,19 @@
-import { fileURLToPath } from 'node:url';
-import { config as loadEnv } from 'dotenv';
-import { defineNode, z } from '@midscene/test';
-import type { NodeExecutionContext } from '@midscene/test';
-import { defineProjectSetup, defineTestProject } from '@midscene/test/config';
-import { createMidsceneNodes } from '@midscene/test/midscene';
-import { PlaywrightAgent } from '@midscene/web/playwright/agent';
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
+import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
+import { defineNode, z } from "@midscene/test";
+import type { NodeExecutionContext } from "@midscene/test";
+import { defineProjectSetup, defineTestProject } from "@midscene/test/config";
+import { createMidsceneNodes } from "@midscene/test/midscene";
+import { PlaywrightAgent } from "@midscene/web/playwright/agent";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 
-loadEnv({ path: fileURLToPath(new URL('.env', import.meta.url)) });
+loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
-const BASE_URL = process.env.ROME_E2E_BASE_URL ?? 'http://localhost:3200';
+const BASE_URL = process.env.ROME_E2E_BASE_URL ?? "http://localhost:3200";
 // The mock app boots with an English UI when no language is cached, but Chinese
 // CI runners would detect zh-CN from the OS. Pin English explicitly so every
 // assertion in the YAML cases targets one language.
-const LOCALE = 'en';
+const LOCALE = "en";
 
 const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -25,15 +25,15 @@ interface ProjectContext {
 }
 
 const getAgent = ({ context }: NodeExecutionContext<unknown, ProjectContext>) => {
-  if (!context.page) throw new Error('No page is open; call app.open before AI steps');
+  if (!context.page) throw new Error("No page is open; call app.open before AI steps");
   context.agent ??= new PlaywrightAgent(context.page);
   return context.agent;
 };
 
 const setup = defineProjectSetup<ProjectContext>({
-  name: 'web',
+  name: "web",
   async setup({ env, onTeardown }) {
-    const browser = await chromium.launch({ headless: env.HEADLESS !== 'false' });
+    const browser = await chromium.launch({ headless: env.HEADLESS !== "false" });
     const context: ProjectContext = { browser };
     onTeardown(async () => {
       await context.agent?.destroy();
@@ -49,27 +49,27 @@ const setup = defineProjectSetup<ProjectContext>({
 // up front (rome-sidebar-pins, the shell's own localStorage contract). This
 // also avoids the "all apps" popover and keeps clicks deterministic.
 const DEFAULT_PINS = [
-  'apps',
-  'projects',
-  'sessions',
-  'memory',
-  'people',
-  'routines',
-  'activity',
-  'desktop',
-  'chat',
-  'settings',
+  "apps",
+  "projects",
+  "sessions",
+  "memory",
+  "people",
+  "routines",
+  "activity",
+  "desktop",
+  "chat",
+  "settings",
 ] as const;
 
 const openInput = z.strictObject({
   path: z.string().min(1),
   // 'shell' waits for the authenticated sidebar (mock guardian), 'login' for
   // the login route, and 'any' only waits for the document to load.
-  waitUntil: z.enum(['shell', 'login', 'any']).default('shell'),
+  waitUntil: z.enum(["shell", "login", "any"]).default("shell"),
   // Extra built-in nav ids to pin in addition to the default set.
   pins: z.array(z.string()).optional(),
   // 'mobile' opens a phone-sized viewport (sidebar becomes a drawer).
-  viewport: z.enum(['desktop', 'mobile']).default('desktop'),
+  viewport: z.enum(["desktop", "mobile"]).default("desktop"),
 });
 
 const VIEWPORTS = {
@@ -78,10 +78,10 @@ const VIEWPORTS = {
 } as const;
 
 const appOpen = defineNode<typeof openInput, void, ProjectContext>({
-  name: 'app.open',
+  name: "app.open",
   description:
-    'Open a Rome route in a fresh browser context. A fresh context also resets ' +
-    'the in-memory MSW mock state, so every case starts from the same fixtures.',
+    "Open a Rome route in a fresh browser context. A fresh context also resets " +
+    "the in-memory MSW mock state, so every case starts from the same fixtures.",
   inputSchema: openInput,
   async execute({ context, input }) {
     // Tear down the previous case's page/agent before creating the new context.
@@ -91,7 +91,7 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
 
     const browserContext = await context.browser.newContext({
       viewport: VIEWPORTS[input.viewport],
-      locale: 'en-US',
+      locale: "en-US",
       // Fixtures encode absolute instants (e.g. Stock Daily's
       // 2026-09-15T20:30:00Z, asserted as "09/16, 04:30 AM"). GitHub's hosted
       // runners run in UTC and a developer's laptop may run in any zone, so a
@@ -99,15 +99,15 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
       // the zone in which every case is authored; the wall clock is left real
       // because mock timestamps are generated as offsets from now (freezing
       // Date in the page would mislabel the Today/Yesterday grouping).
-      timezoneId: 'Asia/Shanghai',
+      timezoneId: "Asia/Shanghai",
       // The copy-message control only swaps to its "Copied" confirmation once
       // navigator.clipboard.writeText resolves; grant it explicitly so the
       // feedback is deterministic under headless CI.
-      permissions: ['clipboard-read', 'clipboard-write'],
+      permissions: ["clipboard-read", "clipboard-write"],
     });
     // Pin the i18n language and sidebar entries before the app bundle runs.
     const pins = [...DEFAULT_PINS, ...(input.pins ?? [])].map((id) => ({
-      type: 'builtin' as const,
+      type: "builtin" as const,
       id,
     }));
     await browserContext.addInitScript(
@@ -116,11 +116,11 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
         // in a fresh context start in English with every built-in pinned,
         // but a case that switches the language (or edits pins) keeps its
         // choice across in-context navigations instead of being reset here.
-        if (!window.localStorage.getItem('rome.lang')) {
-          window.localStorage.setItem('rome.lang', lang);
+        if (!window.localStorage.getItem("rome.lang")) {
+          window.localStorage.setItem("rome.lang", lang);
         }
-        if (!window.localStorage.getItem('rome-sidebar-pins')) {
-          window.localStorage.setItem('rome-sidebar-pins', JSON.stringify(sidebarPins));
+        if (!window.localStorage.getItem("rome-sidebar-pins")) {
+          window.localStorage.setItem("rome-sidebar-pins", JSON.stringify(sidebarPins));
         }
       },
       { lang: LOCALE, sidebarPins: pins },
@@ -129,24 +129,24 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
     context.browserContext = browserContext;
     context.page = page;
 
-    const url = input.path.startsWith('http')
+    const url = input.path.startsWith("http")
       ? input.path
-      : `${BASE_URL}${input.path.startsWith('/') ? '' : '/'}${input.path}`;
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      : `${BASE_URL}${input.path.startsWith("/") ? "" : "/"}${input.path}`;
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
 
-    if (input.waitUntil === 'shell') {
+    if (input.waitUntil === "shell") {
       // The authenticated sidebar only renders after MSW answers /api/health,
       // /api/bootstrap and /api/auth/me, so this doubles as the mock-ready wait.
       await page.locator('a[href="/chat"]').first().waitFor({
-        state: 'visible',
+        state: "visible",
         timeout: 60_000,
       });
-    } else if (input.waitUntil === 'login') {
+    } else if (input.waitUntil === "login") {
       await page.waitForURL(/\/login/, { timeout: 60_000 });
       // The URL matches immediately after domcontentloaded; wait until the
       // LoginPage bundle has actually mounted the form.
       await page.locator('input[type="password"]').first().waitFor({
-        state: 'visible',
+        state: "visible",
         timeout: 60_000,
       });
     }
@@ -154,18 +154,18 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
 });
 
 const scrollInput = z.strictObject({
-  position: z.enum(['top', 'bottom']),
+  position: z.enum(["top", "bottom"]),
 });
 
 const appScrollContent = defineNode<typeof scrollInput, void, ProjectContext>({
-  name: 'app.scrollContent',
+  name: "app.scrollContent",
   description:
-    'Scroll the main content scroll container (right of the sidebar) to its ' +
-    'top or bottom, deterministically.',
+    "Scroll the main content scroll container (right of the sidebar) to its " +
+    "top or bottom, deterministically.",
   inputSchema: scrollInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     // Kept as a *string* expression and evaluated via page.evaluate(string):
     // esbuild rewrites nested function declarations inside evaluate callbacks
     // with __name() helpers that do not exist in the browser runtime. The walk
@@ -174,26 +174,26 @@ const appScrollContent = defineNode<typeof scrollInput, void, ProjectContext>({
     // scroll the window itself). It pins the tallest scroller twice because
     // the transcript snaps itself back to the newest content while replaying.
     const scrollExpr =
-      '(() => {' +
-      '  const scrollables = [];' +
-      '  const doc = document.scrollingElement;' +
-      '  if (doc && doc.scrollHeight > window.innerHeight + 50) scrollables.push(doc);' +
-      '  const stack = [document];' +
-      '  while (stack.length) {' +
-      '    const root = stack.pop();' +
+      "(() => {" +
+      "  const scrollables = [];" +
+      "  const doc = document.scrollingElement;" +
+      "  if (doc && doc.scrollHeight > window.innerHeight + 50) scrollables.push(doc);" +
+      "  const stack = [document];" +
+      "  while (stack.length) {" +
+      "    const root = stack.pop();" +
       '    root.querySelectorAll("*").forEach((el) => {' +
-      '      if (el.shadowRoot) stack.push(el.shadowRoot);' +
-      '      const o = getComputedStyle(el).overflowY;' +
+      "      if (el.shadowRoot) stack.push(el.shadowRoot);" +
+      "      const o = getComputedStyle(el).overflowY;" +
       '      if ((o === "auto" || o === "scroll" || o === "overlay") &&' +
-      '          el.clientHeight > 100 && el.scrollHeight > el.clientHeight + 50) {' +
-      '        scrollables.push(el);' +
-      '      }' +
-      '    });' +
-      '  }' +
+      "          el.clientHeight > 100 && el.scrollHeight > el.clientHeight + 50) {" +
+      "        scrollables.push(el);" +
+      "      }" +
+      "    });" +
+      "  }" +
       '  if (!scrollables.length) throw new Error("No scrollable content container found");' +
-      '  const target = scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];' +
-      `  target.scrollTop = ${input.position === 'top' ? '0' : 'target.scrollHeight'};` +
-      '})()';
+      "  const target = scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];" +
+      `  target.scrollTop = ${input.position === "top" ? "0" : "target.scrollHeight"};` +
+      "})()";
     await page.evaluate(scrollExpr);
     await page.waitForTimeout(900);
     await page.evaluate(scrollExpr);
@@ -206,16 +206,16 @@ const scrollTextInput = z.strictObject({
 });
 
 const appScrollTextIntoView = defineNode<typeof scrollTextInput, void, ProjectContext>({
-  name: 'app.scrollTextIntoView',
+  name: "app.scrollTextIntoView",
   description:
-    'Scroll the nearest scrollable ancestor so the element whose visible ' +
-    'text contains the given string is centered in the viewport. Unlike ' +
-    'scrolling to an absolute position, this survives late layout shifts ' +
-    '(e.g. mermaid diagrams re-rendering).',
+    "Scroll the nearest scrollable ancestor so the element whose visible " +
+    "text contains the given string is centered in the viewport. Unlike " +
+    "scrolling to an absolute position, this survives late layout shifts " +
+    "(e.g. mermaid diagrams re-rendering).",
   inputSchema: scrollTextInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     // The chat's stick-to-bottom hook ignores programmatic scrolls and snaps
     // back on every content resize (streamed blocks, mermaid). Only a trusted
     // wheel gesture releases the pin, so emulate one over the transcript
@@ -226,8 +226,8 @@ const appScrollTextIntoView = defineNode<typeof scrollTextInput, void, ProjectCo
     // getByText pierces open shadow roots, so this also positions content
     // inside recorded apps.
     const target = page.getByText(input.text, { exact: false }).last();
-    await target.waitFor({ state: 'visible', timeout: 30_000 });
-    await target.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await target.waitFor({ state: "visible", timeout: 30_000 });
+    await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await page.waitForTimeout(500);
   },
 });
@@ -240,18 +240,15 @@ const contentLinkInput = z.strictObject({
 // markdown (e.g. "Issue Triage"), so a vision-based tap is ambiguous. The
 // conversation content always sits right of the 255px sidebar.
 const appClickContentLink = defineNode<typeof contentLinkInput, void, ProjectContext>({
-  name: 'app.clickContentLink',
+  name: "app.clickContentLink",
   description:
-    'Click a hyperlink by its visible text inside the main content area ' +
-    '(excludes the left sidebar), deterministically via Playwright.',
+    "Click a hyperlink by its visible text inside the main content area " +
+    "(excludes the left sidebar), deterministically via Playwright.",
   inputSchema: contentLinkInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    const candidates = await page
-      .locator('a:visible')
-      .filter({ hasText: input.text })
-      .all();
+    if (!page) throw new Error("No page is open; call app.open first");
+    const candidates = await page.locator("a:visible").filter({ hasText: input.text }).all();
     for (const anchor of candidates) {
       const box = await anchor.boundingBox();
       if (box && box.x >= 255) {
@@ -278,35 +275,35 @@ const clickByLabelInput = z.strictObject({
 });
 
 const appClickByLabel = defineNode<typeof clickByLabelInput, void, ProjectContext>({
-  name: 'app.clickByLabel',
+  name: "app.clickByLabel",
   description:
-    'Click an icon-only or ambiguously placed control by its accessible name ' +
-    '(aria-label or inner text), deterministically. Use this instead of aiTap ' +
-    'for tile kebab menus, repeated icon buttons, and short-text filter chips ' +
-    'where a visual tap could hit the wrong element. Also matches settings ' +
-    'sub-navigation <a> links (e.g. jump from Advanced back to Connections) ' +
+    "Click an icon-only or ambiguously placed control by its accessible name " +
+    "(aria-label or inner text), deterministically. Use this instead of aiTap " +
+    "for tile kebab menus, repeated icon buttons, and short-text filter chips " +
+    "where a visual tap could hit the wrong element. Also matches settings " +
+    "sub-navigation <a> links (e.g. jump from Advanced back to Connections) " +
     'and plain <summary> disclosure headings such as "Developer Settings". ' +
-    'Works inside open shadow roots. Set exact:true when the label is short ' +
+    "Works inside open shadow roots. Set exact:true when the label is short " +
     '(e.g. "Running" must not match a "Running 1" counter), and index to ' +
     'disambiguate repeated names such as a composer "Send" that shares the ' +
     'page with a question-card "Send".',
   inputSchema: clickByLabelInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    const escaped = input.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = input.exact ? new RegExp(`^${escaped}$`, 'i') : new RegExp(escaped, 'i');
+    if (!page) throw new Error("No page is open; call app.open first");
+    const escaped = input.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = input.exact ? new RegExp(`^${escaped}$`, "i") : new RegExp(escaped, "i");
     const lists = [
-      page.getByRole('button', { name: pattern, exact: input.exact }),
+      page.getByRole("button", { name: pattern, exact: input.exact }),
       // Settings sub-navigation renders <a href="/settings/..."> entries
       // (e.g. jumping from Advanced back to Connections).
-      page.getByRole('link', { name: pattern, exact: input.exact }),
+      page.getByRole("link", { name: pattern, exact: input.exact }),
       // Segmented controls render <button role="radio"> (timeline channel
       // filters), whose accessible role is "radio", not "button".
-      page.getByRole('radio', { name: pattern, exact: input.exact }),
+      page.getByRole("radio", { name: pattern, exact: input.exact }),
       // Collapsible disclosures like "Developer Settings" are plain
       // <summary> elements with no role/aria-label.
-      page.locator('summary', { hasText: pattern }),
+      page.locator("summary", { hasText: pattern }),
       page.locator(`[aria-label*="${input.label}" i]`),
     ];
     for (const list of lists) {
@@ -342,7 +339,7 @@ const expectControlInput = z.strictObject({
   checked: z.boolean().optional(),
   // Accessible role to match; segmented controls use "radio" and routine
   // toggle switches use "switch". Defaults to "button".
-  role: z.enum(['button', 'radio', 'switch']).default('button'),
+  role: z.enum(["button", "radio", "switch"]).default("button"),
   // Require the control to be present and visible (default) or absent.
   present: z.boolean().default(true),
   // When several controls share the name, which match to inspect in DOM order
@@ -351,29 +348,34 @@ const expectControlInput = z.strictObject({
 });
 
 const appExpectControl = defineNode<typeof expectControlInput, void, ProjectContext>({
-  name: 'app.expectControl',
+  name: "app.expectControl",
   description:
-    'Assert a button or radio-segment control state deterministically via ' +
-    'Playwright instead of a screenshot: whether it exists/is visible, ' +
+    "Assert a button or radio-segment control state deterministically via " +
+    "Playwright instead of a screenshot: whether it exists/is visible, " +
     'whether it is disabled, and (for role:"radio") whether it is checked. ' +
-    'Use for disabled-vs-enabled distinctions that look identical in a ' +
-    'screenshot (e.g. a question card Send button), for transient aria-label ' +
+    "Use for disabled-vs-enabled distinctions that look identical in a " +
+    "screenshot (e.g. a question card Send button), for transient aria-label " +
     'swaps such as "Copied" or "Feedback recorded", and for segmented-control ' +
-    'selection whose checked fill is visually ambiguous.',
+    "selection whose checked fill is visually ambiguous.",
   inputSchema: expectControlInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    const escaped = input.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const name = input.exact
-      ? new RegExp(`^${escaped}$`, 'i')
-      : new RegExp(escaped, 'i');
+    if (!page) throw new Error("No page is open; call app.open first");
+    const escaped = input.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const name = input.exact ? new RegExp(`^${escaped}$`, "i") : new RegExp(escaped, "i");
     const matched = page.getByRole(input.role, { name, exact: input.exact });
     const count = await matched.count();
     if (!input.present) {
       for (let i = 0; i < count; i += 1) {
-        if (await matched.nth(i).isVisible().catch(() => false)) {
-          throw new Error(`app.expectControl: a visible "${input.label}" ${input.role} still exists`);
+        if (
+          await matched
+            .nth(i)
+            .isVisible()
+            .catch(() => false)
+        ) {
+          throw new Error(
+            `app.expectControl: a visible "${input.label}" ${input.role} still exists`,
+          );
         }
       }
       return;
@@ -384,22 +386,22 @@ const appExpectControl = defineNode<typeof expectControlInput, void, ProjectCont
       );
     }
     const target = matched.nth(input.index);
-    await target.waitFor({ state: 'visible', timeout: 10_000 });
+    await target.waitFor({ state: "visible", timeout: 10_000 });
     if (input.disabled !== undefined) {
       const isDisabled = await target.isDisabled();
       if (isDisabled !== input.disabled) {
         throw new Error(
-          `app.expectControl: "${input.label}" expected ${input.disabled ? 'disabled' : 'enabled'}, ` +
-            `got ${isDisabled ? 'disabled' : 'enabled'}`,
+          `app.expectControl: "${input.label}" expected ${input.disabled ? "disabled" : "enabled"}, ` +
+            `got ${isDisabled ? "disabled" : "enabled"}`,
         );
       }
     }
     if (input.checked !== undefined) {
-      const isChecked = (await target.getAttribute('aria-checked')) === 'true';
+      const isChecked = (await target.getAttribute("aria-checked")) === "true";
       if (isChecked !== input.checked) {
         throw new Error(
-          `app.expectControl: "${input.label}" expected ${input.checked ? 'checked' : 'unchecked'}, ` +
-            `got ${isChecked ? 'checked' : 'unchecked'}`,
+          `app.expectControl: "${input.label}" expected ${input.checked ? "checked" : "unchecked"}, ` +
+            `got ${isChecked ? "checked" : "unchecked"}`,
         );
       }
     }
@@ -420,38 +422,41 @@ const expectTextsInput = z.strictObject({
   // Where to read text: the <main> content (default) or the whole document
   // body. "body" is required for toasts, which sonner renders in a portal
   // outside <main> and auto-dismisses after a few seconds.
-  scope: z.enum(['main', 'body']).default('main'),
+  scope: z.enum(["main", "body"]).default("main"),
 });
 
 const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>({
-  name: 'app.expectTexts',
+  name: "app.expectTexts",
   description:
-    'Assert that text contains (or does not contain) the given strings, ' +
-    'deterministically via the DOM instead of a screenshot. Use for long ' +
-    'cards or transcripts whose complete contents are taller than one ' +
-    'viewport — e.g. a five-question card where a screenshot shows only the ' +
+    "Assert that text contains (or does not contain) the given strings, " +
+    "deterministically via the DOM instead of a screenshot. Use for long " +
+    "cards or transcripts whose complete contents are taller than one " +
+    "viewport — e.g. a five-question card where a screenshot shows only the " +
     'first two questions and its "Answered" footer. Set scope:"body" to ' +
-    'catch toasts, which render in a portal outside <main>. Vision aiAssert ' +
+    "catch toasts, which render in a portal outside <main>. Vision aiAssert " +
     'is for how things look; this node is for "all of these words exist ' +
     'somewhere on the page". Use "matches" for regex patterns (e.g. ' +
-    'date-dependent headings that must stay independent of the run month).',
+    "date-dependent headings that must stay independent of the run month).",
   inputSchema: expectTextsInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    const root = input.scope === 'body' ? page.locator('body') : page.locator('main').first();
-    const patterns = input.matches.map((source) => new RegExp(source, 'i'));
+    if (!page) throw new Error("No page is open; call app.open first");
+    const root = input.scope === "body" ? page.locator("body") : page.locator("main").first();
+    const patterns = input.matches.map((source) => new RegExp(source, "i"));
     // The transcript renders after the messages fetch resolves (and toasts
     // appear briefly after an action); poll for the text instead of requiring
     // it to be present on the first read.
     const deadline = Date.now() + 10_000;
-    let text = '';
+    let text = "";
     for (;;) {
-      text = (await root.innerText().catch(() => '')).toLowerCase();
+      text = (await root.innerText().catch(() => "")).toLowerCase();
       const missing = input.all.filter((needle) => !text.includes(needle.toLowerCase()));
       const present = input.none.filter((needle) => text.includes(needle.toLowerCase()));
       const unmatched = patterns.filter((pattern) => !pattern.test(text)).map(String);
-      if ((missing.length === 0 && present.length === 0 && unmatched.length === 0) || Date.now() >= deadline) {
+      if (
+        (missing.length === 0 && present.length === 0 && unmatched.length === 0) ||
+        Date.now() >= deadline
+      ) {
         if (!text) throw new Error(`app.expectTexts: no ${input.scope} text found`);
         if (missing.length > 0) {
           throw new Error(`app.expectTexts: missing expected text: ${JSON.stringify(missing)}`);
@@ -483,24 +488,22 @@ const expectDomInput = z.strictObject({
   disabled: z.boolean().optional(),
   // Require every match to carry the attribute; when value is given it must
   // equal it (e.g. aria-pressed="true").
-  attribute: z
-    .strictObject({ name: z.string().min(1), value: z.string().optional() })
-    .optional(),
+  attribute: z.strictObject({ name: z.string().min(1), value: z.string().optional() }).optional(),
 });
 
 const appExpectDom = defineNode<typeof expectDomInput, void, ProjectContext>({
-  name: 'app.expectDom',
+  name: "app.expectDom",
   description:
-    'Assert structural/state facts about the main content via a CSS selector ' +
-    'and the DOM, instead of a screenshot: how many visible elements match, ' +
-    'whether they are disabled, and whether they carry an attribute such as ' +
-    'aria-pressed. Use for state that is invisible or ambiguous in an image ' +
-    '(a <fieldset disabled> locking an answered card, pressed option ' +
-    'buttons, absence of a footer action).',
+    "Assert structural/state facts about the main content via a CSS selector " +
+    "and the DOM, instead of a screenshot: how many visible elements match, " +
+    "whether they are disabled, and whether they carry an attribute such as " +
+    "aria-pressed. Use for state that is invisible or ambiguous in an image " +
+    "(a <fieldset disabled> locking an answered card, pressed option " +
+    "buttons, absence of a footer action).",
   inputSchema: expectDomInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     const locator = page.locator(`main ${input.selector}`);
     const total = await locator.count();
     const visible: Locator[] = [];
@@ -524,7 +527,7 @@ const appExpectDom = defineNode<typeof expectDomInput, void, ProjectContext>({
         const isDisabled = await el.isDisabled().catch(() => true);
         if (isDisabled !== input.disabled) {
           throw new Error(
-            `app.expectDom: "${input.selector}" expected ${input.disabled ? 'disabled' : 'enabled'}`,
+            `app.expectDom: "${input.selector}" expected ${input.disabled ? "disabled" : "enabled"}`,
           );
         }
       }
@@ -532,11 +535,14 @@ const appExpectDom = defineNode<typeof expectDomInput, void, ProjectContext>({
     if (input.attribute) {
       for (const el of visible) {
         const actual = await el.getAttribute(input.attribute.name).catch(() => null);
-        if (actual === null || (input.attribute.value !== undefined && actual !== input.attribute.value)) {
+        if (
+          actual === null ||
+          (input.attribute.value !== undefined && actual !== input.attribute.value)
+        ) {
           throw new Error(
             `app.expectDom: "${input.selector}" expected attribute ${input.attribute.name}` +
-              (input.attribute.value !== undefined ? `="${input.attribute.value}"` : '') +
-              `, got ${actual === null ? 'absent' : `"${actual}"`}`,
+              (input.attribute.value !== undefined ? `="${input.attribute.value}"` : "") +
+              `, got ${actual === null ? "absent" : `"${actual}"`}`,
           );
         }
       }
@@ -559,23 +565,23 @@ const expectMenuItemInput = z.strictObject({
 });
 
 const appExpectMenuItem = defineNode<typeof expectMenuItemInput, void, ProjectContext>({
-  name: 'app.expectMenuItem',
+  name: "app.expectMenuItem",
   description:
-    'Assert the state of an open dropdown-menu item deterministically via ' +
-    'Playwright: whether it is visible, and whether it carries the selected ' +
-    'check icon (the current choice). Use for option menus such as the ' +
+    "Assert the state of an open dropdown-menu item deterministically via " +
+    "Playwright: whether it is visible, and whether it carries the selected " +
+    "check icon (the current choice). Use for option menus such as the " +
     'composer "Reasoning effort" picker, whose current value is marked only ' +
-    'with a small check tick instead of aria-checked. Open the menu first ' +
-    '(e.g. app.clickByLabel).',
+    "with a small check tick instead of aria-checked. Open the menu first " +
+    "(e.g. app.clickByLabel).",
   inputSchema: expectMenuItemInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    const items = await page.getByRole('menuitem').all();
+    if (!page) throw new Error("No page is open; call app.open first");
+    const items = await page.getByRole("menuitem").all();
     const visible: { text: string; handle: (typeof items)[number] }[] = [];
     for (const item of items) {
       if (!(await item.isVisible().catch(() => false))) continue;
-      const text = (await item.innerText().catch(() => '')).trim();
+      const text = (await item.innerText().catch(() => "")).trim();
       const matches = input.exact ? text === input.label : text.includes(input.label);
       if (matches) visible.push({ text, handle: item });
     }
@@ -586,24 +592,22 @@ const appExpectMenuItem = defineNode<typeof expectMenuItemInput, void, ProjectCo
       return;
     }
     if (visible.length === 0) {
-      const menuText = (
-        await Promise.all(items.map((item) => item.innerText().catch(() => '')))
-      )
+      const menuText = (await Promise.all(items.map((item) => item.innerText().catch(() => ""))))
         .map((t) => t.trim())
         .filter(Boolean)
-        .join(' | ');
+        .join(" | ");
       throw new Error(
-        `app.expectMenuItem: no visible menu item labelled "${input.label}" (open items: ${menuText || 'none'})`,
+        `app.expectMenuItem: no visible menu item labelled "${input.label}" (open items: ${menuText || "none"})`,
       );
     }
     if (input.checked !== undefined) {
       const hasCheck =
-        (await visible[0].handle.locator('svg.lucide-check').count()) > 0 ||
-        (await visible[0].handle.locator('[data-check]').count()) > 0;
+        (await visible[0].handle.locator("svg.lucide-check").count()) > 0 ||
+        (await visible[0].handle.locator("[data-check]").count()) > 0;
       if (hasCheck !== input.checked) {
         throw new Error(
-          `app.expectMenuItem: "${input.label}" expected ${input.checked ? 'checked' : 'unchecked'}, ` +
-            `got ${hasCheck ? 'checked' : 'unchecked'}`,
+          `app.expectMenuItem: "${input.label}" expected ${input.checked ? "checked" : "unchecked"}, ` +
+            `got ${hasCheck ? "checked" : "unchecked"}`,
         );
       }
     }
@@ -621,22 +625,22 @@ const monacoEditInput = z.strictObject({
 });
 
 const appMonacoEdit = defineNode<typeof monacoEditInput, void, ProjectContext>({
-  name: 'app.monacoEdit',
+  name: "app.monacoEdit",
   description:
-    'Edit the currently open Monaco file editor (Projects/Memory file view) ' +
-    'deterministically via the monaco editor API, instead of steering the ' +
-    'editor with vision actions. The file must already be open in Edit mode ' +
-    '(click the Preview/Edit segmented control first). Appends text at the ' +
-    'end by default; set append:false to replace the whole file, and save:true ' +
-    'to press Save and wait for the write to finish.',
+    "Edit the currently open Monaco file editor (Projects/Memory file view) " +
+    "deterministically via the monaco editor API, instead of steering the " +
+    "editor with vision actions. The file must already be open in Edit mode " +
+    "(click the Preview/Edit segmented control first). Appends text at the " +
+    "end by default; set append:false to replace the whole file, and save:true " +
+    "to press Save and wait for the write to finish.",
   inputSchema: monacoEditInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     // @monaco-editor/react leaves the loader global; wait for a mounted,
     // visible editor instance (the recorded-apps surface never mounts one).
     await page.waitForFunction(
-      '() => (window.monaco?.editor?.getEditors?.() ?? []).some((e) => e.getDomNode()?.offsetParent)',
+      "() => (window.monaco?.editor?.getEditors?.() ?? []).some((e) => e.getDomNode()?.offsetParent)",
       null,
       { timeout: 15_000 },
     );
@@ -646,45 +650,45 @@ const appMonacoEdit = defineNode<typeof monacoEditInput, void, ProjectContext>({
     // string expressions, so the parameters are embedded as JSON literals.
     const argJson = JSON.stringify({ text: input.text, append: input.append });
     await page.evaluate(
-      '((arg) => {' +
-        '  const eds = window.monaco.editor.getEditors();' +
-        '  const ed = eds.find((e) => e.getDomNode()?.offsetParent) ?? eds[eds.length - 1];' +
+      "((arg) => {" +
+        "  const eds = window.monaco.editor.getEditors();" +
+        "  const ed = eds.find((e) => e.getDomNode()?.offsetParent) ?? eds[eds.length - 1];" +
         '  if (!ed) throw new Error("no visible monaco editor");' +
-        '  if (arg.append) {' +
-        '    const m = ed.getModel();' +
-        '    const line = m.getLineCount();' +
-        '    const col = m.getLineMaxColumn(line);' +
+        "  if (arg.append) {" +
+        "    const m = ed.getModel();" +
+        "    const line = m.getLineCount();" +
+        "    const col = m.getLineMaxColumn(line);" +
         '    ed.executeEdits("midscene", [{' +
-        '      range: new window.monaco.Range(line, col, line, col),' +
-        '      text: arg.text, forceMoveMarkers: true,' +
-        '    }]);' +
-        '  } else {' +
-        '    ed.setValue(arg.text);' +
-        '  }' +
-        '  ed.focus();' +
+        "      range: new window.monaco.Range(line, col, line, col)," +
+        "      text: arg.text, forceMoveMarkers: true," +
+        "    }]);" +
+        "  } else {" +
+        "    ed.setValue(arg.text);" +
+        "  }" +
+        "  ed.focus();" +
         `})(${argJson})`,
     );
     // Let React's onChange flush into the file store (enables Save).
     await page.waitForTimeout(300);
     if (input.save) {
       const saveButton = page
-        .locator('main')
-        .getByRole('button', { name: 'Save', exact: true })
+        .locator("main")
+        .getByRole("button", { name: "Save", exact: true })
         .first();
-      await saveButton.waitFor({ state: 'visible', timeout: 10_000 });
+      await saveButton.waitFor({ state: "visible", timeout: 10_000 });
       await page.waitForFunction(
-        '() => {' +
+        "() => {" +
           '  const b = Array.from(document.querySelectorAll("main button"))' +
           '    .find((x) => /^Save$/.test((x.textContent || "").trim()));' +
-          '  return b ? !b.disabled : false;' +
-          '}',
+          "  return b ? !b.disabled : false;" +
+          "}",
         null,
         { timeout: 10_000 },
       );
       const putDone = page.waitForResponse(
         (response) =>
           /\/api\/(projects|memory)\/file/.test(response.url()) &&
-          response.request().method() === 'PUT',
+          response.request().method() === "PUT",
         { timeout: 15_000 },
       );
       await saveButton.click();
@@ -692,11 +696,11 @@ const appMonacoEdit = defineNode<typeof monacoEditInput, void, ProjectContext>({
       // Button label briefly becomes "Saving"; once it reads "Save" again and
       // is disabled, the store has settled back to a clean state.
       await page.waitForFunction(
-        '() => {' +
+        "() => {" +
           '  const b = Array.from(document.querySelectorAll("main button"))' +
           '    .find((x) => /^Save$/.test((x.textContent || "").trim()));' +
-          '  return Boolean(b && b.disabled);' +
-          '}',
+          "  return Boolean(b && b.disabled);" +
+          "}",
         null,
         { timeout: 10_000 },
       );
@@ -705,17 +709,17 @@ const appMonacoEdit = defineNode<typeof monacoEditInput, void, ProjectContext>({
 });
 
 const appGoBack = defineNode<typeof goBackInput, void, ProjectContext>({
-  name: 'app.goBack',
+  name: "app.goBack",
   description:
-    'Go back one entry in browser history (client-side navigation), keeping ' +
-    'the in-memory mock state of the current browser context.',
+    "Go back one entry in browser history (client-side navigation), keeping " +
+    "the in-memory mock state of the current browser context.",
   inputSchema: goBackInput,
   async execute({ context }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+    if (!page) throw new Error("No page is open; call app.open first");
+    await page.goBack({ waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.locator('a[href="/chat"]').first().waitFor({
-      state: 'visible',
+      state: "visible",
       timeout: 60_000,
     });
   },
@@ -727,14 +731,14 @@ const expectUrlInput = z.strictObject({
 });
 
 const appExpectUrl = defineNode<typeof expectUrlInput, void, ProjectContext>({
-  name: 'app.expectUrl',
-  description: 'Assert the current URL matches the given substring or re: regex.',
+  name: "app.expectUrl",
+  description: "Assert the current URL matches the given substring or re: regex.",
   inputSchema: expectUrlInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     const current = page.url();
-    const matched = input.path.startsWith('re:')
+    const matched = input.path.startsWith("re:")
       ? new RegExp(input.path.slice(3)).test(current)
       : current.includes(input.path);
     if (!matched) {
@@ -746,17 +750,17 @@ const appExpectUrl = defineNode<typeof expectUrlInput, void, ProjectContext>({
 const reloadInput = z.strictObject({});
 
 const appReload = defineNode<typeof reloadInput, void, ProjectContext>({
-  name: 'app.reload',
+  name: "app.reload",
   description:
-    'Reload the current page. The mock keeps writes in memory, so a reload ' +
-    'restores the default fixtures while keeping one story within a case.',
+    "Reload the current page. The mock keeps writes in memory, so a reload " +
+    "restores the default fixtures while keeping one story within a case.",
   inputSchema: reloadInput,
   async execute({ context }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+    if (!page) throw new Error("No page is open; call app.open first");
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.locator('a[href="/chat"]').first().waitFor({
-      state: 'visible',
+      state: "visible",
       timeout: 60_000,
     });
   },
@@ -770,20 +774,22 @@ const pressKeyInput = z.strictObject({
 });
 
 const appPressKey = defineNode<typeof pressKeyInput, void, ProjectContext>({
-  name: 'app.pressKey',
+  name: "app.pressKey",
   description:
     'Press a keyboard shortcut deterministically. Use "mod" for the ' +
-    'platform modifier (Cmd on macOS, Ctrl on Linux/Windows).',
+    "platform modifier (Cmd on macOS, Ctrl on Linux/Windows).",
   inputSchema: pressKeyInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     const parts = input.key
       .toLowerCase()
-      .split('+')
+      .split("+")
       .map((part) => part.trim())
-      .map((part) => (part === 'mod' ? (process.platform === 'darwin' ? 'Meta' : 'Control') : part));
-    await page.keyboard.press(parts.map((p) => (p.length > 1 ? capitalize(p) : p)).join('+'));
+      .map((part) =>
+        part === "mod" ? (process.platform === "darwin" ? "Meta" : "Control") : part,
+      );
+    await page.keyboard.press(parts.map((p) => (p.length > 1 ? capitalize(p) : p)).join("+"));
     await page.waitForTimeout(300);
   },
 });
@@ -799,16 +805,16 @@ const typeInput = z.strictObject({
 });
 
 const appTypeText = defineNode<typeof typeInput, void, ProjectContext>({
-  name: 'app.typeText',
+  name: "app.typeText",
   description:
-    'Focus a text field by its visible label/placeholder and type text ' +
-    'deterministically with the keyboard. If target is omitted, types into ' +
-    'the currently focused element. With clear:true and no text, empties the ' +
-    'field only.',
+    "Focus a text field by its visible label/placeholder and type text " +
+    "deterministically with the keyboard. If target is omitted, types into " +
+    "the currently focused element. With clear:true and no text, empties the " +
+    "field only.",
   inputSchema: typeInput,
   async execute({ context, input }) {
     const { page } = context;
-    if (!page) throw new Error('No page is open; call app.open first');
+    if (!page) throw new Error("No page is open; call app.open first");
     let field: Locator | undefined;
     if (input.target) {
       // Try candidate locators one at a time instead of joining them into one
@@ -816,7 +822,7 @@ const appTypeText = defineNode<typeof typeInput, void, ProjectContext>({
       // a trailing xpath union parses as a chain and never matches.
       const candidates = [
         page.getByPlaceholder(input.target).first(),
-        page.getByRole('textbox', { name: input.target }).first(),
+        page.getByRole("textbox", { name: input.target }).first(),
         page.getByLabel(input.target).first(),
       ];
       for (const loc of candidates) {
@@ -832,10 +838,10 @@ const appTypeText = defineNode<typeof typeInput, void, ProjectContext>({
       // Playwright fill drives React controlled inputs reliably; the
       // Ctrl/Cmd+A fallback covers the focused-field case without a target.
       if (field) {
-        await field.fill('');
+        await field.fill("");
       } else {
-        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
-        await page.keyboard.press('Delete');
+        await page.keyboard.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
+        await page.keyboard.press("Delete");
       }
     }
     if (input.text) await page.keyboard.type(input.text, { delay: 15 });
@@ -844,8 +850,8 @@ const appTypeText = defineNode<typeof typeInput, void, ProjectContext>({
 });
 
 const tagList = (raw: string | undefined): string[] =>
-  (raw ?? '')
-    .split(',')
+  (raw ?? "")
+    .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
 
@@ -853,10 +859,10 @@ export default defineTestProject<ProjectContext>({
   test: { maxConcurrency: 1, testTimeout: 8 * 60_000 },
   projects: [
     {
-      name: 'web',
+      name: "web",
       retry: process.env.MIDSCENE_RETRY ? Number(process.env.MIDSCENE_RETRY) : 2,
       setup,
-      files: { include: ['cases/**/*.{yaml,yml}'] },
+      files: { include: ["cases/**/*.{yaml,yml}"] },
       tags: {
         include: tagList(process.env.MIDSCENE_INCLUDE_TAGS),
         exclude: tagList(process.env.MIDSCENE_EXCLUDE_TAGS),
