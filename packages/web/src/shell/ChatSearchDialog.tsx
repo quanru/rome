@@ -350,9 +350,19 @@ export function ChatSearchDialog({ open, onOpenChange }: ChatSearchDialogProps) 
   const openApp = useCallback(
     (entry: AppSearchEntry) => {
       onOpenChange(false);
-      navigate(entry.href);
+      const preserveHiddenSidebar = new URLSearchParams(location.search).get("hideSidebar") === "1";
+      if (!preserveHiddenSidebar) {
+        navigate(entry.href);
+        return;
+      }
+
+      // App hrefs may already carry app-owned query parameters. Parse rather
+      // than concatenate so shell mode is added without replacing them.
+      const target = new URL(entry.href, "http://rome.local");
+      target.searchParams.set("hideSidebar", "1");
+      navigate(`${target.pathname}${target.search}${target.hash}`);
     },
-    [navigate, onOpenChange],
+    [location.search, navigate, onOpenChange],
   );
 
   // The blank state remains chat-only. Once the guardian types, each source

@@ -494,6 +494,23 @@ describe("ChatSearchDialog", () => {
     expect(screen.getByTestId("location").textContent).toBe("/apps/inbox");
   });
 
+  it("preserves hidden-sidebar mode alongside an app's existing query string", async () => {
+    mockSessionSearch(
+      [],
+      [],
+      [installedApp("road", "Roadmap", { href: "/apps/road?view=compact" })],
+    );
+    const user = userEvent.setup();
+    renderSearch("/settings?hideSidebar=1", true);
+
+    await user.type(await screen.findByRole("combobox", { name: "Search apps and chats" }), "road");
+    await user.click(await screen.findByRole("option", { name: "Roadmap" }));
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/apps/road?view=compact&hideSidebar=1",
+    );
+  });
+
   it("keeps app matches usable when chats fail", async () => {
     rs.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
       const url = String(input);
