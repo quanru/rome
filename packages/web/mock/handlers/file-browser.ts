@@ -168,8 +168,18 @@ export function fileBrowserHandlers({
       const path = params.get("path");
       const requestedDepth = Number(params.get("depth"));
       const depth = Number.isFinite(requestedDepth) && requestedDepth > 0 ? requestedDepth : 1;
-      const nodes = !path || path === logicalRoot ? tree : (findNode(tree, path)?.children ?? []);
-      return HttpResponse.json(toTreeNodes(nodes, depth));
+      if (!path || path === logicalRoot) {
+        return HttpResponse.json(toTreeNodes(tree, depth));
+      }
+      const node = findNode(tree, path);
+      // Match core's createTreeHandler: a missing explicit path is a 404 so
+      // the watch reconciler's `GET /tree?path=...` verification can clear a
+      // stale selection after unlinkDir; a file path is a 400.
+      if (!node) return HttpResponse.json({ error: "Folder not found" }, { status: 404 });
+      if (node.type !== "directory") {
+        return HttpResponse.json({ error: "Path must be a folder" }, { status: 400 });
+      }
+      return HttpResponse.json(toTreeNodes(node.children ?? [], depth));
     }),
     // useUrlSelectionSync resolves the URL's path on load, so without this a
     // deep link to a file 404s before anything renders. It is also how the

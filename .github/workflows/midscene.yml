@@ -7,7 +7,7 @@ name: Midscene E2E
 on:
   push:
     branches: [main]
-    paths: &e2e-paths
+    paths:
       - ".github/workflows/midscene.yml"
       - "tests/midscene/**"
       - "packages/web/**"
@@ -19,57 +19,34 @@ on:
       - "packages/ui/**"
       - "packages/web-content/**"
       - "pnpm-lock.yaml"
-  pull_request:
-    branches: [main]
-    paths: *e2e-paths
   workflow_dispatch:
 
 # Credential trust model:
-# - push to main / workflow_dispatch run trusted code and may use the model
-#   secrets directly (environment `midscene-e2e`, no reviewer gate).
-# - pull_request runs checkout PR-controlled code, so secret-backed jobs go
-#   through the protected environment `midscene-e2e-review`: a maintainer must
-#   approve the deployment before the runner starts or any secret is exposed.
-# - fork PRs have no secret access at all, and Dependabot PRs never receive
-#   secrets; visual-e2e-skip makes that outcome explicit in checks.
+# The four MIDSCENE_MODEL_* secrets are billable, and a pull_request job runs
+# contributor-controlled code with the secrets in its environment. Naming a
+# protected environment in the workflow does not create its reviewer gate — an
+# absent environment is provisioned open — so until a maintainer actually
+# configures a protected environment with required reviewers, the secret-
+# bearing path is restricted to trusted refs only: pushes to main (merge-gated
+# code) and manual dispatches on main. PRs do not start this workflow. To opt
+# a PR into visual E2E later, add the protected environment back and gate the
+# pull_request event on an environment approval.
 
 permissions:
   contents: read
 
 concurrency:
   group: midscene-e2e-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
-  visual-e2e-skip:
-    name: Visual E2E skipped (untrusted PR)
-    if: >-
-      github.event_name == 'pull_request' &&
-      (github.event.pull_request.head.repo.full_name != github.repository ||
-       github.actor == 'dependabot[bot]')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Explain why visual E2E does not run
-        run: |
-          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-            echo "Fork pull requests cannot receive the billable model secrets; visual E2E runs after a maintainer re-pushes the branch to the base repository."
-          else
-            echo "Dependabot pull requests never receive repository secrets; visual E2E runs for this change on merge to main."
-          fi
-
   midscene:
     name: Midscene visual (${{ matrix.shard }})
-    needs: visual-e2e-skip
-    if: >-
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       github.actor != 'dependabot[bot]')
-    # PRs run PR-controlled code: require a maintainer's environment approval
-    # before any runner (and any secret) is provisioned.
-    environment:
-      name: ${{ github.event_name == 'pull_request' && 'midscene-e2e-review' || 'midscene-e2e' }}
+    # Fail-closed trust gate: billable secrets only ever run against code on
+    # the protected default branch. (push to main already targets it; this
+    # also binds workflow_dispatch to main even if dispatched via the API on
+    # another ref.)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -95,14 +72,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # pnpm must exist before setup-node resolves the pnpm store for its
+      # cache; without a version it reads the root `packageManager` field.
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v5
+
       - name: Activate Node.js 24 and pnpm
         uses: actions/setup-node@0a44ba7841725637a1aab2a3fb3efdf2d98932e8 # v4.4.0
         with:
           node-version: "24"
           cache: pnpm
-
-      - name: Enable pnpm 11
-        run: corepack prepare pnpm@11.6.0 --activate
 
       - name: Require Midscene model configuration
         env: &model-env
