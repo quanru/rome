@@ -127,7 +127,11 @@ async function bootstrap() {
 
     // macOS only, and not yet macOS 27: the panel window type is what makes the
     // pill unobtrusive, and it is AppKit's.
-    const floatingPill = supportsFloatingPill(process.platform, release())
+    const pillSupported = supportsFloatingPill(process.platform, release());
+    // Without this line an icon that is off on purpose reads, in a log bundle,
+    // the same as one that failed to open.
+    if (!pillSupported) log.info(`Floating icon is off on ${process.platform} ${release()}`);
+    const floatingPill = pillSupported
       ? setupFloatingPill({
           showMainWindow,
           openSettings: () => {

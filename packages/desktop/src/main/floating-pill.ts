@@ -158,11 +158,18 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
     // With the icon turned off there is nowhere to show a name.
     if (!win || win.isDestroyed() || !runtimeManager.isReady()) return;
     try {
+      // The body is the guardian's whole settings map, connector secrets
+      // included, and only agentName is read from it. It must never be logged.
       const response = await session.defaultSession.fetch(
         `${runtimeManager.getDashboardUrl()}/api/settings`,
-        // This runs on every switch away from Rome; a runtime that has stopped
-        // answering should not leave one request hanging per switch.
-        { signal: AbortSignal.timeout(5_000) },
+        {
+          // The route is behind the dashboard's session cookie. Electron sends
+          // it by default only while the request carries no Origin header.
+          credentials: "include",
+          // This runs on every switch away from Rome; a runtime that has
+          // stopped answering should not leave one request hanging per switch.
+          signal: AbortSignal.timeout(5_000),
+        },
       );
       // Signed out, or the runtime is mid-restart: keep the name we have
       // rather than flickering back to the fallback.
