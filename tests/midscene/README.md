@@ -1,132 +1,169 @@
-# Rome × Midscene 视觉 E2E
+# Rome × Midscene Visual E2E
 
-用 [Midscene](https://midscenejs.com/) YAML 用例对 Rome 进行视觉驱动的端到端测试。
-测试运行在 Rome 的 **MSW mock 模式**（`pnpm dev:mock`）上：不访问真实后端、不使用真实个人数据，
-所有断言数据都来自仓库内合成 fixture，因此用例完全确定性、可离线复现、可在 fork PR 上运行。
+Visual-driven end-to-end testing for Rome using
+[Midscene](https://midscenejs.com/) YAML cases. Tests run against Rome's
+**MSW mock mode** (`pnpm dev:mock`): they never hit a real backend or use real
+personal data, and every assertion is backed by in-repo synthetic fixtures, so
+the cases are fully deterministic, reproducible offline, and runnable on fork
+PRs.
 
-> 配套规划文档见 [`docs/midscene-e2e-plan.md`](../../docs/midscene-e2e-plan.md)（用例目录、mock 契约、CI 分片设计）。
+> The companion planning doc is
+> [`docs/midscene-e2e-plan.md`](../../docs/midscene-e2e-plan.md) (case catalog,
+> mock contract, CI shard design).
 
-## 工作原理
+## How It Works
 
-- `midscene.config.ts` 启动一个 Playwright Chromium，每个用例都使用**全新 BrowserContext**：
-  MSW 的内存态随上下文复位，每个用例都从同一份 fixture 开始。
-- 初始化脚本在应用尚无存储值时播种两项 localStorage 契约（不覆盖用例自己
-  做出的选择，因此切换语言/编辑侧栏后跨导航仍保持）：
-  - `rome.lang = en`：固定英文界面（避免中文 CI 机器的 locale 干扰）；
-  - `rome-sidebar-pins`：展开侧栏全部内建入口（mock 用户默认只 pin 了 Apps/Chat/Projects）。
-- 除 Midscene 内置 AI 节点（`aiTap`/`aiAssert`/`aiAct`/`wait` 等）外，本项目注册了 15 个确定性节点：
-  `app.open`、`app.reload`、`app.goBack`、`app.expectUrl`、`app.clickContentLink`、
-  `app.clickByLabel`、`app.expectControl`、`app.expectMenuItem`、`app.expectTexts`、`app.expectDom`、`app.monacoEdit`、`app.scrollContent`、
-  `app.scrollTextIntoView`、`app.pressKey`、
-  `app.typeText`（完整节点清单与参数见 `midscene-node-reference.md`）。
-- 用例全部位于 `cases/**/*.yaml`，按套件文件组织，用 tag 标记分片与主题。
+- `midscene.config.ts` launches Playwright Chromium with a **fresh
+  BrowserContext per case**: in-memory MSW state resets with the context, so
+  every case starts from the same fixtures.
+- An init script seeds two localStorage contracts only when the app has no
+  stored value yet (it does not overwrite a case's own choice, so a language
+  switch or sidebar edit persists across navigation):
+  - `rome.lang = en`: pins the English UI (avoids locale interference on a
+    Chinese CI machine);
+  - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
+    pins only Apps/Chat/Projects by default).
+- Alongside Midscene's built-in AI nodes (`aiTap`/`aiAssert`/`aiAct`/`wait`,
+  etc.), this package registers 15 deterministic nodes:
+  `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,
+  `app.clickContentLink`, `app.clickByLabel`, `app.expectControl`,
+  `app.expectMenuItem`, `app.expectTexts`, `app.expectDom`, `app.monacoEdit`,
+  `app.scrollContent`, `app.scrollTextIntoView`, `app.pressKey`, and
+  `app.typeText` (see `midscene-node-reference.md` for the full node list and
+  their parameters).
+- All cases live in `cases/**/*.yaml`, organized by suite file, with tags for
+  shard and topic.
 
-## 前置条件
+## Prerequisites
 
-- Node.js 24（仓库通过 fnm 锁定：`eval "$(fnm env)" && fnm use 24`）
-- Rome 依赖已安装（仓库根目录 `pnpm install`）
-- Midscene 使用的视觉模型凭据（OpenAI 兼容接口）
+- Node.js 24 (the repo pins it via fnm: `eval "$(fnm env)" && fnm use 24`)
+- Rome dependencies installed (`pnpm install` at the repo root)
+- Credentials for the visual model Midscene uses (an OpenAI-compatible API)
 
-## 本地运行
+## Running Locally
 
 ```bash
-# 1. 启动 Rome mock 模式（仓库根目录或 packages/web）
+# 1. Start Rome mock mode (at the repo root or in packages/web)
 pnpm dev:mock
-# 服务在 http://localhost:3200，日志默认 /tmp/rome-devmock.log
+# Served at http://localhost:3200; logs default to /tmp/rome-devmock.log
 
-# 2. 安装测试依赖（仅首次）
+# 2. Install test dependencies (first time only)
 cd tests/midscene
 npm install
 npx playwright install chromium
 
-# 3. 配置模型凭据（仅首次；.env 已被 .gitignore，严禁提交）
+# 3. Configure model credentials (first time only; .env is gitignored — never commit it)
 cp .env.example .env
-# 编辑 .env，填入 MIDSCENE_MODEL_BASE_URL / API_KEY / NAME / FAMILY
+# Edit .env and fill in MIDSCENE_MODEL_BASE_URL / API_KEY / NAME / FAMILY
 
-# 4. 运行全部用例
+# 4. Run the full suite
 npm test
 ```
 
-### 选择用例运行
+### Selecting Cases
 
-通过环境变量控制 tag 过滤（在 `midscene.config.ts` 中读取）：
+Tag filtering is controlled through environment variables (read in
+`midscene.config.ts`):
 
 ```bash
-# 只跑 PoC 故事线
+# PoC stories only
 MIDSCENE_INCLUDE_TAGS=poc npm test
 
-# 跑某个套件（一个用例可携带多个 tag）
+# One suite (a case can carry multiple tags)
 MIDSCENE_INCLUDE_TAGS=routines npm test
 
-# 多 tag 为 OR 关系，逗号分隔
+# Multiple tags are OR-combined, comma-separated
 MIDSCENE_INCLUDE_TAGS=auth,settings npm test
 
-# 排除慢用例
+# Exclude slow cases
 MIDSCENE_EXCLUDE_TAGS=story npm test
 
-# 调整重试次数（默认 2，CI 各分片按需要设置）
+# Adjust retries (default 2; CI sets it per shard as needed)
 MIDSCENE_RETRY=0 npm test
 
-# 有头模式调试
+# Headed mode for debugging
 HEADLESS=false npm test
 ```
 
-### Tag 约定
+### Tag Conventions
 
-| Tag | 含义 |
+| Tag | Meaning |
 | --- | --- |
-| `poc` | 已验收的 PoC 故事线（AUTH-01、E2E-01/02/03） |
-| `story` | 跨页面端到端故事线（耗时较长） |
-| `auth` / `chat` / `apps` / `sessions` / `routines` / `activity` / `people` / `files` / `settings` / `shell` / `global` | 功能套件 |
-| `shard-N` | CI 分片归属（N=1…6），见规划文档 |
-| `zh` | 中文界面（i18n）用例 |
-| `mobile` | 窄屏视口用例 |
+| `poc` | Accepted PoC storylines (AUTH-01, E2E-01/02/03) |
+| `story` | Cross-page end-to-end storylines (slower) |
+| `auth` / `chat` / `apps` / `sessions` / `routines` / `activity` / `people` / `files` / `settings` / `shell` / `global` | Functional suites |
+| `shard-N` | CI shard ownership (N=1…6), see the planning doc |
+| `zh` | Chinese-UI (i18n) cases |
+| `mobile` | Narrow-viewport cases |
 
-## 报告与产物
+## Reports and Artifacts
 
-- HTML 报告：`midscene_run/report/`
-- 机器可读结果：`.midscene/test-results/<runId>/summary.json`（含收集错误详情）
-- 两者均已在 `.gitignore` 中。
+- HTML reports: `midscene_run/report/`
+- Machine-readable results:
+  `.midscene/test-results/<runId>/summary.json` (includes collection-error
+  details)
+- Both are covered by `.gitignore`.
 
-## 写作约定
+## Authoring Conventions
 
-1. **每个用例以 `app.open` 开始**，保证 fixture 复位；需要验证「刷新后」行为时才用 `app.reload`。
-2. 优先用确定性节点做导航/滚动/URL 断言；`aiTap`/`aiAssert` 只承担视觉语义判断。
-3. `aiAssert` 文案引用界面英文原文，并在描述里写清结构（卡片、徽章、按钮的有无）。
-4. 无参自定义节点在 YAML 中必须写成 `app.goBack: {}`，否则会被解析成标量而收集失败。
-5. 用例只断言仓库 fixture 中的合成数据，不引入真实人名/账号/凭据。
-6. 聊天页有吸底机制：程序化滚动会被弹回，长 transcript 用 `app.scrollTextIntoView`
-   （内部先发送可信 wheel 手势解除吸底）。
-7. 文件浏览器（Projects/Memory）的编辑器是 Monaco，视觉操作极慢且不稳：先切到
-   Edit 视图，再用 `app.monacoEdit`（经 monaco API 改值，`save: true` 等待
-   PUT 完成）；按钮禁用态用 `app.expectControl` 断言，不要靠截图分辨。
-8. 同名重复控件（会话页问题卡与 composer 各有一个 "Send"）用
-   `app.clickByLabel: { index: n }` 按 DOM 顺序选；下拉菜单（如 composer 的
-   "Reasoning effort"）的选中勾没有 `aria-checked`，用 `app.expectMenuItem`
-   断言，不要让模型从截图数对勾。`app.clickByLabel` 同时覆盖 `<a>`
-   （设置子导航）与 `<summary>`（Developer Settings 一类折叠区），
-   跨设置页跳转、展开 disclosure 都用它而不是 `aiTap`。
-9. 高度超过一个视口的长卡片/长消息（如五问设计卡、多节构建回复、Connections
-   九项服务列表、Channels 会话列表），截图只能看到其中一部分：用
-   `app.expectTexts: { all: [...] }` 走 DOM 校验「全文清单」，视觉断言只描述
-   滚动定位后当前视口内可见的部分。
-10. 已回答问题卡这类「锁定态」在截图里与可编辑态几乎无差（禁用的 fieldset
-    仍渲染占位文案）：用 `app.expectDom` 断言 `fieldset[disabled]`、
-    `button[aria-pressed="true"]` 数量、底部操作行按钮数等结构事实。
-11. **预期会触发表单校验拦截**的步骤不要用单个 `aiAct`（模型会把「提交被
-    拒绝」当成自己任务失败并重试到耗尽 replan 预算）：拆成 `app.typeText`
-    （按 placeholder 或 `<label for>` 定位）+ `app.clickByLabel` 提交 +
-    `app.expectTexts` 断言校验文案；补正后再次提交同理。
-12. toast 渲染在 `<main>` 之外的 sonner portal，且几秒后自动消失：用
-    `app.expectTexts: { scope: body }` 在触发动作后立即轮询断言 toast 文案，
-    不要用 `aiAssert`（截图时 toast 常已消失）；列表/表单的持久变化另走
-    默认 `scope: main` 的 DOM 断言。
-13. mock 模式缺失的产品静态资源（如 desktop 工作区嵌入的
-    `/desktop-vnc.html`，生产由 @rome/core 提供）在 `packages/web/mock/public/`
-    补占位文件；MSW（浏览器 Service Worker）拦不住 iframe 初始文档导航
-    （新 frame 还没注册 worker），这类请求必须走 dev server 静态层。
-14. recorded apps（`/apps/*-*`，如 issue-triage、yt-distill）渲染在
-    **open Shadow DOM** 内：视觉断言（`aiAssert`/`aiTap`）与 Playwright
-    role 引擎正常工作，但 `app.expectTexts`/`app.expectDom` 基于的
-    `innerText`/`main` 选择器穿不进 shadow root，这些页面不要使用这两个
-    节点。
+1. **Every case starts with `app.open`** to guarantee fixture reset; use
+   `app.reload` only when verifying "after refresh" behavior.
+2. Prefer deterministic nodes for navigation/scrolling/URL assertions; reserve
+   `aiTap`/`aiAssert` for visual-semantic judgments.
+3. `aiAssert` copy quotes the actual English UI text and describes structure
+   explicitly (presence/absence of cards, badges, buttons).
+4. Parameter-less custom nodes must be written as `app.goBack: {}` in YAML;
+   otherwise they parse as scalars and collection fails.
+5. Cases assert only against synthetic fixture data in the repo; never
+   introduce real names, accounts or credentials.
+6. Chat pages stick to the bottom: programmatic scrolling is pushed back, so
+   for long transcripts use `app.scrollTextIntoView` (internally it first sends
+   a trusted wheel gesture to release the stick-to-bottom behavior).
+7. The file-browser editor (Projects/Memory) is Monaco, where visual actions
+   are very slow and unstable: switch to the Edit view first, then use
+   `app.monacoEdit` (changes the value through the monaco API; `save: true`
+   waits for the PUT to finish). Assert disabled button state with
+   `app.expectControl` instead of trying to tell it apart from a screenshot.
+8. For repeated same-name controls (the sessions question card and the composer
+   each have a "Send"), select by DOM order with
+   `app.clickByLabel: { index: n }`. The selected check in dropdown menus such
+   as the composer's "Reasoning effort" has no `aria-checked`; assert it with
+   `app.expectMenuItem` instead of having the model count checkmarks in a
+   screenshot. `app.clickByLabel` also covers both `<a>` (settings
+   sub-navigation) and `<summary>` (disclosure regions like Developer
+   Settings), so use it — not `aiTap` — for cross-settings navigation and
+   expanding disclosures.
+9. For cards/messages taller than one viewport (the five-question design card,
+   multi-section build replies, the nine-item Connections list, the Channels
+   conversation list), a screenshot shows only part of them: use
+   `app.expectTexts: { all: [...] }` to verify the full-text manifest via the
+   DOM, and let the visual assertion describe only what is visible in the
+   current viewport after scroll positioning.
+10. "Locked" states such as an answered question card are almost
+    indistinguishable from editable state in a screenshot (a disabled fieldset
+    still renders placeholder copy): assert structural facts with
+    `app.expectDom` — `fieldset[disabled]`, the count of
+    `button[aria-pressed="true"]`, the number of buttons in the bottom action
+    row, and so on.
+11. Steps that are **expected to trip form validation** must not use a single
+    `aiAct` (the model treats "submission was rejected" as its own task failure
+    and retries until the replan budget is exhausted): split into
+    `app.typeText` (located by placeholder or `<label for>`) + `app.clickByLabel`
+    to submit + `app.expectTexts` to assert the validation copy; resubmitting
+    after correcting the input works the same way.
+12. Toasts render in a sonner portal outside `<main>` and disappear after a few
+    seconds: use `app.expectTexts: { scope: body }` to poll the toast copy
+    immediately after the triggering action, not `aiAssert` (the toast is often
+    already gone by screenshot time); persistent list/form changes go through
+    the default `scope: main` DOM assertions.
+13. Product static assets missing in mock mode (such as
+    `/desktop-vnc.html` embedded in the desktop workspace, served by @rome/core
+    in production) get placeholder files under `packages/web/mock/public/`;
+    MSW (a browser Service Worker) cannot intercept an iframe's initial
+    document navigation (the new frame has not registered the worker yet), so
+    these requests must go through the dev server's static layer.
+14. Recorded apps (`/apps/*-*`, e.g. issue-triage, yt-distill) render inside an
+    **open Shadow DOM**: visual assertions (`aiAssert`/`aiTap`) and Playwright's
+    role engine work normally, but the `innerText`/`main` selectors behind
+    `app.expectTexts`/`app.expectDom` cannot pierce the shadow root — do not
+    use those two nodes on these pages.
