@@ -1,0 +1,34 @@
+cases:
+  - name: >-
+      E2E-01 Turn on a routine proposed in chat and verify it lands in Routines
+    tags: [poc, story, routines, shard-3]
+    steps:
+      - app.open: { path: /chat/mock-chat-3 }
+      - aiAssert: >-
+          The conversation "Weekly planning" is open. In the agent's latest
+          reply there is a "Scheduled routine" proposal card. It says
+          "Every Monday at 9:00 AM, list anything that has stalled and nudge me."
+          and the card has a "Turn it on" button. The card is not switched on
+          yet (no "On" badge).
+      - aiTap: Turn it on
+      - aiAssert: >-
+          The routine card now shows a green "On" badge and the footer
+          "Saved. Next time it matches, Rome will run it within a minute. Manage
+          it in Routines." There is no "Turn it on" button anymore.
+      # Client-side navigation keeps the POST /api/routines write in memory.
+      - aiTap: the Routines entry in the left app navigation sidebar
+      - app.expectUrl: { path: /routines }
+      - aiAssert: >-
+          The Routines page lists a routine named "Weekly stall check". It is
+          enabled/active (its toggle is switched on), and the active routines
+          count includes it.
+      # Back in the transcript, the card re-checks existing routine names and
+      # must settle on "On" instead of offering to create a duplicate.
+      - app.goBack: {}
+      - app.expectUrl: { path: /chat/mock-chat-3 }
+      # The card remounts and re-checks GET /api/routines before settling on
+      # "On"; give that resolution a deterministic beat.
+      - wait: { duration: 2000 }
+      - aiAssert: >-
+          Back in the conversation, the same routine proposal card still shows
+          the "On" badge and no "Turn it on" button.

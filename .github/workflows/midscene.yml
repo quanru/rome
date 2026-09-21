@@ -1,0 +1,155 @@
+name: Midscene E2E
+
+# Visual E2E against the MSW mock build (pnpm --filter rome-web dev:mock,
+# port 3200). Every case uses only synthetic in-repo fixtures; no real backend
+# or personal data is involved. Model credentials come from repository secrets.
+
+on:
+  push:
+    branches: [main]
+    paths: &e2e-paths
+      - ".github/workflows/midscene.yml"
+      - "tests/midscene/**"
+      - "packages/web/mock/**"
+      - "packages/web/src/**"
+      - "packages/web/package.json"
+      - "packages/web/rsbuild.config.ts"
+      - "pnpm-lock.yaml"
+  pull_request:
+    branches: [main]
+    paths: *e2e-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: midscene-e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  midscene:
+    name: Midscene visual (${{ matrix.shard }})
+    # Fork PRs have no access to the model secrets; skip them there.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        # Shards are selected by YAML tags (MIDSCENE_INCLUDE_TAGS), see
+        # tests/midscene/README.md and docs/midscene-e2e-plan.md.
+        shard:
+          - shard-1
+          - shard-2
+          - shard-3
+          - shard-4
+          - shard-5
+          - shard-6
+    env:
+      HEADLESS: "true"
+      ROME_E2E_BASE_URL: http://localhost:3200
+      MIDSCENE_MODEL_API_KEY: ${{ secrets.MIDSCENE_MODEL_API_KEY }}
+      MIDSCENE_MODEL_NAME: ${{ secrets.MIDSCENE_MODEL_NAME }}
+      MIDSCENE_MODEL_BASE_URL: ${{ secrets.MIDSCENE_MODEL_BASE_URL }}
+      MIDSCENE_MODEL_FAMILY: ${{ secrets.MIDSCENE_MODEL_FAMILY }}
+      # The model endpoint is reachable over IPv4; avoid family-race timeouts.
+      NODE_OPTIONS: "--dns-result-order=ipv4first --no-network-family-autoselection"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Activate Node.js 24 and pnpm
+        uses: actions/setup-node@0a44ba7841725637a1aab2a3fb3efdf2d98932e8 # v4.4.0
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Enable pnpm 11
+        run: corepack prepare pnpm@11.6.0 --activate
+
+      - name: Require Midscene model configuration
+        run: |
+          test -n "$MIDSCENE_MODEL_API_KEY"
+          test -n "$MIDSCENE_MODEL_NAME"
+          test -n "$MIDSCENE_MODEL_BASE_URL"
+          test -n "$MIDSCENE_MODEL_FAMILY"
+
+      - name: Check Midscene model connectivity
+        run: |
+          node --input-type=module <<'NODE'
+          const baseUrl = process.env.MIDSCENE_MODEL_BASE_URL.replace(/\/+$/, '');
+          const response = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.MIDSCENE_MODEL_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: process.env.MIDSCENE_MODEL_NAME,
+              messages: [{ role: 'user', content: 'Reply OK.' }],
+              max_tokens: 1,
+            }),
+            signal: AbortSignal.timeout(90_000),
+          });
+          if (!response.ok) {
+            throw new Error(`Model preflight returned HTTP ${response.status}`);
+          }
+          await response.arrayBuffer();
+          NODE
+
+      - name: Install Rome workspace dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install Midscene test dependencies
+        # allowScripts for esbuild/sharp is declared in this package.json, so
+        # npm ci runs their (approved) install scripts non-interactively.
+        working-directory: tests/midscene
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # dev:mock runs build:kit before rsbuild dev, so first-request readiness
+      # can take a few minutes after the job starts.
+      - name: Start Rome mock server
+        run: |
+          nohup pnpm --filter rome-web dev:mock > /tmp/rome-devmock.log 2>&1 &
+          for attempt in $(seq 1 180); do
+            if curl -sf http://localhost:3200/ -o /dev/null; then
+              echo "dev:mock is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "dev:mock failed to become ready" >&2
+          tail -n 100 /tmp/rome-devmock.log >&2
+          exit 1
+
+      - name: Run Midscene shard
+        working-directory: tests/midscene
+        env:
+          MIDSCENE_INCLUDE_TAGS: ${{ matrix.shard }}
+          MIDSCENE_RETRY: "2"
+        run: timeout --signal=TERM --kill-after=10s 35m npm test
+
+      - name: Upload Midscene shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: midscene-${{ matrix.shard }}
+          path: |
+            tests/midscene/midscene_run/
+            tests/midscene/.midscene/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload mock server log on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rome-devmock-${{ matrix.shard }}
+          path: /tmp/rome-devmock.log
+          if-no-files-found: warn
+          retention-days: 14
