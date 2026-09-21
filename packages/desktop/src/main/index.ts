@@ -1,3 +1,4 @@
+import { release } from "os";
 import { app, BrowserWindow } from "electron";
 import { initDatabase } from "./db/database";
 import { createLogger } from "./logger";
@@ -14,6 +15,7 @@ import { setupUpdater, updateManager } from "./updater";
 import { RESTART_BUTTON, updateDialogFor } from "./update-dialog";
 import { setupTray } from "./tray";
 import { setupFloatingPill } from "./floating-pill";
+import { supportsFloatingPill } from "./floating-pill-state";
 import { setupApplicationMenu } from "./menu";
 import { shouldReturnToDashboard } from "./startup-surface";
 import { RuntimeManager, type RuntimeStatus } from "./runtime/manager";
@@ -123,18 +125,17 @@ async function bootstrap() {
       mainWindow = await createMainWindow(runtimeManager);
     };
 
-    // macOS only for now: the panel window type is what makes the pill
-    // unobtrusive, and it is AppKit's.
-    const floatingPill =
-      process.platform === "darwin"
-        ? setupFloatingPill({
-            showMainWindow,
-            openSettings: () => {
-              createSettingsWindow();
-            },
-            runtimeManager,
-          })
-        : null;
+    // macOS only, and not yet macOS 27: the panel window type is what makes the
+    // pill unobtrusive, and it is AppKit's.
+    const floatingPill = supportsFloatingPill(process.platform, release())
+      ? setupFloatingPill({
+          showMainWindow,
+          openSettings: () => {
+            createSettingsWindow();
+          },
+          runtimeManager,
+        })
+      : null;
 
     setupTray({
       getMainWindow: () => mainWindow,

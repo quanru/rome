@@ -9,12 +9,13 @@ import {
   isPillEnabled,
   parseAgentName,
   parsePillPosition,
+  PILL_DEFAULT_HEIGHT,
   PILL_DEFAULT_WIDTH,
   PILL_ENABLED_KEY,
   PILL_FALLBACK_NAME,
-  PILL_HEIGHT,
   PILL_POSITION_KEY,
   type Point,
+  type Size,
 } from "./floating-pill-state";
 import { isQuitting, requestStopAndQuit } from "./lifecycle";
 import { createLogger } from "./logger";
@@ -66,12 +67,26 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
 
   let win: BrowserWindow | null = null;
   let name = PILL_FALLBACK_NAME;
-  let width = PILL_DEFAULT_WIDTH;
+  let size: Size = { width: PILL_DEFAULT_WIDTH, height: PILL_DEFAULT_HEIGHT };
   let dragOffset: Point | null = null;
   let enabledChanged: (() => void) | null = null;
 
   const workAreaAt = (point: Point): Electron.Rectangle =>
     screen.getDisplayNearestPoint(point).workArea;
+
+  // The main window loads the same preload and navigates to other origins
+  // (provider sign-in, checkout), so window.rome.pill exists on those pages
+  // too. Only the icon's own page may move this window or open its menu.
+  const fromPill = (event: Electron.IpcMainEvent): boolean =>
+    win !== null && !win.isDestroyed() && event.sender === win.webContents;
+
+  const clampIntoView = (): Point | null => {
+    if (!win || win.isDestroyed()) return null;
+    const [x, y] = win.getPosition();
+    const position = clampPillPosition({ x, y }, size, workAreaAt({ x, y }));
+    win.setPosition(position.x, position.y);
+    return position;
+  };
 
   // Electron 36 has no app.isActive(), so the state is kept from the two
   // activation events. By the time this runs the main window has loaded, so a
@@ -90,7 +105,6 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
   const createWindow = (): void => {
     if (win && !win.isDestroyed()) return;
 
-    const size = { width, height: PILL_HEIGHT };
     const saved = parsePillPosition(readSetting(PILL_POSITION_KEY));
     const workArea = saved ? workAreaAt(saved) : screen.getPrimaryDisplay().workArea;
     const position = clampPillPosition(
@@ -141,10 +155,14 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
   };
 
   const refreshName = async (): Promise<void> => {
-    if (!runtimeManager.isReady()) return;
+    // With the icon turned off there is nowhere to show a name.
+    if (!win || win.isDestroyed() || !runtimeManager.isReady()) return;
     try {
       const response = await session.defaultSession.fetch(
         `${runtimeManager.getDashboardUrl()}/api/settings`,
+        // This runs on every switch away from Rome; a runtime that has stopped
+        // answering should not leave one request hanging per switch.
+        { signal: AbortSignal.timeout(5_000) },
       );
       // Signed out, or the runtime is mid-restart: keep the name we have
       // rather than flickering back to the fallback.
@@ -164,6 +182,7 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
     writeSetting(PILL_ENABLED_KEY, enabled ? "true" : "false");
     if (enabled) {
       createWindow();
+      void refreshName();
     } else if (win && !win.isDestroyed()) {
       win.destroy();
       win = null;
@@ -172,20 +191,23 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
   };
 
   ipcMain.on("pill:ready", (event) => {
+    if (!fromPill(event)) return;
     event.sender.send("pill:name", name);
   });
 
-  ipcMain.on("pill:setWidth", (_event, raw: number) => {
-    if (!win || !Number.isFinite(raw)) return;
-    width = Math.ceil(raw);
-    const [x, y] = win.getPosition();
-    const size = { width, height: PILL_HEIGHT };
-    // A longer name widens the pill to the right, which can push it off-screen.
-    const position = clampPillPosition({ x, y }, size, workAreaAt({ x, y }));
-    win.setBounds({ ...position, ...size });
+  // The page owns the icon's layout, so it reports the size the window has to
+  // be: both dimensions, measured, rather than one of them restated here.
+  ipcMain.on("pill:setSize", (event, rawWidth: number, rawHeight: number) => {
+    if (!fromPill(event) || !win) return;
+    if (!Number.isFinite(rawWidth) || !Number.isFinite(rawHeight)) return;
+    size = { width: Math.ceil(rawWidth), height: Math.ceil(rawHeight) };
+    win.setSize(size.width, size.height);
+    // A longer name widens the icon to the right, which can push it off-screen.
+    clampIntoView();
   });
 
-  ipcMain.on("pill:click", () => {
+  ipcMain.on("pill:click", (event) => {
+    if (!fromPill(event)) return;
     dragOffset = null;
     void showMainWindow();
   });
@@ -195,20 +217,20 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
   // one thing taken from the page is where inside the window the pointer went
   // down: the press can be delivered late, after the cursor has already moved
   // on, so the cursor's position at this moment says nothing about the grab.
-  ipcMain.on("pill:dragStart", (_event, grabX: number, grabY: number) => {
-    if (!win || !Number.isFinite(grabX) || !Number.isFinite(grabY)) return;
+  ipcMain.on("pill:dragStart", (event, grabX: number, grabY: number) => {
+    if (!fromPill(event) || !Number.isFinite(grabX) || !Number.isFinite(grabY)) return;
     // The page reports fractional CSS pixels; setPosition takes whole points.
     dragOffset = { x: Math.round(grabX), y: Math.round(grabY) };
   });
 
-  ipcMain.on("pill:dragMove", () => {
-    if (!win || !dragOffset) return;
+  ipcMain.on("pill:dragMove", (event) => {
+    if (!fromPill(event) || !win || !dragOffset) return;
     const cursor = screen.getCursorScreenPoint();
     win.setPosition(cursor.x - dragOffset.x, cursor.y - dragOffset.y);
   });
 
-  ipcMain.on("pill:dragEnd", () => {
-    if (!win) return;
+  ipcMain.on("pill:dragEnd", (event) => {
+    if (!fromPill(event) || !win) return;
     // A drag recognised only at the release never sent a move, so the window
     // has not followed yet.
     if (dragOffset) {
@@ -216,18 +238,12 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
       win.setPosition(cursor.x - dragOffset.x, cursor.y - dragOffset.y);
     }
     dragOffset = null;
-    const [x, y] = win.getPosition();
-    const position = clampPillPosition(
-      { x, y },
-      { width, height: PILL_HEIGHT },
-      workAreaAt({ x, y }),
-    );
-    win.setPosition(position.x, position.y);
-    writeSetting(PILL_POSITION_KEY, JSON.stringify(position));
+    const position = clampIntoView();
+    if (position) writeSetting(PILL_POSITION_KEY, JSON.stringify(position));
   });
 
-  ipcMain.on("pill:contextMenu", () => {
-    if (!win) return;
+  ipcMain.on("pill:contextMenu", (event) => {
+    if (!fromPill(event) || !win) return;
     dragOffset = null;
     const stopping = isQuitting() || runtimeManager.getStatus().phase === "stopping";
     Menu.buildFromTemplate([
@@ -267,6 +283,12 @@ export function setupFloatingPill(options: FloatingPillOptions): FloatingPill {
     // view, so that is when to re-read.
     void refreshName();
   });
+
+  // A display unplugged or rearranged while Rome runs can leave the icon on a
+  // screen that is gone. The stored position is left alone, so it returns to
+  // its place when that display does.
+  screen.on("display-removed", clampIntoView);
+  screen.on("display-metrics-changed", clampIntoView);
 
   if (isEnabled()) createWindow();
   void refreshName();

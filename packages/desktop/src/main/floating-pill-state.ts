@@ -1,8 +1,8 @@
-// The window is the icon — a 48px logo disc, a 4px gap and a 20px name label
-// under it — plus a 4px transparent gutter on every side, so no border is
-// clipped by the window edge. PillPage.tsx carries the same numbers.
-export const PILL_HEIGHT = 80;
+// The size the window opens at, before the page has measured itself and
+// reported the real one. The page owns the layout; these only have to be close
+// enough that the first frame does not jump far.
 export const PILL_DEFAULT_WIDTH = 96;
+export const PILL_DEFAULT_HEIGHT = 80;
 export const PILL_EDGE_MARGIN = 24;
 export const PILL_FALLBACK_NAME = "Rome";
 
@@ -35,15 +35,44 @@ export function isPillEnabled(raw: string | null): boolean {
   return raw !== "false";
 }
 
+// Far beyond any arrangement of displays, and far below what the window APIs
+// can represent.
+const MAX_COORDINATE = 100_000;
+
+function isUsableCoordinate(value: unknown): value is number {
+  return typeof value === "number" && Math.abs(value) <= MAX_COORDINATE;
+}
+
+/**
+ * A stored position the window APIs will accept, or null. They throw on a
+ * non-finite or out-of-range number, this runs during bootstrap, and bootstrap
+ * quits on a throw — so an unusable value must read as "never stored" rather
+ * than reach them.
+ */
 export function parsePillPosition(raw: string | null): Point | null {
   if (!raw) return null;
   try {
     const { x, y } = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof x !== "number" || typeof y !== "number") return null;
-    return { x, y };
+    if (!isUsableCoordinate(x) || !isUsableCoordinate(y)) return null;
+    return { x: Math.round(x), y: Math.round(y) };
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether this system gets the floating icon.
+ *
+ * The icon depends on a panel that takes clicks without activating Rome. On
+ * macOS 27 a click on a panel activates the app (electron/electron#53889), and
+ * becoming active is what hides the icon — so it would vanish under the pointer
+ * mid-gesture. Off there until that is fixed upstream or checked on a machine.
+ * Darwin's major version runs one behind macOS's: Darwin 26 is macOS 27.
+ */
+export function supportsFloatingPill(platform: string, osRelease: string): boolean {
+  if (platform !== "darwin") return false;
+  const darwinMajor = Number.parseInt(osRelease, 10);
+  return Number.isFinite(darwinMajor) && darwinMajor < 26;
 }
 
 export function defaultPillPosition(workArea: Rect, size: Size): Point {

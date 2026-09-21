@@ -12,9 +12,8 @@ import { romeApi } from "@/lib/rome-api";
 
 // Below this the gesture is a click. A trackpad tap routinely moves a pixel or two.
 const DRAG_THRESHOLD_PX = 4;
-// Transparent gutter between the icon and the window edge. The main process
-// assumes the same value: PILL_HEIGHT (80) = logo disc (48) + gap (4) + name
-// label (20) + 2 × 4.
+// Transparent gutter between the icon and the window edge, so no border is
+// clipped by it.
 const WINDOW_GUTTER_PX = 4;
 
 // A white disc, so the black mark reads on any wallpaper. The logo's inner
@@ -48,7 +47,10 @@ export function PillPage() {
   useLayoutEffect(() => {
     const el = iconRef.current;
     if (!el) return;
-    romeApi.pill.setWidth(el.offsetWidth + WINDOW_GUTTER_PX * 2);
+    romeApi.pill.setSize(
+      el.offsetWidth + WINDOW_GUTTER_PX * 2,
+      el.offsetHeight + WINDOW_GUTTER_PX * 2,
+    );
   }, [name]);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>): void => {

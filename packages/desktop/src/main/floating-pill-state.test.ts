@@ -5,6 +5,7 @@ import {
   isPillEnabled,
   parseAgentName,
   parsePillPosition,
+  supportsFloatingPill,
 } from "./floating-pill-state";
 
 const WORK_AREA = { x: 0, y: 25, width: 1440, height: 875 };
@@ -40,6 +41,34 @@ describe("parsePillPosition", () => {
   it("returns null for anything else, so the default position is used", () => {
     expect(parsePillPosition(null)).toBeNull();
     expect(parsePillPosition("not json")).toBeNull();
+  });
+
+  it("refuses a number the window APIs would throw on", () => {
+    // They throw during bootstrap, and bootstrap quits on a throw — a stored
+    // value like this would keep Rome from starting at all.
+    expect(parsePillPosition('{"x":1e400,"y":0}')).toBeNull();
+    expect(parsePillPosition('{"x":0,"y":1e300}')).toBeNull();
+  });
+
+  it("rounds, because the window APIs take whole points", () => {
+    expect(parsePillPosition('{"x":100.4,"y":200.6}')).toEqual({ x: 100, y: 201 });
+  });
+});
+
+describe("supportsFloatingPill", () => {
+  it("is on for macOS up to 26, which is Darwin 25", () => {
+    expect(supportsFloatingPill("darwin", "25.5.0")).toBe(true);
+    expect(supportsFloatingPill("darwin", "24.6.0")).toBe(true);
+  });
+
+  it("is off from macOS 27, where clicking a panel activates the app", () => {
+    expect(supportsFloatingPill("darwin", "26.0.0")).toBe(false);
+    expect(supportsFloatingPill("darwin", "27.1.0")).toBe(false);
+  });
+
+  it("is off everywhere else", () => {
+    expect(supportsFloatingPill("win32", "10.0.26100")).toBe(false);
+    expect(supportsFloatingPill("linux", "6.8.0")).toBe(false);
   });
 });
 

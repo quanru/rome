@@ -41,7 +41,8 @@ const api = {
   // owns all window geometry — the page only reports gestures.
   pill: {
     ready: (): void => ipcRenderer.send("pill:ready"),
-    setWidth: (width: number): void => ipcRenderer.send("pill:setWidth", width),
+    setSize: (width: number, height: number): void =>
+      ipcRenderer.send("pill:setSize", width, height),
     click: (): void => ipcRenderer.send("pill:click"),
     dragStart: (grabX: number, grabY: number): void =>
       ipcRenderer.send("pill:dragStart", grabX, grabY),

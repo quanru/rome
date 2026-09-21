@@ -125,7 +125,7 @@ export interface RomeApi {
   };
   pill: {
     ready(): void;
-    setWidth(width: number): void;
+    setSize(width: number, height: number): void;
     click(): void;
     dragStart(grabX: number, grabY: number): void;
     dragMove(): void;
@@ -271,7 +271,7 @@ function createMockRomeApi(): RomeApi {
     },
     pill: {
       ready: () => log("pill.ready"),
-      setWidth: (width) => log("pill.setWidth", width),
+      setSize: (width, height) => log("pill.setSize", width, height),
       click: () => log("pill.click"),
       dragStart: (grabX, grabY) => log("pill.dragStart", grabX, grabY),
       dragMove: () => {},
