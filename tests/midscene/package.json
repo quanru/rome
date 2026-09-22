@@ -7,14 +7,15 @@
     "test": "midscene-test",
     "nodes": "midscene-test nodes",
     "typecheck": "tsc --noEmit",
-    "collect": "node scripts/collect-cases.mjs"
+    "collect": "node scripts/collect-cases.mjs",
+    "test:summary": "node --test scripts/render-ci-summary.test.mjs"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
   },
   "devDependencies": {
-    "@midscene/test": "1.12.9",
-    "@midscene/web": "1.12.9",
+    "@midscene/test": "1.13.0",
+    "@midscene/web": "1.13.0",
     "@types/node": "^20.0.0",
     "dotenv": "^16.4.5",
     "typescript": "^5.8.3",

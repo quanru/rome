@@ -91,6 +91,10 @@ jobs:
         working-directory: tests/midscene
         run: npm run collect
 
+      - name: Test CI Summary renderer
+        working-directory: tests/midscene
+        run: npm run test:summary
+
   midscene:
     name: Midscene visual (${{ matrix.shard }})
     # Fail-closed trust gate: billable secrets run against the protected
@@ -218,8 +222,29 @@ jobs:
           MIDSCENE_MODEL_BASE_URL: ${{ secrets.MIDSCENE_MODEL_BASE_URL }}
           MIDSCENE_MODEL_FAMILY: ${{ secrets.MIDSCENE_MODEL_FAMILY }}
           MIDSCENE_INCLUDE_TAGS: ${{ matrix.shard }}
+          MIDSCENE_PROJECT_NAME: web-${{ matrix.shard }}
+          MIDSCENE_REPLANNING_CYCLE_LIMIT: "40"
           MIDSCENE_RETRY: "2"
         run: timeout --signal=TERM --kill-after=10s 35m npm test
+
+      - name: Record report model
+        if: always()
+        working-directory: tests/midscene
+        env:
+          MIDSCENE_MODEL_NAME: ${{ secrets.MIDSCENE_MODEL_NAME }}
+          MIDSCENE_MODEL_FAMILY: ${{ secrets.MIDSCENE_MODEL_FAMILY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdir, writeFile } from 'node:fs/promises';
+          await mkdir('midscene_run', { recursive: true });
+          await writeFile(
+            'midscene_run/model.json',
+            `${JSON.stringify({
+              modelName: process.env.MIDSCENE_MODEL_NAME,
+              modelFamily: process.env.MIDSCENE_MODEL_FAMILY,
+            }, null, 2)}\n`,
+          );
+          NODE
 
       - name: Upload Midscene shard report
         if: always()
@@ -239,4 +264,48 @@ jobs:
           name: rome-devmock-${{ matrix.shard }}
           path: /tmp/rome-devmock.log
           if-no-files-found: warn
+          retention-days: 14
+
+  report-summary:
+    name: Assemble Midscene report and Summary
+    needs: midscene
+    if: always() && !cancelled() && needs.midscene.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # Separate directories preserve reports whose generated filenames match
+      # across serial shards.
+      - name: Download every Midscene shard
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: midscene-shard-*
+          path: ${{ runner.temp }}/midscene-report-shards
+          merge-multiple: false
+
+      - name: Add case table to the run Summary
+        env:
+          PRODUCER_RESULT: ${{ needs.midscene.result }}
+        run: |
+          node tests/midscene/scripts/render-ci-summary.mjs \
+            --reports-dir "$RUNNER_TEMP/midscene-report-shards" \
+            --expected-projects "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --producer-result "$PRODUCER_RESULT" \
+            --output "$GITHUB_STEP_SUMMARY" \
+            --html-output "$RUNNER_TEMP/midscene-report-shards/index.html"
+
+      - name: Upload combined Midscene report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: midscene-e2e-report
+          path: ${{ runner.temp }}/midscene-report-shards/
+          if-no-files-found: error
           retention-days: 14

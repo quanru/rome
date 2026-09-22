@@ -12,11 +12,25 @@ This table lists all available Nodes. See [Node Details](#node-details) below fo
 | --- | --- |
 | aiAct | Perform a natural-language task with a Midscene UI Agent. |
 | aiAssert | Assert a natural-language condition with a Midscene UI Agent. |
+| action | Call a platform or custom action. Its ActionSpace schema validates params when the action executes. |
 | aiAsk | Run aiAsk with a Midscene UI Agent and store its value. |
 | aiBoolean | Run aiBoolean with a Midscene UI Agent and store its value. |
+| aiClearInput | Locate an input element and clear its value with a Midscene UI Agent. |
+| aiDoubleClick | Locate and double-click an element with a Midscene UI Agent. |
+| aiDragAndDrop | Locate source and destination elements, then drag the source to the destination. |
+| aiHover | Locate and hover over an element with a Midscene UI Agent. |
+| aiInput | Locate an input element and enter a value with a Midscene UI Agent. |
+| aiKeyboardPress | Press a key or key combination, optionally targeting a located element. |
+| aiLocate | Locate an element from a natural-language description and store the result. |
+| aiLongPress | Locate and long-press an element with a Midscene UI Agent. |
 | aiNumber | Run aiNumber with a Midscene UI Agent and store its value. |
+| aiPinch | Perform a pinch-in or pinch-out gesture with a Midscene UI Agent. |
+| aiQuery | Extract structured data from the current interface and store the result. |
+| aiRightClick | Locate and right-click an element with a Midscene UI Agent. |
+| aiScroll | Scroll the page or a located region with a Midscene UI Agent. |
 | aiString | Run aiString with a Midscene UI Agent and store its value. |
 | aiTap | Locate and tap an element with a Midscene UI Agent. |
+| aiWaitFor | Wait until a natural-language condition is satisfied. |
 | app.clickByLabel | Click an icon-only or ambiguously placed control by its accessible name (aria-label or inner text), deterministically. Use this instead of aiTap for tile kebab menus, repeated icon buttons, and short-text filter chips where a visual tap could hit the wrong element. Also matches settings sub-navigation <a> links (e.g. jump from Advanced back to Connections) and plain <summary> disclosure headings such as "Developer Settings". Works inside open shadow roots. Set exact:true when the label is short (e.g. "Running" must not match a "Running 1" counter), and index to disambiguate repeated names such as a composer "Send" that shares the page with a question-card "Send". |
 | app.clickContentLink | Click a hyperlink by its visible text inside the main content area (excludes the left sidebar), deterministically via Playwright. |
 | app.expectControl | Assert a button or radio-segment control state deterministically via Playwright instead of a screenshot: whether it exists/is visible, whether it is disabled, and (for role:"radio") whether it is checked. Use for disabled-vs-enabled distinctions that look identical in a screenshot (e.g. a question card Send button), for transient aria-label swaps such as "Copied" or "Feedback recorded", and for segmented-control selection whose checked fill is visually ambiguous. |
@@ -34,9 +48,12 @@ This table lists all available Nodes. See [Node Details](#node-details) below fo
 | app.typeText | Focus a text field by its visible label/placeholder and type text deterministically with the keyboard. If target is omitted, types into the currently focused element. With clear:true and no text, empties the field only. |
 | clearCookies | Clear all cookies from the current Playwright BrowserContext, or only cookies matching name, domain, or path. |
 | gotoUrl | Navigate the current Playwright Page to an absolute HTTP(S) URL or a path relative to Playwright baseURL or the current page URL. |
+| javascript | Evaluate JavaScript in the current interface and store the result. |
 | recordToReport | Add text or screenshots to the current Midscene report. |
+| runGherkinScenario | Execute a Gherkin scenario with the current Midscene UI Agent. |
 | setCookies | Load cookies from an environment variable, configured profile, or Playwright storage-state file without persisting cookie values in workflow input or output. |
 | setViewportSize | Set the current Playwright Page viewport size in CSS pixels and return the effective size. |
+| sleep | Wait for a fixed number of milliseconds, recording standard UI snapshots and honoring cancellation. |
 | wait | Wait for a fixed duration while honoring cancellation. |
 
 ## Where to use these Nodes
@@ -69,6 +86,8 @@ cases:
 ```
 
 A Node may map a string step value to one declared input field. Each Node section states whether it supports this shorthand and names the target field.
+
+Each Node's returned `data` is saved on that Step's result. Results are not named or automatically passed to later Steps. A failed Case does not stop later Cases by default; `test.bail` controls early stopping across the run.
 
 ## Node Details
 
@@ -107,6 +126,14 @@ Perform a natural-language task with a Midscene UI Agent.
               "type": "boolean"
             }
           ]
+        },
+        "effort": {
+          "enum": [
+            "fast",
+            "balance",
+            "deepThink"
+          ],
+          "type": "string"
         },
         "fileChooserAccept": {
           "anyOf": [
@@ -272,6 +299,32 @@ Assert a natural-language condition with a Midscene UI Agent.
   },
   "required": [
     "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `action`
+
+Call a platform or custom action. Its ActionSpace schema validates params when the action executes.
+
+**String shorthand:** Not supported by this Node.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "pattern": "\\S",
+      "type": "string"
+    },
+    "params": {}
+  },
+  "required": [
+    "name"
   ],
   "type": "object"
 }
@@ -457,6 +510,866 @@ Run aiBoolean with a Midscene UI Agent and store its value.
 }
 ```
 
+### `aiClearInput`
+
+Locate an input element and clear its value with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiDoubleClick`
+
+Locate and double-click an element with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiDragAndDrop`
+
+Locate source and destination elements, then drag the source to the destination.
+
+**String shorthand:** Not supported by this Node.
+
+#### Input Schema
+
+```json
+{
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "$ref": "#/$defs/__schema0"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "to": {
+      "$ref": "#/$defs/__schema0"
+    }
+  },
+  "required": [
+    "from",
+    "to"
+  ],
+  "type": "object"
+}
+```
+
+### `aiHover`
+
+Locate and hover over an element with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiInput`
+
+Locate an input element and enter a value with a Midscene UI Agent.
+
+**String shorthand:** Not supported by this Node.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "autoDismissKeyboard": {
+          "type": "boolean"
+        },
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "inputStrategy": {
+          "enum": [
+            "legacy",
+            "sequential",
+            "bulk"
+          ],
+          "type": "string"
+        },
+        "keyboardTypeDelay": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "mode": {
+          "enum": [
+            "replace",
+            "clear",
+            "typeOnly",
+            "append"
+          ],
+          "type": "string"
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt",
+    "value"
+  ],
+  "type": "object"
+}
+```
+
+### `aiKeyboardPress`
+
+Press a key or key combination, optionally targeting a located element.
+
+**String shorthand:** Maps to `{ keyName: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "keyName": {
+      "pattern": "\\S",
+      "type": "string"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "keyName"
+  ],
+  "type": "object"
+}
+```
+
+### `aiLocate`
+
+Locate an element from a natural-language description and store the result.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiLongPress`
+
+Locate and long-press an element with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "duration": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
 ### `aiNumber`
 
 Run aiNumber with a Midscene UI Agent and store its value.
@@ -543,6 +1456,415 @@ Run aiNumber with a Midscene UI Agent and store its value.
   "required": [
     "prompt"
   ],
+  "type": "object"
+}
+```
+
+### `aiPinch`
+
+Perform a pinch-in or pinch-out gesture with a Midscene UI Agent.
+
+**String shorthand:** Not supported by this Node.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "direction": {
+      "enum": [
+        "in",
+        "out"
+      ],
+      "type": "string"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "distance": {
+          "type": "number"
+        },
+        "duration": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "direction"
+  ],
+  "type": "object"
+}
+```
+
+### `aiQuery`
+
+Extract structured data from the current interface and store the result.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "type": "string"
+        },
+        "domIncluded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "const": "visible-only",
+              "type": "string"
+            }
+          ]
+        },
+        "screenshotIncluded": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiRightClick`
+
+Locate and right-click an element with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiScroll`
+
+Scroll the page or a located region with a Midscene UI Agent.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "type": "boolean"
+        },
+        "direction": {
+          "enum": [
+            "down",
+            "up",
+            "right",
+            "left"
+          ],
+          "type": "string"
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "scrollType": {
+          "enum": [
+            "singleAction",
+            "scrollToBottom",
+            "scrollToTop",
+            "scrollToRight",
+            "scrollToLeft",
+            "once",
+            "untilBottom",
+            "untilTop",
+            "untilRight",
+            "untilLeft"
+          ],
+          "type": "string"
+        },
+        "xpath": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
   "type": "object"
 }
 ```
@@ -680,6 +2002,104 @@ Locate and tap an element with a Midscene UI Agent.
         },
         "xpath": {
           "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "convertHttpImage2Base64": {
+              "type": "boolean"
+            },
+            "images": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
+                  "url": {
+                    "pattern": "\\S",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "prompt": {
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "type": "object"
+}
+```
+
+### `aiWaitFor`
+
+Wait until a natural-language condition is satisfied.
+
+**String shorthand:** Maps to `{ prompt: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "checkIntervalMs": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "context": {
+          "type": "string"
+        },
+        "domIncluded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "const": "visible-only",
+              "type": "string"
+            }
+          ]
+        },
+        "screenshotIncluded": {
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "exclusiveMinimum": 0,
+          "type": "number"
         }
       },
       "type": "object"
@@ -1312,6 +2732,31 @@ Navigate the current Playwright Page to an absolute HTTP(S) URL or a path relati
 }
 ```
 
+### `javascript`
+
+Evaluate JavaScript in the current interface and store the result.
+
+**String shorthand:** Maps to `{ script: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "script": {
+      "pattern": "\\S",
+      "type": "string"
+    }
+  },
+  "required": [
+    "script"
+  ],
+  "type": "object"
+}
+```
+
 ### `recordToReport`
 
 Add text or screenshots to the current Midscene report.
@@ -1361,6 +2806,81 @@ Add text or screenshots to the current Midscene report.
       "type": "string"
     }
   },
+  "type": "object"
+}
+```
+
+### `runGherkinScenario`
+
+Execute a Gherkin scenario with the current Midscene UI Agent.
+
+**String shorthand:** Maps to `{ scenario: value }`.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheable": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "string"
+        },
+        "deepLocate": {
+          "type": "boolean"
+        },
+        "deepThink": {
+          "anyOf": [
+            {
+              "const": "unset",
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "effort": {
+          "enum": [
+            "fast",
+            "balance",
+            "deepThink"
+          ],
+          "type": "string"
+        },
+        "fileChooserAccept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "fileChooserAllowedDir": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "scenario": {
+      "pattern": "\\S",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scenario"
+  ],
   "type": "object"
 }
 ```
@@ -1430,6 +2950,31 @@ Set the current Playwright Page viewport size in CSS pixels and return the effec
   "required": [
     "width",
     "height"
+  ],
+  "type": "object"
+}
+```
+
+### `sleep`
+
+Wait for a fixed number of milliseconds, recording standard UI snapshots and honoring cancellation.
+
+**String shorthand:** Not supported by this Node.
+
+#### Input Schema
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "ms": {
+      "exclusiveMinimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "ms"
   ],
   "type": "object"
 }

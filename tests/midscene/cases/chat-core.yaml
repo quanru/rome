@@ -40,8 +40,8 @@ cases:
 
           2. Find the field identified by "How can I help you today?", enter text with "/".
       - aiAssert: >-
-          Typing "/" surfaces the skill picker failure state: an error notice reads "Failed to load
-          skills." and no skill entries are listed.
+          The composer contains "/" and a visible error notice directly above it reads "Failed to
+          load skills.".
       - aiAct: >-
           1. Close transient menus and clear temporary searches, filters, or drafts before
           continuing, without undoing saved changes.

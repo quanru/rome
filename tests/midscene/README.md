@@ -109,6 +109,10 @@ HEADLESS=false npm test
   `.midscene/test-results/<runId>/summary.json` (includes collection-error
   details)
 - Both are covered by `.gitignore`.
+- CI uploads each shard separately and also produces a combined
+  `midscene-e2e-report` artifact. Its `index.html` contains the overall Summary,
+  model names, shard counts, case results, durations, and links to the native
+  Midscene reports. The same result table appears on the Actions run Summary.
 
 ## Authoring Conventions
 

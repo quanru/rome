@@ -859,7 +859,7 @@ export default defineTestProject<ProjectContext>({
   test: { maxConcurrency: 1, testTimeout: 8 * 60_000 },
   projects: [
     {
-      name: "web",
+      name: process.env.MIDSCENE_PROJECT_NAME ?? "web",
       retry: process.env.MIDSCENE_RETRY ? Number(process.env.MIDSCENE_RETRY) : 2,
       setup,
       files: { include: ["cases/**/*.{yaml,yml}"] },
