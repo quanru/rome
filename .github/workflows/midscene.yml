@@ -38,8 +38,10 @@ on:
 # absent environment is provisioned open — so until a maintainer actually
 # configures a protected environment with required reviewers, the secret-
 # bearing path (the `midscene` matrix) is restricted to the protected main
-# branch. Pull requests run only the secret-free `harness-validation` job
-# (npm ci, type-check, YAML case collection, and Summary renderer tests).
+# branch in the upstream repository. Fork owners may explicitly dispatch a
+# fork branch with their fork's own secrets. Pull requests still run only the
+# secret-free `harness-validation` job (npm ci, type-check, YAML case
+# collection, and Summary renderer tests).
 
 permissions:
   contents: read
@@ -96,8 +98,12 @@ jobs:
   midscene:
     name: Midscene visual (${{ matrix.shard }})
     # Fail-closed trust gate: contributor-controlled pull request code never
-    # runs with the billable model credentials, including same-repo branches.
-    if: github.ref == 'refs/heads/main'
+    # runs automatically with billable model credentials. Upstream runs only
+    # on main; a fork owner may explicitly dispatch a fork ref with that fork's
+    # own secrets.
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && github.repository != 'rome-os/rome')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
