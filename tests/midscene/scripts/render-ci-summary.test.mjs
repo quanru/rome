@@ -16,8 +16,14 @@ const writeShard = async (root, shard, status, caseName, modelName) => {
     JSON.stringify({
       status,
       durationMs: 12_400,
-      steps:
-        status === "success" ? [] : [{ status: "failed", error: { message: "button missing" } }],
+      steps: [
+        {
+          id: "step-1",
+          status,
+          agentDetails: [{ executionId: "execution-1" }],
+          ...(status === "success" ? {} : { error: { message: "button missing" } }),
+        },
+      ],
     }),
   );
   await writeFile(
@@ -33,6 +39,7 @@ const writeShard = async (root, shard, status, caseName, modelName) => {
           lifecycle: { durationMs: 13_000 },
           cases: [
             {
+              caseId: "case-1",
               name: caseName,
               status,
               attempts: [{ resultFile: "project-0/case-1/attempt.json" }],
@@ -50,10 +57,46 @@ const writeShard = async (root, shard, status, caseName, modelName) => {
     "midscene-e2e-run-1",
   );
   await mkdir(reportRoot, { recursive: true });
+  await mkdir(path.join(reportRoot, "screenshots"));
   await writeFile(
     path.join(reportRoot, "index.html"),
-    `<script>window.x={"modelName":"${modelName}"}</script>`,
+    `<script>window.x={"modelName":"${modelName}"}</script><script type="midscene_test_run_dump">${JSON.stringify(
+      {
+        projects: [
+          {
+            documents: [
+              {
+                cases: [
+                  {
+                    caseId: "case-1",
+                    attempts: [
+                      {
+                        steps: [
+                          {
+                            id: "step-1",
+                            status,
+                            agentDetails: [{ executionId: "execution-1" }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    )}</script><script type="midscene_web_dump">${JSON.stringify({
+      executions: [
+        {
+          id: "execution-1",
+          tasks: [{ uiContext: { screenshot: { id: "screenshot-1" } } }],
+        },
+      ],
+    })}</script>`,
   );
+  await writeFile(path.join(reportRoot, "screenshots", "screenshot-1.jpeg"), "image bytes");
   await writeFile(
     path.join(root, `midscene-${shard}`, "midscene_run", "model.json"),
     JSON.stringify({ modelName, modelFamily: "deepseek" }),
@@ -74,6 +117,7 @@ test("builds one combined Markdown and HTML Summary for all shards", async (cont
     "reports-dir": root,
     "expected-projects": "web-shard-1,web-shard-2,web-shard-3",
     "run-url": "https://github.com/quanru/rome/actions/runs/1",
+    "pages-url": "https://quanru.github.io/rome/",
     "producer-result": "failure",
     output: markdownFile,
     "html-output": htmlFile,
@@ -85,10 +129,15 @@ test("builds one combined Markdown and HTML Summary for all shards", async (cont
   assert.match(markdown, /1\/2 cases · 50% passed/);
   assert.match(markdown, /web-shard-3 \(missing\)/);
   assert.match(markdown, /CHAT-09 sends a message.*button missing/);
+  assert.match(markdown, /All screenshots \(2\)/);
+  assert.match(markdown, /#runner-step=step-1/);
+  assert.match(markdown, /screenshots\/screenshot-1\.jpeg/);
   const page = await readFile(htmlFile, "utf8");
   assert.match(page, /Rome × Midscene Summary/);
   assert.match(page, /deepseek-v3\.2/);
   assert.match(page, /midscene-shard-1\/midscene_run\/report\/midscene-e2e-run-1\/index\.html/);
+  assert.match(page, /#runner-step=step-1/);
+  assert.match(page, /Node screenshot/);
 });
 
 test("escapes Markdown table content", () => {
@@ -105,6 +154,7 @@ test("escapes Markdown table content", () => {
     ],
     models: [],
     runUrl: "https://example.test/run",
+    pagesUrl: "https://example.test/reports/",
     producerResult: "failure",
   });
   assert.match(markdown, /web\\\|shard/);

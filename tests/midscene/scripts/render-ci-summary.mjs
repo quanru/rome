@@ -54,6 +54,62 @@ const html = (value) =>
 const newest = (left, right) =>
   Date.parse(left.startedAt ?? "") >= Date.parse(right.startedAt ?? "") ? left : right;
 
+const normalizedBaseUrl = (value) => {
+  const url = new URL(value);
+  if (!url.pathname.endsWith("/")) url.pathname += "/";
+  return url;
+};
+
+const reportUrl = (baseUrl, reportPath) => new URL(reportPath, normalizedBaseUrl(baseUrl)).href;
+
+const caseUrl = (baseUrl, testCase) => {
+  const url = new URL(testCase.reportPath, normalizedBaseUrl(baseUrl));
+  if (testCase.stepId) {
+    url.hash = new URLSearchParams({ "runner-step": testCase.stepId }).toString();
+  }
+  return url.href;
+};
+
+const normalizeJsonControlCharacters = (source) => {
+  let normalized = "";
+  let insideString = false;
+  let escaped = false;
+  for (const character of source) {
+    if (!insideString) {
+      normalized += character;
+      if (character === '"') insideString = true;
+    } else if (escaped) {
+      normalized += character;
+      escaped = false;
+    } else if (character === "\\") {
+      normalized += character;
+      escaped = true;
+    } else if (character === '"') {
+      normalized += character;
+      insideString = false;
+    } else if (character.charCodeAt(0) <= 0x1f) {
+      normalized += `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+    } else {
+      normalized += character;
+    }
+  }
+  return normalized;
+};
+
+const reportDumps = (source) =>
+  [
+    ...source.matchAll(
+      /<script\s+([^>]*\btype=["']midscene_web_dump["'][^>]*)>\s*(\{[\s\S]*?)<\/script>/g,
+    ),
+  ].map((match) => JSON.parse(normalizeJsonControlCharacters(match[2])));
+
+const testRunDumps = (source) =>
+  [
+    ...source.matchAll(
+      /<script\s+[^>]*\btype=["']midscene_test_run_dump["'][^>]*>\s*(\{[\s\S]*?)<\/script>/g,
+    ),
+  ].map((match) => JSON.parse(normalizeJsonControlCharacters(match[1])));
+
 const loadAttempt = async (summaryFile, attempt) => {
   if (!attempt?.resultFile) return null;
   const resultFile = path.join(path.dirname(summaryFile), attempt.resultFile);
@@ -101,7 +157,10 @@ const modelsFromReports = async (directory) => {
 const nativeReportFor = async (reportsDirectory, record) => {
   if (record.report) {
     const report = path.resolve(path.dirname(record.summaryFile), record.report);
-    return path.relative(reportsDirectory, report).split(path.sep).join("/");
+    return {
+      file: report,
+      path: path.relative(reportsDirectory, report).split(path.sep).join("/"),
+    };
   }
   const { summaryFile } = record;
   const artifactRoot = summaryFile.slice(0, summaryFile.indexOf(`${path.sep}.midscene${path.sep}`));
@@ -117,7 +176,65 @@ const nativeReportFor = async (reportsDirectory, record) => {
     );
   });
   const report = reports.sort().at(-1);
-  return report ? path.relative(reportsDirectory, report).split(path.sep).join("/") : null;
+  return report
+    ? { file: report, path: path.relative(reportsDirectory, report).split(path.sep).join("/") }
+    : null;
+};
+
+const evidenceForCase = async (reportsDirectory, report, caseId, passed) => {
+  if (!report || !caseId) return {};
+  const source = await readFile(report.file, "utf8");
+  const reportCase = testRunDumps(source)
+    .flatMap((run) => run.projects ?? [])
+    .flatMap((project) => project.documents ?? [])
+    .flatMap((document) => document.cases ?? [])
+    .find((testCase) => testCase.caseId === caseId);
+  const attempt = reportCase?.attempts?.at(-1);
+  if (!attempt) return {};
+  const steps = [
+    ...(attempt.beforeEach ?? []),
+    ...(attempt.steps ?? []),
+    ...(attempt.afterEach ?? []),
+  ];
+  const hasAgentDetails = (step) => Array.isArray(step?.agentDetails) && step.agentDetails.length;
+  const step = passed
+    ? steps.findLast(hasAgentDetails)
+    : (steps.find((item) => item.status === "failed" && hasAgentDetails(item)) ??
+      steps.find((item) => item.status === "failed") ??
+      steps.findLast(hasAgentDetails));
+  if (!step) return {};
+
+  const dumps = reportDumps(source);
+  let screenshotId = null;
+  for (const detail of [...(step.agentDetails ?? [])].reverse()) {
+    for (const dump of dumps) {
+      const execution = dump.executions?.find((item) => item.id === detail.executionId);
+      const task = execution?.tasks?.findLast((item) => item.uiContext?.screenshot?.id);
+      if (task) {
+        screenshotId = task.uiContext.screenshot.id;
+        break;
+      }
+    }
+    if (screenshotId) break;
+  }
+
+  let screenshotPath = null;
+  if (screenshotId) {
+    const screenshotDirectory = path.join(path.dirname(report.file), "screenshots");
+    const filename = (
+      await readdir(screenshotDirectory).catch((error) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      })
+    ).find((name) => name.slice(0, name.lastIndexOf(".")) === screenshotId);
+    if (filename) {
+      screenshotPath = path
+        .relative(reportsDirectory, path.join(screenshotDirectory, filename))
+        .split(path.sep)
+        .join("/");
+    }
+  }
+  return { stepId: step.id ?? null, screenshotPath };
 };
 
 export async function collectReportData(reportsDirectory, expectedProjects = []) {
@@ -147,22 +264,27 @@ export async function collectReportData(reportsDirectory, expectedProjects = [])
       projects.push({ name, status: "missing", durationMs: null, reportPath: null, cases: [] });
       continue;
     }
+    const report = await nativeReportFor(reportsDirectory, record);
     const cases = [];
     for (const testCase of record.project.cases ?? []) {
       const attemptRef = testCase.attempts?.at(-1);
       const attempt = await loadAttempt(record.summaryFile, attemptRef).catch(() => null);
+      const passed = testCase.status === "success";
+      const evidence = await evidenceForCase(reportsDirectory, report, testCase.caseId, passed);
       cases.push({
         name: testCase.name,
         status: testCase.status,
         durationMs: attempt?.durationMs ?? null,
-        reason: testCase.status === "success" ? "" : failureReason(attempt),
+        reason: passed ? "" : failureReason(attempt),
+        reportPath: report?.path ?? null,
+        ...evidence,
       });
     }
     projects.push({
       name,
       status: record.project.status,
       durationMs: record.project.lifecycle?.durationMs ?? record.durationMs,
-      reportPath: await nativeReportFor(reportsDirectory, record),
+      reportPath: report?.path ?? null,
       cases,
     });
   }
@@ -177,7 +299,26 @@ const totalsFor = (projects) => {
   return { cases, passed, failed: cases.length - passed, total: cases.length };
 };
 
-export function renderMarkdown({ projects, models, runUrl, producerResult = "success" }) {
+const screenshotGrid = (pagesUrl, cases) => {
+  const cells = cases
+    .filter((testCase) => testCase.screenshotPath && testCase.reportPath)
+    .map((testCase) => {
+      const target = caseUrl(pagesUrl, testCase);
+      const image = reportUrl(pagesUrl, testCase.screenshotPath);
+      const name = markdownCell(testCase.name);
+      return `[![${name}](${image})](${target})<br>[${name}](${target})`;
+    });
+  if (!cells.length) return "";
+  const rows = [];
+  for (let index = 0; index < cells.length; index += 3) {
+    const row = cells.slice(index, index + 3);
+    while (row.length < 3) row.push("");
+    rows.push(`| ${row.join(" | ")} |`);
+  }
+  return ["| | | |", "|:--|:--|:--|", ...rows].join("\n");
+};
+
+export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success" }) {
   const totals = totalsFor(projects);
   const complete = producerResult === "success" && totals.total > 0 && totals.failed === 0;
   const sections = [
@@ -187,7 +328,7 @@ export function renderMarkdown({ projects, models, runUrl, producerResult = "suc
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",
-    `**[Download the combined HTML report](${runUrl}#artifacts)**`,
+    `**[Open the published HTML report](${reportUrl(pagesUrl, "index.html")})** · [Download the artifact](${runUrl}#artifacts)`,
     "",
     "| Shard | Passed | Failed | Duration |",
     "|:--|--:|--:|--:|",
@@ -209,7 +350,7 @@ export function renderMarkdown({ projects, models, runUrl, producerResult = "suc
       "|:--|:--|--:|:--|",
       ...failures.map(
         (testCase) =>
-          `| ❌ ${markdownCell(testCase.name)} | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} | ${markdownCell(testCase.reason)} |`,
+          `| ❌ [${markdownCell(testCase.name)}](${caseUrl(pagesUrl, testCase)}) | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} | ${markdownCell(testCase.reason)} |`,
       ),
       "",
     );
@@ -219,30 +360,41 @@ export function renderMarkdown({ projects, models, runUrl, producerResult = "suc
 
   sections.push(
     "<details>",
+    `<summary>All screenshots (${totals.cases.filter((testCase) => testCase.screenshotPath).length})</summary>`,
+    "",
+    screenshotGrid(pagesUrl, totals.cases) || "_No case screenshots were produced._",
+    "",
+    "</details>",
+    "",
+    "<details>",
     `<summary>All cases (${totals.total})</summary>`,
     "",
     "| | Case | Shard | Duration |",
     "|:--:|:--|:--|--:|",
     ...totals.cases.map(
       (testCase) =>
-        `| ${testCase.status === "success" ? "✅" : "❌"} | ${markdownCell(testCase.name)} | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} |`,
+        `| ${testCase.status === "success" ? "✅" : "❌"} | [${markdownCell(testCase.name)}](${caseUrl(pagesUrl, testCase)}) | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} |`,
     ),
     "",
     "</details>",
+    "",
+    "Each image is the original Midscene node screenshot. Click a case name or image to open that exact step in the native report.",
     "",
   );
   return sections.join("\n");
 }
 
-export function renderHtml({ projects, models, runUrl }) {
+export function renderHtml({ projects, models, pagesUrl, runUrl }) {
   const totals = totalsFor(projects);
   const rows = totals.cases
     .map((testCase) => {
-      const project = projects.find((item) => item.name === testCase.project);
-      const caseName = project?.reportPath
-        ? `<a href="${html(project.reportPath)}">${html(testCase.name)}</a>`
+      const caseName = testCase.reportPath
+        ? `<a href="${html(caseUrl(pagesUrl, testCase))}">${html(testCase.name)}</a>`
         : html(testCase.name);
-      return `<tr><td class="status">${testCase.status === "success" ? "✅" : "❌"}</td><td>${caseName}</td><td>${html(testCase.project)}</td><td>${html(formatDuration(testCase.durationMs))}</td><td>${html(testCase.reason)}</td></tr>`;
+      const screenshot = testCase.screenshotPath
+        ? `<a href="${html(caseUrl(pagesUrl, testCase))}"><img src="${html(reportUrl(pagesUrl, testCase.screenshotPath))}" alt="${html(testCase.name)} screenshot" loading="lazy"></a>`
+        : "Not available";
+      return `<tr><td class="status">${testCase.status === "success" ? "✅" : "❌"}</td><td>${caseName}</td><td>${html(testCase.project)}</td><td>${html(formatDuration(testCase.durationMs))}</td><td class="preview">${screenshot}</td><td>${html(testCase.reason)}</td></tr>`;
     })
     .join("\n");
   const shardRows = projects
@@ -250,7 +402,7 @@ export function renderHtml({ projects, models, runUrl }) {
       const passed = project.cases.filter((testCase) => testCase.status === "success").length;
       const failed = project.cases.length - passed;
       const name = project.reportPath
-        ? `<a href="${html(project.reportPath)}">${html(project.name)}</a>`
+        ? `<a href="${html(reportUrl(pagesUrl, project.reportPath))}">${html(project.name)}</a>`
         : html(`${project.name} (missing)`);
       return `<tr><td>${name}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
     })
@@ -258,11 +410,11 @@ export function renderHtml({ projects, models, runUrl }) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Rome × Midscene Summary</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;max-width:1200px;margin:40px auto;padding:0 24px;color:#172033}h1{margin-bottom:4px}.meta{color:#596579}table{width:100%;border-collapse:collapse;margin:20px 0 32px}th,td{border:1px solid #d8dee9;padding:9px 12px;text-align:left;vertical-align:top}th{background:#f4f6f8}.status{width:30px;text-align:center}a{color:#0969da}code{background:#f4f6f8;padding:2px 5px;border-radius:4px}</style></head>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:40px auto;padding:0 24px;color:#172033}h1{margin-bottom:4px}.meta{color:#596579}table{width:100%;border-collapse:collapse;margin:20px 0 32px}th,td{border:1px solid #d8dee9;padding:9px 12px;text-align:left;vertical-align:top}th{background:#f4f6f8}.status{width:30px;text-align:center}.preview{width:240px}.preview img{display:block;width:240px;height:150px;object-fit:cover;border-radius:6px}a{color:#0969da}code{background:#f4f6f8;padding:2px 5px;border-radius:4px}</style></head>
 <body><h1>Rome × Midscene Summary</h1>
 <p class="meta"><strong>${totals.passed}/${totals.total} cases passed</strong> · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
 <h2>Shards</h2><table><thead><tr><th>Shard</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
-<h2>Cases</h2><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
+<h2>Cases</h2><p>Click a case name or screenshot to open its exact Midscene step.</p><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Node screenshot</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
 }
 
 export async function buildSummary(options) {
@@ -274,6 +426,7 @@ export async function buildSummary(options) {
   const data = await collectReportData(reportsDirectory, expectedProjects);
   const values = {
     ...data,
+    pagesUrl: options["pages-url"],
     runUrl: options["run-url"],
     producerResult: options["producer-result"],
   };

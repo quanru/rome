@@ -26,7 +26,7 @@ PRs.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.
-- The suite contains 42 user journeys. Related page states share one case so
+- The suite contains 36 AI-native cases. Related page states share one case so
   the model completes a product goal instead of replaying isolated UI checks.
 - The package also registers deterministic nodes for harness setup and focused
   debugging:
@@ -111,8 +111,9 @@ HEADLESS=false npm test
 - Both are covered by `.gitignore`.
 - CI uploads each shard separately and also produces a combined
   `midscene-e2e-report` artifact. Its `index.html` contains the overall Summary,
-  model names, shard counts, case results, durations, and links to the native
-  Midscene reports. The same result table appears on the Actions run Summary.
+  model names, shard counts, case results, durations, screenshots, and links to
+  exact steps in the native Midscene reports. CI publishes the HTML through
+  GitHub Pages so links and images work from the Actions run Summary.
 
 ## Authoring Conventions
 
