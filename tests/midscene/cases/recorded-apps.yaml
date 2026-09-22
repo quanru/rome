@@ -19,8 +19,11 @@ cases:
     steps:
       - app.open:
           path: /apps/code-review
+      - app.scrollTextIntoView:
+          text: PR #301
       - aiAct: >-
-          Click the visible "PR #301" review item once, then stop.
+          Click the now-visible "PR #301" review item exactly once, then immediately declare the
+          action complete without inspecting the result or retrying.
       - aiAssert: >-
           The PR #301 review detail is open and shows its completed review timeline rather than an
           error state.

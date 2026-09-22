@@ -26,6 +26,7 @@ const infrastructureNodes = new Set(["app.open", "app.reload", "app.expectUrl"])
 const deterministicAssistNodes = new Set([
   "app.clickByLabel",
   "app.expectTexts",
+  "app.pressKey",
   "app.scrollTextIntoView",
 ]);
 const expectedCasesByShard = new Map([

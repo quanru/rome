@@ -1,16 +1,20 @@
 cases:
-  - name: SHELL-02 Open global chat search
+  - name: SHELL-02 Search global chat history
     tags:
       - shell
       - shard-6
+      - deterministic-assist
     steps:
       - app.open:
           path: /chat
+      - app.pressKey:
+          key: mod+k
       - aiAct: >-
-          Open global chat search using the Command+K keyboard shortcut once, then stop.
+          Type "market recap" into the open "Search chats and messages" field, then stop as soon as
+          the query is visible in the field.
       - aiAssert: >-
-          A search dialog is open with the field "Search chats and messages", a "Recent chats"
-          heading, and keyboard hints for navigating, opening, and closing results.
+          A global search dialog is open with "market recap" in its search field and shows at least
+          one relevant chat or message result about the market recap.
   - name: SHELL-03 Open the mobile navigation drawer
     tags:
       - shell
