@@ -129,7 +129,8 @@ test("builds one combined Markdown and HTML Summary for all shards", async (cont
   assert.match(markdown, /1\/2 cases · 50% passed/);
   assert.match(markdown, /web-shard-3 \(missing\)/);
   assert.match(markdown, /CHAT-09 sends a message.*button missing/);
-  assert.match(markdown, /All screenshots \(2\)/);
+  assert.match(markdown, /Case reports \(2\)/);
+  assert.match(markdown, /\| Screenshot \| Report \| Result \| Shard \| Duration \|/);
   assert.match(markdown, /#runner-step=step-1/);
   assert.match(markdown, /screenshots\/screenshot-1\.jpeg/);
   const page = await readFile(htmlFile, "utf8");
