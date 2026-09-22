@@ -20,7 +20,10 @@ cases:
       - app.open:
           path: /chat/mock-chat-market-brief
       - aiAct: >-
-          Click the visible blue underlined "September 11 market recap" text once, then stop.
+          Near the top of the chat conversation, click the underlined "September 11 market recap"
+          link below the first market-summary paragraph. Do not click the nearby September 10 link.
+          Click exactly once and immediately declare the action complete, even if the screen has not
+          visibly changed yet; never retry the click.
       - aiAssert: >-
           The Stock Daily report is open in the workspace, marked "Completed", and titled "US Stock
           Market Daily Close Report | 2026-09-11" rather than showing an error.

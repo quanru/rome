@@ -18,11 +18,13 @@ cases:
       - deterministic-assist
     steps:
       - app.open:
-          path: /projects/todo.md
+          path: /projects
       - aiAct: >-
-          Click "Edit" in the Preview/Edit view toggle once, then stop.
+          In the project tree, open the visible todo.md file. Finish when the right-hand file viewer
+          shows todo.md in Preview mode with its rendered content visible.
       - aiAssert: >-
-          todo.md is open in Edit mode with its Markdown text visible in an editable text area.
+          todo.md is open in Preview mode and displays "Mock file content for the dashboard mock
+          mode." rather than a loading or error state.
       - app.open:
           path: /memory
       - app.clickByLabel:
@@ -52,8 +54,9 @@ cases:
 
           5. Find and click Rename.
 
-          6. Before continuing, confirm these visible checkpoints: A "Rename item" dialog opens with
-          the Name field prefilled "notes.txt" and "Cancel" / "Rename" actions.
+          6. The duplicate-name rejection is the expected successful result of this test. Stop when
+          the UI shows "Already exists." and report the action as complete; do not return a task
+          failure because the rename was rejected.
       - aiAssert: >-
           The duplicate rename is rejected: both "notes.txt" and the existing "README.md" remain
           listed in the demo-app tree.

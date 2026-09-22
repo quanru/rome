@@ -20,12 +20,13 @@ cases:
       - app.open:
           path: /apps
       - aiAct: >-
-          On the Issue Triage card, open its actions menu and choose "Disable". Then reopen that
+          First search for "issue" using the "Search apps" field so Issue Triage is the only result.
+          On that remaining card, open its actions menu and choose "Disable". Then reopen the same
           card's actions menu. Finish with the menu open in the disabled state, showing "Enable"
           instead of "Disable".
       - aiAssert: >-
-          The open actions menu belongs to Issue Triage and offers "Enable", confirming that Issue
-          Triage is disabled.
+          The search field contains "issue", the page shows exactly one installed-app result, and
+          that result's open actions menu offers "Enable", confirming the filtered app is disabled.
   - name: APPS-03 Open Issue Triage from its details page
     tags:
       - apps

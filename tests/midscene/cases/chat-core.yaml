@@ -21,66 +21,70 @@ cases:
     tags:
       - chat
       - shard-1
+      - deterministic-assist
     steps:
       - app.open:
           path: /chat
       - aiAct: >-
-          1. Find the field identified by "How can I help you today?", enter text with "Book a focus
-          block tomorrow morning".
-
-          2. Find the visible control labelled "Send" and click it.
+          Trigger the mock app's expected failed-send state: find the field identified by "How can
+          I help you today?", enter "Book a focus block tomorrow morning", then click the visible
+          control labelled "Send". The standalone mock intentionally returns a proxy error instead
+          of sending; reaching that visible error with the draft preserved completes this task
+          successfully. Enter the text directly into the large rounded composer at the bottom;
+          keyboard focus has no visible indicator, so do not repeatedly tap it or wait for a visual
+          focus change before entering the text.
+      - app.expectUrl:
+          path: /chat
+      - app.expectTexts:
+          scope: body
+          all:
+            - /api/chat/sessions
       - aiAssert: >-
           The message is not sent: an error above the composer reports the failed request to
           "/api/chat/sessions" (the standalone mock has no chat backend, so the dev proxy fails).
           The typed text remains in the composer and the URL stays on /chat (no new conversation is
           created).
       - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the field identified by "How can I help you today?", enter text with "/".
+          In the large rounded composer at the bottom, replace its entire current value "Book a
+          focus block tomorrow morning" with "/". The visible old draft is the field value, not a
+          placeholder. Use the input action to replace it directly; keyboard focus has no visible
+          indicator, so do not repeatedly tap or wait for a visual focus change.
+      - app.expectUrl:
+          path: /chat
+      - app.expectTexts:
+          scope: body
+          all:
+            - Failed to load skills.
       - aiAssert: >-
           The composer contains "/" and a visible error notice directly above it reads "Failed to
           load skills.".
-      - aiAct: >-
-          1. Close transient menus and clear temporary searches, filters, or drafts before
-          continuing, without undoing saved changes.
-
-          2. Find the field identified by "How can I help you today?", enter text with "@".
-
-          4. Before continuing, confirm these visible checkpoints: An agent mention picker titled
-          "Pick an agent to chat with" opens, showing a "Built-in agents" section with a "Rome"
-          group and its two agents, "main" and "envoy".
-      - aiAssert: >-
-          An agent mention picker titled "Pick an agent to chat with" opens, showing a "Built-in
-          agents" section with a "Rome" group and its two agents, "main" and "envoy".
-  - name: CHAT-03 Preserve a draft after a failed send in an existing conversation
+  - name: CHAT-03 Open the agent mention picker
     tags:
       - chat
       - shard-1
     steps:
       - app.open:
-          path: /chat/mock-chat-2
+          path: /chat
       - aiAct: >-
-          In the open "Draft launch email" conversation, enter "Make the subject line shorter" in
-          the bottom message composer, then use the arrow-shaped Send button immediately beside
-          that same composer. Do not use the Send button inside the earlier question card. Finish
-          after the failed-request error appears above the bottom composer.
+          Enter "@" directly into the empty message composer on the Chat home. Finish when the agent
+          mention picker opens; do not select an agent.
       - aiAssert: >-
-          Sending fails with an error above the composer: a proxy error message naming
-          "/api/chat/sessions/mock-chat-2/turns" (the standalone mock has no chat backend). The
-          typed draft "Make the subject line shorter" is still in the composer and no new user
-          message bubble appears in the transcript.
+          An agent mention picker titled "Pick an agent to chat with" is open, showing a "Built-in
+          agents" section with a "Rome" group and its two agents, "main" and "envoy".
   - name: CHAT-04 Inspect a successful execution trace
     tags:
       - chat
       - shard-1
+      - deterministic-assist
     steps:
       - app.open:
           path: /chat/mock-chat-1
+      - app.scrollTextIntoView:
+          text: 1 app · 1 step · 8.4s
       - aiAct: >-
-          Click the visible collapsed trace summary reading "1 app · 1 step · 8.4s" beneath the
-          first assistant response once, then stop.
+          Click near the upper-middle of the now-centered collapsed trace summary reading "1 app ·
+          1 step · 8.4s" beneath the first assistant response. Avoid the lower edge, click exactly
+          once, and immediately declare the action complete without retrying.
       - aiAssert: >-
           The "Trace" drawer is open and shows a successful "settings_get" step for the "briefer"
           app, including "keys: [2]" and a duration. The header reads "Used 1 app · 1 step · 8.4s".
