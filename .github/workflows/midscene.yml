@@ -37,11 +37,9 @@ on:
 # protected environment in the workflow does not create its reviewer gate — an
 # absent environment is provisioned open — so until a maintainer actually
 # configures a protected environment with required reviewers, the secret-
-# bearing path (the `midscene` matrix) is restricted to trusted refs only:
-# pushes to main (merge-gated code), manual dispatches on main, and same-repo
-# pull requests whose authors already have permission to push to the repository.
-# External fork pull requests only run the secret-free `harness-validation`
-# job (npm ci, type-check, YAML case collection).
+# bearing path (the `midscene` matrix) is restricted to the protected main
+# branch. Pull requests run only the secret-free `harness-validation` job
+# (npm ci, type-check, YAML case collection, and Summary renderer tests).
 
 permissions:
   contents: read
@@ -97,13 +95,9 @@ jobs:
 
   midscene:
     name: Midscene visual (${{ matrix.shard }})
-    # Fail-closed trust gate: billable secrets run against the protected
-    # default branch or a same-repository pull request. External fork pull
-    # requests never receive repository secrets.
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+    # Fail-closed trust gate: contributor-controlled pull request code never
+    # runs with the billable model credentials, including same-repo branches.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:

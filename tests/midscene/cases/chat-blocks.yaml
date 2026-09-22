@@ -12,18 +12,18 @@ cases:
       - aiAssert: >-
           The "Architecture" section and "Mermaid diagram" disclosure remain visible, but the
           diagram content is collapsed. The nearby "Verification" heading is still visible.
-  - name: CHAT-07 Open a linked learning kit from a recorded conversation
+  - name: CHAT-07 Open a linked market report from a recorded conversation
     tags:
       - chat
       - shard-2
     steps:
       - app.open:
-          path: /chat/mock-chat-learn-video
+          path: /chat/mock-chat-market-brief
       - aiAct: >-
-          Click the visible blue underlined "Open the learning kit" text once, then stop.
+          Click the visible blue underlined "September 11 market recap" text once, then stop.
       - aiAssert: >-
-          A YouTube page for "Deep Dive into LLMs like ChatGPT" is open and visibly shows the video
-          content rather than an error.
+          The Stock Daily report is open in the workspace, marked "Completed", and titled "US Stock
+          Market Daily Close Report | 2026-09-11" rather than showing an error.
   - name: CHAT-08 Choose a tone on the live question card
     tags:
       - chat

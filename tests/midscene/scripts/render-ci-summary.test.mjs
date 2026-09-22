@@ -162,3 +162,31 @@ test("escapes Markdown table content", () => {
   assert.match(markdown, /Case \\\| name/);
   assert.match(markdown, /line 1 line 2/);
 });
+
+test("reports a missing expected shard as an overall failure", () => {
+  const markdown = renderMarkdown({
+    projects: [
+      {
+        name: "web-shard-1",
+        status: "success",
+        durationMs: 1000,
+        cases: [{ name: "AUTH-01", status: "success", durationMs: 1000, reason: "" }],
+      },
+      {
+        name: "web-shard-2",
+        status: "missing",
+        durationMs: null,
+        cases: [],
+      },
+    ],
+    models: ["deepseek-v3.2 (deepseek)"],
+    runUrl: "https://example.test/run",
+    pagesUrl: "https://example.test/reports/",
+    producerResult: "success",
+  });
+
+  assert.match(markdown, /Rome × Midscene · failure captured/);
+  assert.match(markdown, /Incomplete shards \(1\)/);
+  assert.match(markdown, /web-shard-2.*missing/);
+  assert.doesNotMatch(markdown, /All 1 cases passed/);
+});

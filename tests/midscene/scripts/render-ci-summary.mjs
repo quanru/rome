@@ -311,7 +311,12 @@ const evidenceRows = (pagesUrl, cases) =>
 
 export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success" }) {
   const totals = totalsFor(projects);
-  const complete = producerResult === "success" && totals.total > 0 && totals.failed === 0;
+  const incompleteProjects = projects.filter((project) => project.status !== "success");
+  const complete =
+    producerResult === "success" &&
+    totals.total > 0 &&
+    totals.failed === 0 &&
+    incompleteProjects.length === 0;
   const sections = [
     `## Rome × Midscene · ${complete ? "passed" : "failure captured"}`,
     "",
@@ -332,6 +337,19 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
     "",
   ];
 
+  if (incompleteProjects.length) {
+    sections.push(
+      `### Incomplete shards (${incompleteProjects.length})`,
+      "",
+      "| Shard | Status |",
+      "|:--|:--|",
+      ...incompleteProjects.map(
+        (project) => `| ${markdownCell(project.name)} | ❌ ${markdownCell(project.status)} |`,
+      ),
+      "",
+    );
+  }
+
   const failures = totals.cases.filter((testCase) => testCase.status !== "success");
   if (failures.length) {
     sections.push(
@@ -345,7 +363,7 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
       ),
       "",
     );
-  } else {
+  } else if (incompleteProjects.length === 0) {
     sections.push(`**All ${totals.total} cases passed.**`, "");
   }
 

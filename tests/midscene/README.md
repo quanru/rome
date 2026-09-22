@@ -3,9 +3,8 @@
 Visual-driven end-to-end testing for Rome using
 [Midscene](https://midscenejs.com/) YAML cases. Tests run against Rome's
 **MSW mock mode** (`pnpm dev:mock`): they never hit a real backend or use real
-personal data, and every assertion is backed by in-repo synthetic fixtures, so
-the cases are fully deterministic, reproducible offline, and runnable on fork
-PRs.
+personal data. The browser only loads local synthetic fixtures. The Node-side
+Midscene agent calls the configured model endpoint.
 
 > The companion planning doc is
 > [`docs/midscene-e2e-plan.md`](../../docs/midscene-e2e-plan.md) (case catalog,
@@ -23,11 +22,15 @@ PRs.
     Chinese CI machine);
   - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
     pins only Apps/Chat/Projects by default).
+- A BrowserContext request guard aborts every browser request outside
+  `ROME_E2E_BASE_URL`. Recorded apps cannot add hidden CDN dependencies.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.
 - The suite contains 36 AI-native cases. Related page states share one case so
   the model completes a product goal instead of replaying isolated UI checks.
+- The collector validates a 36-case per-shard manifest. A missing or moved case
+  fails the secret-free validation job.
 - The package also registers deterministic nodes for harness setup and focused
   debugging:
   `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,
@@ -114,6 +117,8 @@ HEADLESS=false npm test
   model names, shard counts, case results, durations, screenshots, and links to
   exact steps in the native Midscene reports. CI publishes the HTML through
   GitHub Pages so links and images work from the Actions run Summary.
+- Pull requests run only the secret-free harness validation job. The
+  model-backed shard matrix runs only on the protected `main` branch.
 
 ## Authoring Conventions
 

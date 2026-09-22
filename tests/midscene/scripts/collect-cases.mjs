@@ -28,16 +28,32 @@ const deterministicAssistNodes = new Set([
   "app.expectTexts",
   "app.scrollTextIntoView",
 ]);
+const expectedCasesByShard = new Map([
+  ["shard-1", 5],
+  ["shard-2", 8],
+  ["shard-3", 7],
+  ["shard-4", 6],
+  ["shard-5", 6],
+  ["shard-6", 4],
+]);
+const collectedCasesByShard = new Map([...expectedCasesByShard.keys()].map((shard) => [shard, 0]));
 
 const validateAiNativeCase = (testCase) => {
   const nodes = testCase.definition.steps.map((step) => step.node);
   const tags = new Set(testCase.definition.tags);
   const allowsDeterministicAssist = tags.has("deterministic-assist");
   const problems = [];
+  const shardTags = [...tags].filter((tag) => expectedCasesByShard.has(tag));
 
   if (nodes[0] !== "app.open") problems.push("the first step must be app.open");
   if (!nodes.includes("aiAct")) problems.push("at least one aiAct is required");
   if (!nodes.includes("aiAssert")) problems.push("at least one aiAssert is required");
+  if (shardTags.length !== 1) {
+    problems.push(`exactly one shard tag is required, found ${shardTags.length}`);
+  } else {
+    const shard = shardTags[0];
+    collectedCasesByShard.set(shard, (collectedCasesByShard.get(shard) ?? 0) + 1);
+  }
 
   const forbidden = nodes.filter(
     (node) =>
@@ -97,6 +113,22 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
+const manifestMismatches = [...expectedCasesByShard].filter(
+  ([shard, expected]) => collectedCasesByShard.get(shard) !== expected,
+);
+if (manifestMismatches.length > 0) {
+  for (const [shard, expected] of manifestMismatches) {
+    console.error(
+      `x ${shard}: expected ${expected} cases, collected ${collectedCasesByShard.get(shard) ?? 0}`,
+    );
+  }
+  console.error("\nCollection failed: the committed shard manifest is out of date.");
+  process.exit(1);
+}
+
 console.log(
   `Collection OK: ${caseCount} cases in ${fileCount} file(s) across ${loaded.projects.length} project(s).`,
+);
+console.log(
+  `Shard manifest: ${[...collectedCasesByShard].map(([shard, count]) => `${shard}=${count}`).join(", ")}.`,
 );

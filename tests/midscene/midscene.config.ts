@@ -10,6 +10,7 @@ import { chromium, type Browser, type BrowserContext, type Locator, type Page } 
 loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
 const BASE_URL = process.env.ROME_E2E_BASE_URL ?? "http://localhost:3200";
+const BASE_ORIGIN = new URL(BASE_URL).origin;
 // The mock app boots with an English UI when no language is cached, but Chinese
 // CI runners would detect zh-CN from the OS. Pin English explicitly so every
 // assertion in the YAML cases targets one language.
@@ -104,6 +105,18 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
       // navigator.clipboard.writeText resolves; grant it explicitly so the
       // feedback is deterministic under headless CI.
       permissions: ["clipboard-read", "clipboard-write"],
+    });
+    // The suite promises an offline/local mock boundary. Abort browser traffic
+    // to every other origin so a recorded app cannot silently add a CDN or
+    // third-party dependency. Model calls are made by the Node-side agent and
+    // are therefore outside this browser request guard.
+    await browserContext.route("**/*", async (route) => {
+      const requestUrl = route.request().url();
+      if (new URL(requestUrl).origin === BASE_ORIGIN) {
+        await route.continue();
+        return;
+      }
+      await route.abort("blockedbyclient");
     });
     // Pin the i18n language and sidebar entries before the app bundle runs.
     const pins = [...DEFAULT_PINS, ...(input.pins ?? [])].map((id) => ({

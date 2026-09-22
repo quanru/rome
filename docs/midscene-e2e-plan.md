@@ -2,20 +2,18 @@
 
 > Onboarding attachment for Rome maintainers.
 >
-> Status: all 42 journeys catalogued in section 5 are defined as AI-native YAML
+> Status: all 36 cases catalogued in section 5 are defined as AI-native YAML
 > workflows under `tests/midscene/cases/`. Six CI shards split them
-> 5/8/7/9/8/5. Each case uses `aiAct` for interaction and `aiAssert` for
+> 5/8/7/6/6/4. Each case uses `aiAct` for interaction and `aiAssert` for
 > its visible outcome.
 
 ## 1. Background and Goals
 
 Rome is a conversation-centric personal AI OS that integrates routines,
 approvals, an activity feed and installed apps. Much of its product experience
-is made of **rich interactive cards** and **cross-page state coupling**: a
-routine is proposed in chat, enabled with one click, and lands on the Routines
-page; an approval is completed on a chat card and syncs to Activity; an app
-link in chat opens in a workspace tile beside the conversation and shows up in
-the installed Apps list.
+uses rich interactive cards. A routine proposal changes state inside Chat, an
+approval completes inside its card, and an app link opens beside the current
+conversation.
 
 This kind of experience has two testing problems:
 
@@ -28,7 +26,7 @@ This kind of experience has two testing problems:
 This proposal uses [Midscene](https://midscenejs.com/) visual-semantic driving
 for problem 1, and Rome's built-in **MSW mock mode** (`pnpm dev:mock`) for
 problem 2: every case runs only against in-repo synthetic fixtures, with no
-real accounts and no external side effects, and is reproducible on a fork PR.
+  real accounts and no external side effects.
 
 Goals:
 
@@ -36,7 +34,8 @@ Goals:
   stories.
 - Serve as a reference implementation for offering Midscene CI to open-source
   projects (deterministic fixtures + visual-semantic assertions + sharded CI).
-- Keep every case offline-runnable, repeatable and mutually non-polluting.
+- Keep browser traffic local, repeatable and mutually non-polluting. The
+  Node-side Midscene agent still calls the configured model endpoint.
 
 ## 2. Architecture
 
@@ -186,28 +185,24 @@ reasons behind them.
   minutes); its log is uploaded as an artifact on failure.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
   every case carries exactly one `shard-N` tag. `fail-fast: false`,
-  `max-parallel: 2`, a 45-minute per-job timeout, and 2 case-level retries.
-- **Evidence**: every shard always uploads the `midscene_run/` and
-  `.midscene/` report artifacts (14-day retention); the mock server log is
-  attached on failure.
+  `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
+- **Evidence**: every shard uploads the `midscene_run/` and `.midscene/`
+  report artifacts. The aggregation job publishes an Actions Summary table
+  with one screenshot and an exact report-step link for every case. It also
+  publishes the combined HTML and native reports through GitHub Pages.
 - **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
   --no-network-family-autoselection` works around runner-side IPv6 racing when
   the model endpoint is only stable over IPv4.
-- **Possible follow-up**: aggregate reports and publish a GitHub Pages history,
-  reusing Midscene's report-bundle + deploy reusable workflow. That needs an
-  extra Rome-side report build script and is out of scope for this iteration.
-
-Shard split (grouped by measured runtime and module; six parallel shards take
-roughly 8–12 minutes of wall time):
+Shard split:
 
 | Shard | Cases | Contents |
 | --- | --- | --- |
 | shard-1 | 5 | Chat core journeys |
 | shard-2 | 8 | Apps, rich chat cards, and E2E-03 |
 | shard-3 | 7 | Sessions, routines, and E2E-01/02 |
-| shard-4 | 9 | Activity, people, files, and memory |
-| shard-5 | 8 | Settings, auth, and desktop shell journeys |
-| shard-6 | 5 | Recorded apps, desktop shell, and mobile navigation |
+| shard-4 | 6 | Activity, people, files, and memory |
+| shard-5 | 6 | Settings, auth, and desktop shell cases |
+| shard-6 | 4 | Recorded apps, global search, and mobile navigation |
 
 The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
 shard-2, AUTH-01 → shard-5).
@@ -219,52 +214,10 @@ shard-2, AUTH-01 → shard-5).
 > no YAML).
 
 <!-- CASE-CATALOG -->
-This iteration lands **42** ✅ mock-drivable user journeys in 15 YAML files.
-
-| ID | User journey | Shard |
-| --- | --- | --- |
-| ACT-01 | Activity overview and status filters stay consistent | shard-4 |
-| ACT-02 | Review pending requests and reject an action approval | shard-4 |
-| ACT-03 | Inspect an accepted webhook delivery payload | shard-4 |
-| APPS-01 | Search and restore the installed-app catalog | shard-2 |
-| APPS-02 | Disable, re-enable, and uninstall apps from tile menus | shard-2 |
-| APPS-03 | Inspect the Issue Triage app details and capabilities | shard-2 |
-| AUTH-01 | Authenticated root navigation reaches the chat home | shard-5 |
-| AUTH-02 | Login validation and failed submission preserve the form | shard-5 |
-| CHAT-06 | Inspect the answered design card and built-app reply | shard-2 |
-| CHAT-07 | Open linked apps from three recorded conversations | shard-2 |
-| CHAT-08 | Complete the live question card and preserve its failed submission | shard-2 |
-| CHAT-09 | Reject the plumber approval card | shard-2 |
-| CHAT-01 | Configure the home composer and inspect its menus | shard-1 |
-| CHAT-02 | Exercise composer pickers and the failed-send state | shard-1 |
-| CHAT-03 | Find a conversation, inspect its transcript, and preserve a failed draft | shard-1 |
-| CHAT-04 | Inspect successful, failed, and delegated execution traces | shard-1 |
-| CHAT-05 | Give feedback and copy assistant messages | shard-1 |
-| E2E-01 | Enable a proposed routine and verify it across Chat and Routines | shard-3 |
-| E2E-02 | Approve a message and inspect its Activity record | shard-3 |
-| E2E-03 | Open a built app from Chat and find it in Apps | shard-2 |
-| FILE-01 | Search the project tree and open a project file | shard-4 |
-| FILE-02 | Edit an existing file and create a new project file | shard-4 |
-| FILE-03 | Handle a duplicate project-file rename | shard-4 |
-| FILE-04 | Browse journal and relationship memory, then persist a project-note edit | shard-4 |
-| PPL-01 | Browse recent people, directory groups, and bond filters | shard-4 |
-| PPL-02 | Inspect a person timeline, channel filters, and account actions | shard-4 |
-| RAPP-01 | Inspect the Issue Triage dashboard and recent results | shard-6 |
-| RAPP-02 | Review a recorded code review from timeline to findings | shard-6 |
-| RAPP-03 | Inspect a Stock Daily report from schedule to market news | shard-6 |
-| ROUT-01 | Explore routine list, calendar, timeline, and creation options | shard-3 |
-| ROUT-02 | Toggle an on-demand routine and restore its paused state | shard-3 |
-| SES-01 | Search sessions across time ranges and reach the empty state | shard-3 |
-| SES-02 | Filter channel sessions and compare seven-day with all-time results | shard-3 |
-| SES-03 | Inspect channel and webchat session details, then reopen Chat | shard-3 |
-| SET-01 | Navigate Settings and switch appearance mode | shard-5 |
-| SET-02 | Inspect connections, disconnect a grant, and add an app key | shard-5 |
-| SET-03 | Inspect channel activation and log out an AI tool | shard-5 |
-| SET-04 | Review favors and advanced settings, then persist access controls | shard-5 |
-| SHELL-01 | Navigate every built-in surface from Chat to Settings | shard-5 |
-| SHELL-02 | Search chats, toggle the sidebar, and edit pinned entries | shard-6 |
-| SHELL-03 | Use the mobile navigation drawer | shard-6 |
-| SHELL-04 | Inspect account actions, handle logout failure, and switch language | shard-5 |
+The suite contains **36** ✅ mock-drivable cases in 15 YAML files. The
+[case catalog](midscene-e2e-cases.md#case-catalog) lists their names and shard
+assignments. `npm run collect` validates the expected total and each shard
+count against a committed manifest.
 
 ### ⚠️ Candidates blocked by section 6 mock gaps (no YAML yet)
 
