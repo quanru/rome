@@ -277,6 +277,8 @@ jobs:
       actions: read
       contents: read
       pages: write
+    outputs:
+      pages-artifact-name: ${{ steps.pages-artifact.outputs.name }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -330,10 +332,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Name GitHub Pages artifact
+        id: pages-artifact
+        run: echo "name=midscene-e2e-report-pages-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
       - name: Upload GitHub Pages report
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          name: midscene-e2e-report-pages-${{ github.run_attempt }}
+          name: ${{ steps.pages-artifact.outputs.name }}
           path: ${{ runner.temp }}/midscene-pages
 
   deploy-report:
@@ -356,4 +362,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         with:
-          artifact_name: midscene-e2e-report-pages-${{ github.run_attempt }}
+          artifact_name: ${{ needs.report-summary.outputs.pages-artifact-name }}
