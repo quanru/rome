@@ -254,6 +254,7 @@ jobs:
           path: |
             tests/midscene/midscene_run/
             tests/midscene/.midscene/
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
 

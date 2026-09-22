@@ -9,8 +9,8 @@ cases:
       - app.open:
           path: /chat/mock-chat-3
       - aiAct: >-
-          Click the orange "Turn it on" button on the visible "Scheduled routine" proposal. Finish
-          when the proposal shows its enabled state.
+          Enable the visible "Scheduled routine" proposal by clicking its orange "Turn it on"
+          button once. Stop immediately after the click.
       - aiAssert: >-
           The routine proposal card shows a green "On" badge and the footer "Saved. Next time it
           matches, Rome will run it within a minute. Manage it in Routines." There is no "Turn it
