@@ -3,11 +3,9 @@
 > Evaluation target: [Rome](https://github.com/rome-os/rome)
 >
 > Cases live in `tests/midscene/cases/` and run against the local MSW mock
-> build with synthetic fixtures. The latest complete run of the prior 36-case
-> suite passed:
-> [Actions run 35734638707](https://github.com/quanru/rome/actions/runs/35734638707).
-> The 38-case suite passed locally without case retries on 2026-09-23. A full
-> remote run of this revision has not yet completed.
+> build with synthetic fixtures. The 38-case suite passed locally without case
+> retries and passed in the fork's six remote shards:
+> [Actions run 35816486576](https://github.com/quanru/rome/actions/runs/35816486576).
 
 ## Suite shape
 
