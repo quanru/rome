@@ -308,7 +308,7 @@ jobs:
         if: steps.previous-report.outputs.run_id != ''
         run: |
           mkdir -p "$RUNNER_TEMP/previous-pages"
-          tar -xzf "$RUNNER_TEMP/previous-pages-artifact/artifact.tar.gz" -C "$RUNNER_TEMP/previous-pages"
+          tar -xf "$RUNNER_TEMP/previous-pages-artifact/artifact.tar" -C "$RUNNER_TEMP/previous-pages"
 
       - name: Download report for the affected historical run
         if: steps.previous-report.outputs.run_id == '35816486576'
@@ -323,7 +323,7 @@ jobs:
         if: steps.previous-report.outputs.run_id == '35816486576'
         run: |
           mkdir -p "$RUNNER_TEMP/legacy-pages"
-          tar -xzf "$RUNNER_TEMP/legacy-pages-artifact/artifact.tar.gz" -C "$RUNNER_TEMP/legacy-pages"
+          tar -xf "$RUNNER_TEMP/legacy-pages-artifact/artifact.tar" -C "$RUNNER_TEMP/legacy-pages"
 
       - name: Render case table
         env:
