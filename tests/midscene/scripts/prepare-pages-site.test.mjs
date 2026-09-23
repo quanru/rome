@@ -84,3 +84,25 @@ test("rejects conflicting historical screenshot IDs", async (context) => {
     /Conflicting report asset/,
   );
 });
+
+test("prunes older run directories before exceeding the Pages budget", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-pages-budget-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const previous = path.join(root, "previous");
+  const reports = path.join(root, "reports");
+  await mkdir(path.join(previous, "runs", "100"), { recursive: true });
+  await writeFile(path.join(previous, "runs", "100", "report.bin"), Buffer.alloc(12_000));
+  await shard(reports, "new");
+  await writeFile(path.join(reports, "index.html"), "summary");
+  await writeFile(
+    path.join(reports, "midscene-shard-1/midscene_run/report/new/report.bin"),
+    Buffer.alloc(12_000),
+  );
+
+  const site = path.join(root, "site");
+  const result = await preparePagesSite({ site, reports, runId: "101", previous, maxSiteBytes: 20_000 });
+  assert.deepEqual(result.runIds, ["101"]);
+  assert.ok(result.bytes < 20_000);
+  await assert.rejects(stat(path.join(site, "runs", "100")), { code: "ENOENT" });
+  assert.doesNotMatch(await readFile(path.join(site, "index.html"), "utf8"), /Run 100/);
+});

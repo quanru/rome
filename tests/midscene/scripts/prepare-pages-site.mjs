@@ -5,7 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const MAX_SITE_BYTES = 800 * 1024 * 1024;
+const MAX_SITE_BYTES = 900 * 1024 * 1024;
 const MAX_RECENT_RUNS = 3;
 
 const parseArguments = (argv) => {
@@ -63,7 +63,7 @@ const copyShardReports = async (source, destination) => {
   }
 };
 
-export async function preparePagesSite({ site, reports, runId, previous, previousRunId, legacy, legacyRunId }) {
+export async function preparePagesSite({ site, reports, runId, previous, previousRunId, legacy, legacyRunId, maxSiteBytes = MAX_SITE_BYTES }) {
   if (!/^\d+$/.test(runId)) throw new Error("run-id must be numeric");
   await mkdir(site, { recursive: true });
 
@@ -101,6 +101,11 @@ export async function preparePagesSite({ site, reports, runId, previous, previou
   for (const oldRun of runIds.slice(0, -MAX_RECENT_RUNS)) {
     await rm(path.join(runsDirectory, oldRun), { recursive: true });
   }
+  const retainedRunIds = runIds.slice(-MAX_RECENT_RUNS);
+  while ((await bytesIn(site)) > maxSiteBytes - 10_000 && retainedRunIds.length > 1) {
+    const oldRun = retainedRunIds.shift();
+    await rm(path.join(runsDirectory, oldRun), { recursive: true });
+  }
   const historicalIndexes = (await readdir(site))
     .filter((entry) => /^index-\d+\.html$/.test(entry))
     .sort();
@@ -109,13 +114,13 @@ export async function preparePagesSite({ site, reports, runId, previous, previou
     .join("");
   await writeFile(
     path.join(site, "index.html"),
-    `<!doctype html><html lang="en"><meta charset="utf-8"><title>Midscene reports</title><h1>Midscene reports</h1><p>Recent run reports:</p><ul>${runIds.slice(-MAX_RECENT_RUNS).map((id) => `<li><a href="runs/${id}/index.html">Run ${id}</a></li>`).join("")}</ul><p>Historical run reports:</p><ul>${archiveLinks}</ul></html>`,
+    `<!doctype html><html lang="en"><meta charset="utf-8"><title>Midscene reports</title><h1>Midscene reports</h1><p>Recent run reports:</p><ul>${retainedRunIds.map((id) => `<li><a href="runs/${id}/index.html">Run ${id}</a></li>`).join("")}</ul><p>Historical run reports:</p><ul>${archiveLinks}</ul></html>`,
   );
   const bytes = await bytesIn(site);
-  if (bytes > MAX_SITE_BYTES) {
-    throw new Error(`Pages site is ${bytes} bytes, above the ${MAX_SITE_BYTES}-byte safety limit`);
+  if (bytes > maxSiteBytes) {
+    throw new Error(`Pages site is ${bytes} bytes, above the ${maxSiteBytes}-byte safety limit`);
   }
-  return { bytes, runIds: runIds.slice(-MAX_RECENT_RUNS) };
+  return { bytes, runIds: retainedRunIds };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
