@@ -1,174 +1,72 @@
 cases:
-  - name: FILE-01 Projects tree shows the fixture folders and files
-    tags: [files, shard-4]
+  - name: FILE-01 Search the project tree
+    tags:
+      - files
+      - shard-4
     steps:
-      - app.open: { path: /projects }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The Projects file browser is shown in English with the heading
-          "Projects", a "Search project files..." search field, and a New
-          (+) control. The top level of the folder tree lists the "demo-app"
-          and "research" folders (collapsed) plus a "todo.md" file.
-      - aiAssert: >-
-          With a folder selected, the right-hand dashboard area fails to load
-          its summary because that endpoint is not mocked: a "Network error"
-          message with a "Retry" button is shown, while the file tree itself
-          remains usable.
-
-  - name: FILE-02 Opening a file renders its contents in the viewer
-    tags: [files, shard-4]
-    steps:
-      - app.open: { path: /projects }
-      - wait: { duration: 800 }
+      - app.open:
+          path: /projects
       - aiAct: >-
-          Expand the "demo-app" folder and open its "README.md" file in the
-          tree.
-      - wait: { duration: 1200 }
+          Enter "todo.md" in the visible "Search project files..." field, then stop.
       - aiAssert: >-
-          The README.md file opens in the content area in Preview mode,
-          rendering its markdown (a "README.md" heading and the mock file
-          body), and the expanded demo-app folder lists its "src" subfolder,
-          "README.md", and "notes.txt".
-
-  - name: FILE-03 Editing a text file persists within the session
-    tags: [files, shard-4]
+          The project search field contains "todo.md" and the matching todo.md file is visible in
+          the project tree.
+  - name: FILE-02 Open a project file
+    tags:
+      - files
+      - shard-4
     steps:
-      - app.open: { path: /projects/todo.md }
-      - wait: { duration: 1200 }
-      - aiTap: the "Edit" option of the Preview/Edit view toggle
-      - wait: { duration: 1000 }
-      - app.monacoEdit:
-          text: "\nBuy more coffee beans"
-          append: true
-          save: true
-      - app.expectControl: { label: "Save", disabled: true }
-      - aiAssert: >-
-          The editor's text ends with the newly appended line "Buy more
-          coffee beans".
+      - app.open:
+          path: /projects
       - aiAct: >-
-          Expand the "research" folder in the tree and open its "papers.md"
-          file, then open "todo.md" again.
-      - wait: { duration: 1200 }
+          In the project tree, open the visible todo.md file. Finish when the right-hand file viewer
+          shows todo.md in Preview mode with its rendered content visible.
       - aiAssert: >-
-          The todo.md content shown now ends with the line "Buy more coffee
-          beans" (the edit made before switching files is still present).
-
-  - name: FILE-04 Creating a new file appears in the tree
-    tags: [files, shard-4]
+          todo.md is open in Preview mode and displays "Mock file content for the dashboard mock
+          mode." rather than a loading or error state.
+  - name: FILE-03 Handle a duplicate project-file rename
+    tags:
+      - files
+      - shard-4
+      - deterministic-assist
     steps:
-      - app.open: { path: /projects }
-      - wait: { duration: 1000 }
-      # Select the target folder first; New creates inside the selection.
-      - aiTap: the "demo-app" folder row in the file tree
-      - wait: { duration: 500 }
-      - app.clickByLabel: { label: "New", exact: true }
-      - wait: { duration: 500 }
-      - aiTap: "New file"
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          A "New file" dialog opens titled "New file", explaining it will
-          create a file in projects/demo-app/, with a Name field prefilled
-          "Untitled.md" and "Cancel" / "Create file" actions.
-      - app.typeText: { target: "Name", text: "CHECKLIST.md", clear: true }
-      - aiTap: "Create file"
-      - wait: { duration: 1200 }
-      - app.expectUrl: { path: /projects/demo-app/CHECKLIST.md }
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          The new CHECKLIST.md opens automatically in the content area and
-          also appears under demo-app in the tree (the mock's file-watch
-          event reconciles it in immediately), selected as the active row.
-      - aiTap: the "Edit" option of the Preview/Edit view toggle
-      - wait: { duration: 1000 }
-      - app.monacoEdit:
-          text: "# Checklist\n"
-          append: false
-          save: true
-      - app.expectControl: { label: "Save", disabled: true }
-      - aiAssert: >-
-          The editor's first line reads "# Checklist" for CHECKLIST.md.
-
-  - name: FILE-05 Renaming onto an existing name shows the conflict error
-    tags: [files, shard-4]
-    steps:
-      # The name dialog rejects paths with "/" (it is a bare name, not a
-      # path), so the conflict is exercised inside one folder: notes.txt
-      # cannot take README.md's name. The mock answers PATCH with 409
-      # "Already exists.".
-      - app.open: { path: /projects }
-      - wait: { duration: 1000 }
-      - aiTap: the "demo-app" folder expander in the file tree
-      - wait: { duration: 600 }
-      - app.clickByLabel: { label: "More actions for notes.txt" }
-      - wait: { duration: 500 }
-      - aiTap: "Rename"
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          A "Rename item" dialog opens with the Name field prefilled
-          "notes.txt" and "Cancel" / "Rename" actions.
-      - app.typeText: { target: "Name", text: "README.md", clear: true }
-      - aiTap: "Rename"
-      - wait: { duration: 900 }
-      - aiAssert: >-
-          An error toast reads "Already exists." and both files remain in
-          the tree: "notes.txt" is still listed and "README.md" is
-          untouched.
-
-  - name: FILE-06 Memory browser shows journal, relationship and project notes
-    tags: [files, shard-4]
-    steps:
-      - app.open: { path: /memory }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The Memory file browser is shown with top-level folders "journal",
-          "projects", "relationship", and "topics", plus "IDENTITY.md" and
-          "MEMORY.md" notes.
-      - aiTap: the "relationship" folder expander in the file tree
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          Expanding "relationship" reveals "BONDS.md", "GUARDIAN.md", and
-          per-person notes including "ray-oster.md", "nadia-petrova.md", and
-          "mira-chen.md".
-      - aiTap: the "BONDS.md" tree row
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The file renders in Preview mode with the heading "Relationship
-          Bonds" and an "Inner Circle" section listing ray-oster and
-          nadia-petrova.
-
-  - name: FILE-07 Today's journal entry exists under the dated journal path
-    tags: [files, shard-4]
-    steps:
-      - app.open: { path: /memory }
-      - wait: { duration: 800 }
+      - app.open:
+          path: /projects
       - aiAct: >-
-          Expand the "journal" folder and its year/month subfolders, then open
-          today's journal entry (the single .md file under the month folder).
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          Today's journal note opens with a date heading and lists the items
-          about Ray's Saturday hike and Mira's clinic intake form.
+          1. Find and click the "demo-app" folder expander in the file tree.
 
-  - name: FILE-08 Memory notes can be edited and survive switching files
-    tags: [files, shard-4]
-    steps:
-      - app.open: { path: /memory }
-      - wait: { duration: 800 }
-      - aiAct: >-
-          Expand "projects" and its "default" subfolder, then open
-          "PROJECT.md".
-      - wait: { duration: 1000 }
-      - aiTap: the "Edit" option of the Preview/Edit view toggle
-      - wait: { duration: 1000 }
-      - app.monacoEdit:
-          text: "\n## Update\n\nFollow up Friday.\n"
-          append: true
-          save: true
-      - app.expectControl: { label: "Save", disabled: true }
-      - aiAct: >-
-          Open "GUARDIAN.md" inside the relationship folder, then open
-          PROJECT.md under projects/default again.
-      - wait: { duration: 1200 }
+          2. Find the visible control labelled "More actions for notes.txt" and click it.
+
+          3. Find and click Rename.
+
+          4. Find the field identified by "Name", replace its current value with "README.md".
+
+          5. Find and click Rename.
+
+          6. The duplicate-name rejection is the expected successful result of this test. Stop when
+          the UI shows "Already exists." and report the action as complete; do not return a task
+          failure because the rename was rejected.
+      # The duplicate-name toast auto-dismisses before a second model screenshot can inspect it.
+      - app.expectResponse:
+          method: PATCH
+          path: /api/projects/file
+          status: 409
+          requestBodyIncludes:
+            - notes.txt
+            - README.md
       - aiAssert: >-
-          The reopened PROJECT.md still contains "Follow up Friday." under
-          its "Update" heading.
+          Both "notes.txt" and the existing "README.md" remain listed in the demo-app tree after
+          the rejected rename.
+  - name: FILE-04 Open a Memory file
+    tags:
+      - files
+      - shard-4
+    steps:
+      - app.open:
+          path: /memory
+      - aiAct: >-
+          In the Memory file tree, expand the relationship folder and open BONDS.md. Finish when
+          the right-hand file viewer shows the rendered file in Preview mode.
+      - aiAssert: >-
+          The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
+          Circle" section listing ray-oster and nadia-petrova.

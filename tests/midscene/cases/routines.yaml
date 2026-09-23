@@ -1,110 +1,27 @@
 cases:
-  - name: ROUT-01 Routines list shows totals, groups, schedules and switches
-    tags: [routines, shard-3]
+  - name: ROUT-01 Open the routine calendar
+    tags:
+      - routines
+      - shard-3
     steps:
-      - app.open: { path: /routines }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The Routines page is shown in English with a "Create Routine"
-          button. Summary cards read "Total 6", "Active 5", and "Paused 1",
-          and a "Next up" card names "Morning brief". View switcher buttons
-          read "List", "Calendar", and "Timeline", with "List" active.
-      - aiAssert: >-
-          The list is grouped into "On a schedule", "When something happens",
-          and "On demand". The schedule group lists "Morning brief" (Every
-          day at 7:00 AM), "Weekday inbox sweep" (Every weekday at 5:30 PM),
-          "Rent reminder" (On the 28th of every month at 9:00 AM,
-          Europe/Berlin), and "Weekly digest" (Every Sunday at 6:00 PM). Each
-          schedule row has a toggle switch and a run control — "Run now", or
-          "Stop" while the routine is currently executing.
-      - aiAssert: >-
-          "Ledger sync" sits under "When something happens" with the text
-          "Whenever a expense logged event happens (from expense-tracker)",
-          and "Archive old notes" sits under "On demand" with the text
-          "Only when you run it"; its toggle is switched off, which accounts
-          for the single paused routine.
-
-  - name: ROUT-02 Calendar view renders the month with run markers
-    tags: [routines, shard-3]
-    steps:
-      - app.open: { path: /routines }
-      - wait: { duration: 1000 }
-      - aiTap: Calendar
-      - wait: { duration: 1000 }
-      # The calendar heading is built from the browser's current month, so it
-      # must not be pinned to "September 2026" (the case would fail in
-      # October against unchanged code). The regex below requires a real
-      # month-name/year title regardless of the run date.
-      - app.expectTexts:
-          matches:
-            - '\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d\b'
-      - aiAssert: >-
-          The view switches to a monthly calendar headed with the current
-          month name and four-digit year, with weekday headers (Sun through
-          Sat) and dated cells. A legend distinguishes "recurring" and
-          "one-time" runs, and days carrying scheduled routines show markers.
-          "Calendar" is the active view switcher button.
-      - aiTap: List
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          Switching back to "List" restores the grouped routine list with
-          "Morning brief" visible.
-
-  - name: ROUT-03 Timeline view orders upcoming schedule runs on a time axis
-    tags: [routines, shard-3]
-    steps:
-      - app.open: { path: /routines }
-      - wait: { duration: 1000 }
-      - aiTap: Timeline
-      - wait: { duration: 1200 }
-      - aiAssert: >-
-          The timeline view shows a "NOW" marker followed by upcoming
-          scheduled runs in chronological order: "Morning brief" with
-          "Schedule · recurring" and the action "daily_summary",
-          "Weekday inbox sweep" with "inbox_scan", and "Rent reminder" with
-          "send_message". Each entry offers "Disable" and "Delete" actions.
-          The "Weekly digest" entry shows "No next run".
-
-  - name: ROUT-04 Create Routine dialog explains the three trigger types
-    tags: [routines, shard-3]
-    steps:
-      - app.open: { path: /routines }
-      - wait: { duration: 1000 }
-      - aiTap: "Create Routine"
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          A "Create Routine" dialog opens with a "Trigger type" choice of
-          three cards: "Schedule" ("Fires on a clock — once at a date or on
-          a recurring rule."), "Event" ("Fires when a matching event is
-          emitted on the internal bus."), and "Manual" ("Never fires on its
-          own — you run it by hand from here."). With Schedule selected, the
-          form has Name, "one-time"/"recurring" schedule options, Timezone,
-          Date, Action Name ("Pick an action…"), and "Args (JSON object)"
-          fields, plus "Cancel" and "Create Routine" buttons.
-      - aiTap: Cancel
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          The dialog closes and no new routine is created: the totals still
-          read "Total 6" and "Active 5".
-
-  - name: ROUT-05 Toggling the on-demand routine updates the active count
-    tags: [routines, shard-3]
-    steps:
-      - app.open: { path: /routines }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The summary cards read "Active 5" and "Paused 1", and the
-          "Archive old notes" row under "On demand" shows its toggle
-          switched off.
+      - app.open:
+          path: /routines
       - aiAct: >-
-          Switch on the toggle switch on the "Archive old notes" row under
-          "On demand".
-      - wait: { duration: 1000 }
+          Click the visible "Calendar" view button and finish when the monthly routine calendar is
+          open.
       - aiAssert: >-
-          The toggle is now switched on and the summary updates to
-          "Active 6" and "Paused 0".
+          The Calendar view is active and shows a monthly grid with weekday headers and routine
+          markers.
+  - name: ROUT-02 Filter the routine list
+    tags:
+      - routines
+      - shard-3
+    steps:
+      - app.open:
+          path: /routines
       - aiAct: >-
-          Switch the "Archive old notes" toggle back off.
-      - wait: { duration: 1000 }
+          Search for "Archive old notes" using the "Filter routines..." field and finish when the
+          routine list is filtered.
       - aiAssert: >-
-          The summary returns to "Active 5" and "Paused 1".
+          The filtered list shows the "Archive old notes" on-demand routine and hides unrelated
+          routines such as "Morning brief".

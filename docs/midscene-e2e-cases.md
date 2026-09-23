@@ -1,232 +1,112 @@
-# Rome · Midscene E2E Case Overview
+# Rome Midscene E2E Cases
 
 > Evaluation target: [Rome](https://github.com/rome-os/rome)
-> Cases live in: `tests/midscene/cases/`
-> Run mode: local **MSW mock mode** (synthetic fixtures, no real backend / credentials)
-> Latest result: **91 / 91 passing with MIDSCENE_RETRY=0 (retries disabled; all passed on the first run)**
-> Last updated: 2026-09-21
+>
+> Cases live in `tests/midscene/cases/` and run against the local MSW mock
+> build with synthetic fixtures. The 38-case suite passed locally without case
+> retries and passed in the fork's six remote shards:
+> [Actions run 35816486576](https://github.com/quanru/rome/actions/runs/35816486576).
 
----
+## Suite shape
 
-## 1. Overall
+The suite contains 38 AI-native cases in 15 YAML files. Every case starts with
+`app.open`, uses `aiAct` for user interaction, and uses `aiAssert` for its
+visible outcome. A small number of cases tagged `deterministic-assist` also use
+targeted `app.*` nodes for state that cannot be read reliably from one
+screenshot.
 
-- **91 cases** in total, organized in 13 YAML files grouped by product module.
-- Each case is driven by a mix of **visual assertions (aiAssert / aiTap)** and
-  **deterministic nodes (custom `app.*` nodes)**, covering page rendering,
-  interaction flows, form validation, toasts, cross-page persistence and
-  responsive behavior.
-- CI runs 6 shards in parallel; the shard is tagged directly on each case:
+The secret-free collector validates the expected total and per-shard manifest,
+so deleting or moving a case without deliberately updating the manifest fails
+CI.
 
-| Shard | Cases | Main contents |
-|---|---|---|
-| shard-1 | 14 | Chat core (composer, traces, feedback, copy) |
-| shard-2 | 15 | App management 7, chat cards 7, end-to-end story 1 |
-| shard-3 | 14 | Sessions 7, routines 5, end-to-end stories 2 |
-| shard-4 | 20 | Activity 6, files/memory 8, people 6 |
-| shard-5 | 17 | Settings 11, auth 3, shell navigation 3 |
-| shard-6 | 11 | Recorded apps 5, shell/global 6 |
-| **Total** | **91** | |
+| Shard | Cases | Main coverage |
+| --- | ---: | --- |
+| shard-1 | 5 | Chat composer, menus, send failure, traces, question card |
+| shard-2 | 8 | Apps, rich chat cards, E2E-03 |
+| shard-3 | 7 | Sessions, routines, E2E-01 and E2E-02 |
+| shard-4 | 7 | Activity, files, memory, people |
+| shard-5 | 6 | Settings, auth, shell navigation |
+| shard-6 | 5 | Recorded apps, global search, mobile navigation |
+| **Total** | **38** | |
 
----
+## Case catalog
 
-## 2. Case List by Module
+| ID | Case | Shard |
+| --- | --- | --- |
+| CHAT-01 | Draft and clear a message from the home composer | shard-1 |
+| CHAT-02 | Exercise composer pickers and the failed-send state | shard-1 |
+| CHAT-03 | Preserve a draft after a failed send in an existing conversation | shard-1 |
+| CHAT-04 | Inspect a successful execution trace | shard-1 |
+| CHAT-05 | Draft an answer in an unanswered question card | shard-1 |
+| CHAT-06 | Collapse the architecture diagram in a built-app reply | shard-2 |
+| CHAT-07 | Open a linked market report from a recorded conversation | shard-2 |
+| CHAT-08 | Choose a tone on the live question card | shard-2 |
+| CHAT-09 | Reject the plumber approval card | shard-2 |
+| APPS-01 | Search the installed-app catalog | shard-2 |
+| APPS-02 | Disable an app from its tile menu | shard-2 |
+| APPS-03 | Open Issue Triage from its details page | shard-2 |
+| E2E-03 | Open a built app from Chat | shard-2 |
+| SES-01 | Search for a missing session | shard-3 |
+| SES-02 | Open the session filter panel | shard-3 |
+| SES-03 | Open a channel session detail | shard-3 |
+| ROUT-01 | Open the routine calendar | shard-3 |
+| ROUT-02 | Filter the routine list | shard-3 |
+| E2E-01 | Enable a proposed routine from Chat | shard-3 |
+| E2E-02 | Approve a pending outbound message | shard-3 |
+| ACT-03 | Review requests and inspect an accepted webhook payload | shard-4 |
+| FILE-01 | Search the project tree | shard-4 |
+| FILE-02 | Open a project file | shard-4 |
+| FILE-03 | Handle a duplicate project-file rename | shard-4 |
+| FILE-04 | Open a Memory file | shard-4 |
+| PPL-01 | Open the people directory | shard-4 |
+| PPL-02 | Filter a person timeline by channel | shard-4 |
+| SET-01 | Open the appearance-mode choices | shard-5 |
+| SET-02 | Open connection details | shard-5 |
+| SET-03 | Inspect channel activation settings | shard-5 |
+| SET-04 | Open advanced developer settings | shard-5 |
+| AUTH-01 | Inspect the authenticated account identity | shard-5 |
+| AUTH-02 | Login validation and failed submission preserve the form | shard-5 |
+| RAPP-01 | Inspect recent Issue Triage activity | shard-6 |
+| RAPP-02 | Inspect a completed Code Review record | shard-6 |
+| RAPP-03 | Inspect a completed Stock Daily report | shard-6 |
+| SHELL-02 | Open global chat search | shard-6 |
+| SHELL-03 | Open the mobile navigation drawer | shard-6 |
 
-### 1. Chat Core (`chat-core.yaml`) — shard-1, 14 cases
+The case names and shard assignments above match the executable YAML. Run
+`npm run collect` from `tests/midscene` to validate the catalog manifest.
 
-| ID | Case |
-|---|---|
-| CHAT-01 | Home composer shows placeholder, upload, project and reasoning controls |
-| CHAT-02 | Reasoning effort menu offers Fast, Think and Ultrathink |
-| CHAT-03 | Project selector lists projects and a create entry |
-| CHAT-04 | Sending from the home composer fails clearly without a backend |
-| CHAT-05 | Sending inside a conversation fails without removing the draft |
-| CHAT-06 | Slash skill menu loads and reports its unavailable state |
-| CHAT-07 | Agent mention picker offers the two fixture agents |
-| CHAT-08 | Recent chats are grouped by date with curated and older fixtures |
-| CHAT-09 | Opening a conversation from the sidebar loads its transcript |
-| CHAT-10 | Successful tool trace opens from the collapsed summary |
-| CHAT-11 | Failed turn trace surfaces the model provider error |
-| CHAT-12 | Subagent delegation trace shows its recorded-not-available state |
-| CHAT-13 | Helpful-turn feedback submits and records |
-| CHAT-14 | Copy message copies a plain-text assistant turn |
+## Execution contract
 
-### 2. Chat Blocks (`chat-blocks.yaml`) — shard-2, 7 cases
+- Browser requests are limited to `ROME_E2E_BASE_URL`. The BrowserContext
+  request guard aborts unexpected CDN or third-party requests.
+- Model calls run from the Node-side Midscene agent, not from the page.
+- Every case gets a fresh BrowserContext, so MSW state is isolated between
+  cases while client-side navigation within one case preserves mock writes.
+- CI pull requests run only secret-free harness validation. The six model-backed
+  shards run on the upstream `main` branch or by manual dispatch in a fork
+  using that fork's model secrets.
+- The `quanru/rome` fork uploads each shard's native report and publishes a
+  Summary table for abnormal cases, followed by a collapsed appendix of passed
+  cases. Each case has a screenshot and an exact report-step link when available.
+- The upstream repository runs the cases without uploading reports or
+  publishing the Summary.
 
-| ID | Case |
-|---|---|
-| CHAT-15 | Answered design question card is locked with chosen answers |
-| CHAT-16 | Built-app reply renders sections and a collapsible mermaid diagram |
-| CHAT-17 | Learning kit links open YouTube Distill in a workspace tile |
-| CHAT-18 | Workout plan links open Fitness Tracker in a workspace tile |
-| CHAT-19 | Market recap links open a specific Stock Daily report tile |
-| CHAT-20 | Live question card enables Send only after required answers |
-| CHAT-21 | Rejecting the plumber approval resolves the card as rejected |
+## Local run
 
-### 3. Apps (`apps.yaml`) — shard-2, 7 cases
+Start the mock build from the repository root:
 
-| ID | Case |
-|---|---|
-| APPS-01 | Installed apps grid lists the five fixture apps and built-in entries |
-| APPS-02 | Search narrows the apps grid |
-| APPS-03 | Search without matches shows the empty state |
-| APPS-04 | Disable an app from its tile menu and re-enable it |
-| APPS-05 | Uninstall an app through the confirmation dialog |
-| APPS-06 | App details page renders manage rows and capability cards |
-| APPS-07 | Installing an unknown store handle shows the not-found state |
+```bash
+pnpm start:web:mock
+```
 
-### 4. Recorded Apps (`recorded-apps.yaml`) — shard-6, 5 cases
-
-> These apps render inside open Shadow DOM and are the product's built-in
-> record-and-replay demo applications.
-
-| ID | Case |
-|---|---|
-| RAPP-01 | Issue Triage dashboard shows repository and recent triage results |
-| RAPP-02 | YouTube Distill opens the recorded talk with its mind map |
-| RAPP-03 | Code Review dashboard opens the recorded PR review with verdict |
-| RAPP-04 | Fitness Tracker shows the weekly plan and beginner settings |
-| RAPP-05 | Stock Daily shows the weekday schedule and a full report |
-
-### 5. Sessions (`sessions.yaml`) — shard-3, 7 cases
-
-| ID | Case |
-|---|---|
-| SES-01 | Sessions list renders the fixture rows with columns and pagination |
-| SES-02 | Search filters sessions across title and context |
-| SES-03 | Facet filter restricts to Channel sessions and shows a filter chip |
-| SES-04 | Time range selector widens the list to all-time sessions |
-| SES-05 | Empty result state for an unmatched search |
-| SES-06 | Channel session detail shows read-only header and Details sheet |
-| SES-07 | Webchat session detail offers Open chat back to the conversation |
-
-### 6. Routines (`routines.yaml`) — shard-3, 5 cases
-
-| ID | Case |
-|---|---|
-| ROUT-01 | Routines list shows totals, groups, schedules and switches |
-| ROUT-02 | Calendar view renders the month with run markers |
-| ROUT-03 | Timeline view orders upcoming schedule runs on a time axis |
-| ROUT-04 | Create Routine dialog explains the three trigger types |
-| ROUT-05 | Toggling the on-demand routine updates the active count |
-
-### 7. Activity / Approvals (`activity.yaml`) — shard-4, 6 cases
-
-| ID | Case |
-|---|---|
-| ACT-01 | Activity overview shows live counters, banner and filter chips |
-| ACT-02 | Incoming channel connection requests show pairing guidance |
-| ACT-03 | Running filter isolates the in-flight execution with cancel |
-| ACT-04 | Rejecting an action approval updates the feed and banner |
-| ACT-05 | Accepted webhook deliveries can be inspected as payload JSON |
-| ACT-06 | Error filter lists the three failed executions |
-
-### 8. Files and Memory (`files.yaml`) — shard-4, 8 cases
-
-| ID | Case |
-|---|---|
-| FILE-01 | Projects tree shows the fixture folders and files |
-| FILE-02 | Opening a file renders its contents in the viewer |
-| FILE-03 | Editing a text file persists within the session |
-| FILE-04 | Creating a new file appears in the tree |
-| FILE-05 | Renaming onto an existing name shows the conflict error |
-| FILE-06 | Memory browser shows journal, relationship and project notes |
-| FILE-07 | Today's journal entry exists under the dated journal path |
-| FILE-08 | Memory notes can be edited and survive switching files |
-
-### 9. People (`people.yaml`) — shard-4, 6 cases
-
-| ID | Case |
-|---|---|
-| PPL-01 | Latest feed shows recent conversations with previews |
-| PPL-02 | Directory groups people by bond level with counts |
-| PPL-03 | Bond filter chips narrow the directory |
-| PPL-04 | Person detail renders the message timeline and composer |
-| PPL-05 | Timeline channel filter keeps only WhatsApp messages |
-| PPL-06 | Person actions menu offers bond, linking and merge management |
-
-### 10. Settings (`settings.yaml`) — shard-5, 11 cases
-
-| ID | Case |
-|---|---|
-| SET-01 | Settings redirect to Appearance and expose all six tabs |
-| SET-02 | Appearance mode switches to Dark instantly |
-| SET-03 | Connections list shows the nine fixture connections |
-| SET-04 | Disconnecting a connection grant updates the card until refresh |
-| SET-05 | App keys add flow validates input and saves successfully |
-| SET-06 | Channels page lists conversation activation cards |
-| SET-07 | AI Tools shows Claude connected with usage and supports logout |
-| SET-08 | Favors page renders balance, pending decision and ledger |
-| SET-09 | Advanced page exposes access control, computer use and developer toggles |
-| SET-10 | Adding an allowed dashboard email saves and toasts |
-| SET-11 | Developer toggles save via PUT /api/settings and persist across navigation |
-
-### 11. Auth (`auth-shell.yaml`) — shard-5, 3 cases
-
-| ID | Case |
-|---|---|
-| AUTH-01 | Mock guardian opens the app root and lands on the chat home |
-| AUTH-02 | Login preview renders the local sign-in form with validation |
-| AUTH-03 | Submitting the login form against the mock shows a login failure |
-
-### 12. Shell / Global (`shell-global.yaml`) — shard-5/6, 9 cases
-
-| ID | Shard | Case |
-|---|---|---|
-| SHELL-01 | shard-5 | Sidebar entries navigate between every built-in page |
-| SHELL-02 | shard-6 | Cmd+K opens chat search and finds a conversation |
-| SHELL-03 | shard-6 | Cmd+B collapses and expands the sidebar |
-| SHELL-04 | shard-5 | Edit mode removes a pinned entry and Add restores it |
-| SHELL-05 | shard-6 | Mobile viewport opens the sidebar as a closable drawer |
-| SHELL-06 | shard-5 | Account menu shows identity and account actions |
-| SHELL-07 | shard-6 | Log out is unsupported in mock mode and reports an error toast |
-| GLOBAL-01 | shard-6 | Unknown routes redirect to the chat home |
-| GLOBAL-02 | shard-6 | Switching the language to Chinese localizes the whole shell |
-
-### 13. End-to-End Cross-Page Stories (`e2e-*.yaml`) — 3 cases
-
-| ID | Shard | Case / Storyline |
-|---|---|---|
-| E2E-01 | shard-3 | **Turn on a routine proposed in chat and verify it lands in Routines**: enable the "weekly stagnation check" routine from its chat card → go back to the Routines page and confirm it is enabled with the count incremented → return to the conversation and confirm the card state does not offer duplicate creation. |
-| E2E-02 | shard-3 | **Approve the send_message card in chat and verify the Activity feed**: approve the pending Telegram message card → the pending-approval count in Activity drops from 3 to 2 → the execution and its payload JSON are visible under the Approved filter. |
-| E2E-03 | shard-2 | **Open the built Issue Triage app from its chat link and find it in Apps**: from the long "build an app from one sentence" conversation, click the design card and then the built-app link → Issue Triage opens in a workspace tile → the Apps page confirms it is installed. |
-
----
-
-## 3. Coverage
-
-**Covered**
-
-- First-screen rendering and key interactions of every primary navigation page;
-- Form validation, success/failure toasts, confirmation dialogs, dropdown menus,
-  toggles, filter/search/pagination;
-- Cross-page/cross-navigation in-memory persistence (routines, approvals,
-  developer toggles);
-- Keyboard shortcuts (Cmd+K, Cmd+B), the mobile drawer viewport, dark mode and
-  English/Chinese localization;
-- Special in-chat cards (approvals, design Q&A, embedded app links, expanded
-  traces).
-
-**Not covered in mock mode yet (gaps recorded in the planning doc)**
-
-- Conversation turn SSE streaming replies, sessions usage metrics, projects
-  dashboard;
-- App fork / share, channel-side approve;
-- Success paths of writes that depend on a real backend (such as logout) — only
-  their error states are verified.
-
----
-
-## 4. How to Run
+Then run the suite from another shell:
 
 ```bash
 cd tests/midscene
-eval "$(fnm env)" && fnm use 24
-# The mock server must already be running on localhost:3200
-MIDSCENE_RETRY=0 HEADLESS=true npm test                      # full suite
-MIDSCENE_INCLUDE_TAGS=shard-5 HEADLESS=true npm test         # one shard
+npm ci
+npx playwright install chromium
+MIDSCENE_RETRY=0 HEADLESS=true npm test
 ```
 
-- Model credentials are injected via the untracked `tests/midscene/.env`
-  locally and via secrets in CI.
-- The per-run aggregated HTML report is written to
-  `tests/midscene/midscene_run/report/test-run-*.html`.
+Use `MIDSCENE_INCLUDE_TAGS=shard-2` to run one shard. Model settings belong in
+the untracked `tests/midscene/.env`. Never commit credentials.

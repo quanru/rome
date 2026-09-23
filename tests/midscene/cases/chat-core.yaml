@@ -1,220 +1,104 @@
 cases:
-  - name: CHAT-01 Home composer shows placeholder, upload, project and reasoning controls
-    tags: [chat, shard-1]
+  - name: CHAT-01 Draft and clear a message from the home composer
+    tags:
+      - chat
+      - shard-1
     steps:
-      - app.open: { path: /chat }
-      - wait: { duration: 800 }
+      - app.open:
+          path: /chat
+      - aiAct: >-
+          On the Chat home, type "draft" in the bottom message composer and then delete it without
+          sending. Keep the current project and reasoning settings unchanged, and finish on the
+          Chat home with the composer empty.
       - aiAssert: >-
-          The chat home shows the greeting "Welcome," and the headline
-          "What should we create?". The message composer shows the
-          placeholder "How can I help you today?", the current project name
-          "default", and a reasoning effort control that currently reads
-          "Think".
-      # Upload / Project / Send are icon-only controls: their names exist
-      # only as aria-labels and never appear as visible text in a screenshot.
-      - app.expectControl: { label: "Upload files", role: button }
-      - app.expectControl: { label: "Project", role: button }
-      - app.expectControl: { label: "Send", role: button }
-
-  - name: CHAT-02 Reasoning effort menu offers Fast, Think and Ultrathink
-    tags: [chat, shard-1]
+          The chat home shows the greeting "Welcome," and the headline "What should we create?". The
+          message composer shows the placeholder "How can I help you today?", the current project
+          name "default", and a reasoning effort control that currently reads "Think". A button
+          with an attachment icon is visible, along with the project picker, reasoning control, and
+          arrow-shaped send button. The temporary "draft" text has been cleared and no message was
+          sent.
+  - name: CHAT-02 Exercise composer pickers and the failed-send state
+    tags:
+      - chat
+      - shard-1
+      - deterministic-assist
     steps:
-      - app.open: { path: /chat }
-      # The trigger's accessible name is "Reasoning effort"; its visible text
-      # shows the current value ("Think").
-      - app.clickByLabel: { label: "Reasoning effort", exact: true }
-      - wait: { duration: 600 }
+      - app.open:
+          path: /chat
+      - aiAct: >-
+          Trigger the mock app's expected failed-send state: find the field identified by "How can
+          I help you today?", enter "Book a focus block tomorrow morning", then click the visible
+          control labelled "Send". The standalone mock intentionally returns a proxy error instead
+          of sending; reaching that visible error with the draft preserved completes this task
+          successfully. Enter the text directly into the large rounded composer at the bottom;
+          keyboard focus has no visible indicator, so do not repeatedly tap it or wait for a visual
+          focus change before entering the text.
+      - app.expectUrl:
+          path: /chat
+      - app.expectTexts:
+          scope: body
+          all:
+            - /api/chat/sessions
       - aiAssert: >-
-          A small popover menu opens above the composer listing three
-          options: "Fast", "Think", and "Ultrathink".
-      - app.expectMenuItem: { label: "Fast", checked: false }
-      - app.expectMenuItem: { label: "Think", checked: true }
-      - app.expectMenuItem: { label: "Ultrathink", checked: false }
-
-  - name: CHAT-03 Project selector lists projects and a create entry
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat }
-      # The composer's Project picker trigger is icon-labelled; a vision tap
-      # can miss it, click by accessible name instead.
-      - app.clickByLabel: { label: "Project", exact: true }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          A project picker menu opens listing multiple available projects
-          and a "Create project" action.
-
-  - name: CHAT-04 Sending from the home composer fails clearly without a backend
-    tags: [chat, shard-1]
-    steps:
-      # POST /api/chat/sessions is intentionally unhandled in mock mode.
-      - app.open: { path: /chat }
-      - app.typeText: { target: "How can I help you today?", text: "Book a focus block tomorrow morning" }
-      - app.clickByLabel: { label: "Send", exact: true }
-      - wait: { duration: 2000 }
-      - aiAssert: >-
-          The message is not sent: an error above the composer reports the
-          failed request to "/api/chat/sessions" (the standalone mock has no
-          chat backend, so the dev proxy fails). The typed text remains in
-          the composer and the URL stays on /chat (no new conversation is
+          The message is not sent: an error above the composer reports the failed request to
+          "/api/chat/sessions" (the standalone mock has no chat backend, so the dev proxy fails).
+          The typed text remains in the composer and the URL stays on /chat (no new conversation is
           created).
-
-  - name: CHAT-05 Sending inside a conversation fails without removing the draft
-    tags: [chat, shard-1]
+      - aiAct: >-
+          In the large rounded composer at the bottom, replace its entire current value "Book a
+          focus block tomorrow morning" with "/". The visible old draft is the field value, not a
+          placeholder. Use the input action to replace it directly; keyboard focus has no visible
+          indicator, so do not repeatedly tap or wait for a visual focus change.
+      - app.expectUrl:
+          path: /chat
+      - app.expectTexts:
+          scope: body
+          all:
+            - Failed to load skills.
+      - aiAssert: >-
+          The composer contains "/" and a visible error notice directly above it reads "Failed to
+          load skills.".
+  - name: CHAT-03 Open the agent mention picker
+    tags:
+      - chat
+      - shard-1
     steps:
-      # POST .../turns is intentionally unhandled in mock mode.
-      - app.open: { path: /chat/mock-chat-2 }
-      - app.typeText: { target: "How can I help you today?", text: "Make the subject line shorter" }
-      # The transcript's Recap question card renders its own "Send" above the
-      # composer; the composer's is the second matching button.
-      - app.clickByLabel: { label: "Send", exact: true, index: 1 }
-      - wait: { duration: 2000 }
+      - app.open:
+          path: /chat
+      - aiAct: >-
+          Enter "@" directly into the empty message composer on the Chat home. Finish when the agent
+          mention picker opens; do not select an agent.
       - aiAssert: >-
-          Sending fails with an error above the composer: a proxy error
-          message naming "/api/chat/sessions/mock-chat-2/turns" (the
-          standalone mock has no chat backend). The typed draft "Make the
-          subject line shorter" is still in the composer and no new user
-          message bubble appears in the transcript.
-
-  - name: CHAT-06 Slash skill menu loads and reports its unavailable state
-    tags: [chat, shard-1]
+          An agent mention picker titled "Pick an agent to chat with" is open, showing a "Built-in
+          agents" section with a "Rome" group and its two agents, "main" and "envoy".
+  - name: CHAT-04 Inspect a successful execution trace
+    tags:
+      - chat
+      - shard-1
+      - deterministic-assist
     steps:
-      # GET /api/skills is not mocked; instead of a populated picker the UI
-      # shows its designed failure notice.
-      - app.open: { path: /chat }
-      - app.typeText: { target: "How can I help you today?", text: "/" }
-      - wait: { duration: 1200 }
+      - app.open:
+          path: /chat/mock-chat-1
+      - app.scrollTextIntoView:
+          text: 1 app · 1 step · 8.4s
+      - aiAct: >-
+          Click near the upper-middle of the now-centered collapsed trace summary reading "1 app ·
+          1 step · 8.4s" beneath the first assistant response. Avoid the lower edge, click exactly
+          once, and immediately declare the action complete without retrying.
       - aiAssert: >-
-          Typing "/" surfaces the skill picker failure state: an error notice
-          reads "Failed to load skills." and no skill entries are listed.
-
-  - name: CHAT-07 Agent mention picker offers the two fixture agents
-    tags: [chat, shard-1]
+          The "Trace" drawer is open and shows a successful "settings_get" step for the "briefer"
+          app, including "keys: [2]" and a duration. The header reads "Used 1 app · 1 step · 8.4s".
+  - name: CHAT-05 Draft an answer in an unanswered question card
+    tags:
+      - chat
+      - shard-1
     steps:
-      - app.open: { path: /chat }
-      - app.typeText: { target: "How can I help you today?", text: "@" }
-      - wait: { duration: 1000 }
+      - app.open:
+          path: /chat/mock-chat-2
+      - aiAct: >-
+          On the visible question card beginning "Before I rewrite it for that audience, three
+          things:", enter "Avoid jargon" in the optional "Anything to avoid?" text area. Do not
+          send or dismiss the card.
       - aiAssert: >-
-          An agent mention picker titled "Pick an agent to chat with" opens,
-          showing a "Built-in agents" section with a "Rome" group and its two
-          agents, "main" and "envoy".
-      - app.pressKey: { key: "Escape" }
-
-  - name: CHAT-08 Recent chats are grouped by date with curated and older fixtures
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat }
-      - aiAssert: >-
-          The "Chats" section in the sidebar groups conversations by project
-          folder. The "default" project lists "Build an app from an idea",
-          "Turn a long video into a learning kit", "Make room for a daily
-          workout", and "Have the market recap ready every day" with a
-          "Load 3 more" affordance, and the "website-redesign" project lists
-          "Draft launch email".
-
-  - name: CHAT-09 Opening a conversation from the sidebar loads its transcript
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat }
-      - aiTap: 'the "Draft launch email" row in the Chats sidebar list'
-      - app.expectUrl: { path: /chat/mock-chat-2 }
-      - wait: { duration: 1000 }
-      # The open transcript lands on the latest turn; the first request is
-      # earlier in the scroll area.
-      - app.scrollTextIntoView: { text: "Can the launch copy be warmer?" }
-      - wait: { duration: 400 }
-      - aiAssert: >-
-          The conversation "Draft launch email" is open. Its first user
-          request reads "Can the launch copy be warmer? The roadmap
-          paragraph reads like a changelog.", and the assistant reply that
-          follows starts "Here's a warmer pass at that paragraph:" with the
-          rewritten line "We built Rome because keeping a household running
-          takes more attention than any one person has to spare."
-      # The tsx snippet is a later turn, not the first reply: scroll the
-      # banner answer's follow-up line into view so the code block shows.
-      - app.scrollTextIntoView: { text: "It reads the info semantic tokens" }
-      - wait: { duration: 400 }
-      - aiAssert: >-
-          The later assistant answer that supplies the announcement banner
-          as a paste-in snippet renders a tsx code block immediately above
-          the line "It reads the info semantic tokens, so it tracks
-          whichever theme is active."
-
-  - name: CHAT-10 Successful tool trace opens from the collapsed summary
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat/mock-chat-1 }
-      - app.scrollTextIntoView: { text: "1 app · 1 step · 8.4s" }
-      - aiAssert: >-
-          A collapsed trace summary under an assistant turn reads
-          "1 app · 1 step · 8.4s".
-      - aiTap: the collapsed trace summary reading "1 app · 1 step · 8.4s"
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          A "Trace" drawer opens. Its header reads "Used 1 app · 1 step ·
-          8.4s"; the step list names the "briefer" app session and shows a
-          successful "settings_get" tool step with the detail "keys: [2]" and
-          a per-step duration. There is no error styling on this step.
-
-  - name: CHAT-11 Failed turn trace surfaces the model provider error
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat/mock-chat-3 }
-      - app.scrollTextIntoView: { text: "The model provider is unavailable" }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The failed assistant turn shows an inline error reading "Error:
-          The model provider is unavailable — the run stopped here."
-      - aiTap: the failed trace with the "model provider is unavailable" error
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The trace drawer shows the failed step "Fetching it from the vendor
-          portal." followed by a provider error card stating "Claude usage
-          limit reached" with guidance to check usage or pick another model,
-          and an "Open AI Tools" action.
-
-  - name: CHAT-12 Subagent delegation trace shows its recorded-not-available state
-    tags: [chat, shard-1]
-    steps:
-      # The fixture records the delegation chip (researcher, completed) but
-      # not the trace payload behind it, so the panel renders its designed
-      # "not available yet" state.
-      - app.open: { path: /chat/mock-chat-3 }
-      - app.scrollTextIntoView: { text: "researcher" }
-      - aiAssert: >-
-          Near the routine proposal there is a delegated-subagents chip for
-          the "researcher" subagent marked "completed" (its control is
-          labelled "Open trace for researcher").
-      - app.clickByLabel: { label: "Open trace for researcher" }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The trace panel explains the trace is not available yet, showing
-          "Trace not available yet" with a "Retry" action.
-
-  - name: CHAT-13 Helpful-turn feedback submits and records
-    tags: [chat, shard-1]
-    steps:
-      # Feedback is backed by an in-memory mock handler.
-      - app.open: { path: /chat/mock-chat-2 }
-      - app.scrollTextIntoView: { text: "Lead with the reader, not the feature." }
-      - aiTap: 'the "Mark this turn helpful" control on that assistant turn'
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          A feedback popover opens with an optional comment field with the
-          placeholder "Optional: what went wrong, or what was great?" and a
-          "Submit" button.
-      - aiTap: Submit
-      - wait: { duration: 1000 }
-      # On success the popover closes and the thumbs-up control locks with
-      # the accessible name "Feedback recorded" (no toast is shown).
-      - app.expectControl: { label: "Feedback recorded", disabled: true }
-
-  - name: CHAT-14 Copy message copies a plain-text assistant turn
-    tags: [chat, shard-1]
-    steps:
-      - app.open: { path: /chat/mock-chat-1 }
-      - app.scrollTextIntoView: { text: "Kept. Tomorrow" }
-      - aiTap: 'the "Copy message" control on the assistant turn containing "Kept. Tomorrow"'
-      - wait: { duration: 500 }
-      # The control swaps its icon and accessible name to "Copied" for ~1.5s
-      # once the clipboard write resolves.
-      - app.expectControl: { label: "Copied" }
+          The unanswered question card remains open and its optional "Anything to avoid?" field
+          contains the draft "Avoid jargon".

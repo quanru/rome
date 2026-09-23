@@ -3,9 +3,8 @@
 Visual-driven end-to-end testing for Rome using
 [Midscene](https://midscenejs.com/) YAML cases. Tests run against Rome's
 **MSW mock mode** (`pnpm dev:mock`): they never hit a real backend or use real
-personal data, and every assertion is backed by in-repo synthetic fixtures, so
-the cases are fully deterministic, reproducible offline, and runnable on fork
-PRs.
+personal data. The browser only loads local synthetic fixtures. The Node-side
+Midscene agent calls the configured model endpoint.
 
 > The companion planning doc is
 > [`docs/midscene-e2e-plan.md`](../../docs/midscene-e2e-plan.md) (case catalog,
@@ -23,14 +22,19 @@ PRs.
     Chinese CI machine);
   - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
     pins only Apps/Chat/Projects by default).
-- Alongside Midscene's built-in AI nodes (`aiTap`/`aiAssert`/`aiAct`/`wait`,
-  etc.), this package registers 15 deterministic nodes:
-  `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,
-  `app.clickContentLink`, `app.clickByLabel`, `app.expectControl`,
-  `app.expectMenuItem`, `app.expectTexts`, `app.expectDom`, `app.monacoEdit`,
-  `app.scrollContent`, `app.scrollTextIntoView`, `app.pressKey`, and
-  `app.typeText` (see `midscene-node-reference.md` for the full node list and
-  their parameters).
+- A BrowserContext request guard aborts every browser request outside
+  `ROME_E2E_BASE_URL`. Recorded apps cannot add hidden CDN dependencies.
+- Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
+  visible outcomes. `app.open` provides the isolated starting route, and
+  `wait` covers fixed mock settling time.
+- The suite contains 38 AI-native cases. Each case starts one isolated product
+  goal. Related page states share a case only when they belong to that goal.
+- The collector validates a 38-case per-shard manifest. A missing or moved case
+  fails the secret-free validation job.
+- The package also registers focused deterministic nodes:
+  `app.open`, `app.expectUrl`, `app.expectResponse`, `app.clickByLabel`, `app.expectTexts`,
+  `app.scrollTextIntoView`, and `app.pressKey`. Run `npm run nodes` to generate
+  a local node reference with their parameters.
 - All cases live in `cases/**/*.yaml`, organized by suite file, with tags for
   shard and topic.
 
@@ -95,6 +99,7 @@ HEADLESS=false npm test
 | `shard-N` | CI shard ownership (N=1…6), see the planning doc |
 | `zh` | Chinese-UI (i18n) cases |
 | `mobile` | Narrow-viewport cases |
+| `deterministic-assist` | AI-native journey with a narrowly scoped deterministic helper for a documented visual-model limitation |
 
 ## Reports and Artifacts
 
@@ -103,67 +108,40 @@ HEADLESS=false npm test
   `.midscene/test-results/<runId>/summary.json` (includes collection-error
   details)
 - Both are covered by `.gitignore`.
+- Runs in `quanru/rome` upload each shard and a combined
+  `midscene-e2e-report` artifact. Its `index.html` contains the overall Summary,
+  model names, shard counts, case results, durations, screenshots, and links to
+  exact steps in the native Midscene reports. The fork publishes the HTML
+  through GitHub Pages so links and images work from the Actions run Summary.
+  The Actions Summary shows failed, not-run, and incomplete-shard results first;
+  passed cases and their screenshots appear in a collapsed appendix.
+- Runs in `rome-os/rome` execute the cases without uploading reports or
+  publishing a Summary or GitHub Pages site.
+- Pull requests run only the secret-free harness validation job. The
+  model-backed shard matrix runs on the upstream `main` branch or by manual
+  dispatch in a fork using that fork's model secrets.
 
 ## Authoring Conventions
 
-1. **Every case starts with `app.open`** to guarantee fixture reset; use
-   `app.reload` only when verifying "after refresh" behavior.
-2. Prefer deterministic nodes for navigation/scrolling/URL assertions; reserve
-   `aiTap`/`aiAssert` for visual-semantic judgments.
-3. `aiAssert` copy quotes the actual English UI text and describes structure
-   explicitly (presence/absence of cards, badges, buttons).
-4. Parameter-less custom nodes must be written as `app.goBack: {}` in YAML;
-   otherwise they parse as scalars and collection fails.
-5. Cases assert only against synthetic fixture data in the repo; never
-   introduce real names, accounts or credentials.
-6. Chat pages stick to the bottom: programmatic scrolling is pushed back, so
-   for long transcripts use `app.scrollTextIntoView` (internally it first sends
-   a trusted wheel gesture to release the stick-to-bottom behavior).
-7. The file-browser editor (Projects/Memory) is Monaco, where visual actions
-   are very slow and unstable: switch to the Edit view first, then use
-   `app.monacoEdit` (changes the value through the monaco API; `save: true`
-   waits for the PUT to finish). Assert disabled button state with
-   `app.expectControl` instead of trying to tell it apart from a screenshot.
-8. For repeated same-name controls (the sessions question card and the composer
-   each have a "Send"), select by DOM order with
-   `app.clickByLabel: { index: n }`. The selected check in dropdown menus such
-   as the composer's "Reasoning effort" has no `aria-checked`; assert it with
-   `app.expectMenuItem` instead of having the model count checkmarks in a
-   screenshot. `app.clickByLabel` also covers both `<a>` (settings
-   sub-navigation) and `<summary>` (disclosure regions like Developer
-   Settings), so use it — not `aiTap` — for cross-settings navigation and
-   expanding disclosures.
-9. For cards/messages taller than one viewport (the five-question design card,
-   multi-section build replies, the nine-item Connections list, the Channels
-   conversation list), a screenshot shows only part of them: use
-   `app.expectTexts: { all: [...] }` to verify the full-text manifest via the
-   DOM, and let the visual assertion describe only what is visible in the
-   current viewport after scroll positioning.
-10. "Locked" states such as an answered question card are almost
-    indistinguishable from editable state in a screenshot (a disabled fieldset
-    still renders placeholder copy): assert structural facts with
-    `app.expectDom` — `fieldset[disabled]`, the count of
-    `button[aria-pressed="true"]`, the number of buttons in the bottom action
-    row, and so on.
-11. Steps that are **expected to trip form validation** must not use a single
-    `aiAct` (the model treats "submission was rejected" as its own task failure
-    and retries until the replan budget is exhausted): split into
-    `app.typeText` (located by placeholder or `<label for>`) + `app.clickByLabel`
-    to submit + `app.expectTexts` to assert the validation copy; resubmitting
-    after correcting the input works the same way.
-12. Toasts render in a sonner portal outside `<main>` and disappear after a few
-    seconds: use `app.expectTexts: { scope: body }` to poll the toast copy
-    immediately after the triggering action, not `aiAssert` (the toast is often
-    already gone by screenshot time); persistent list/form changes go through
-    the default `scope: main` DOM assertions.
-13. Product static assets missing in mock mode (such as
-    `/desktop-vnc.html` embedded in the desktop workspace, served by @rome/core
-    in production) get placeholder files under `packages/web/mock/public/`;
-    MSW (a browser Service Worker) cannot intercept an iframe's initial
-    document navigation (the new frame has not registered the worker yet), so
-    these requests must go through the dev server's static layer.
-14. Recorded apps (`/apps/*-*`, e.g. issue-triage, yt-distill) render inside an
-    **open Shadow DOM**: visual assertions (`aiAssert`/`aiTap`) and Playwright's
-    role engine work normally, but the `innerText`/`main` selectors behind
-    `app.expectTexts`/`app.expectDom` cannot pierce the shadow root — do not
-    use those two nodes on these pages.
+1. Start every case with exactly one `app.open`. This resets the fixture state.
+   Use `aiAct` for navigation within the case.
+2. Give `aiAct` a user goal and enough context to choose the right control.
+   Combine related clicks, typing, scrolling, and navigation into one task when
+   they form one user intent.
+3. Use `aiAssert` after each meaningful state change. Describe the visible
+   outcome and quote stable UI text that separates success from nearby states.
+4. Every case must contain at least one `aiAct` and one `aiAssert`. The
+   collection check rejects atomic AI nodes such as `aiTap` and operational
+   `app.*` nodes. `app.expectUrl` is allowed because the model cannot see the
+   browser address bar. A case tagged `deterministic-assist` may use only the
+   allowlisted helpers for a confirmed visual-model limitation; keep the user
+   interaction and visible outcome covered by `aiAct` and `aiAssert`.
+5. Use `wait` only for mock state that settles asynchronously. Do not use fixed
+   waits as a substitute for an observable completion condition.
+6. Keep a case focused on one user goal. Put multiple checkpoints in the same
+   case only when they prove one stateful flow.
+7. Use synthetic fixture data only. Never add real people, accounts, tokens, or
+   chat content.
+8. Keep deterministic nodes as local debugging tools. A committed exception
+   must use the `deterministic-assist` tag and explain the visual limitation in
+   the case or pull request.

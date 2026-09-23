@@ -1,21 +1,19 @@
-# Rome Midscene E2E Plan
+# Rome Midscene AI-Native E2E Plan
 
 > Onboarding attachment for Rome maintainers.
 >
-> Status: all 91 cases catalogued in section 5 are landed as YAML under
-> `tests/midscene/cases/`, split across 6 CI shards (14/15/14/20/17/11), and
-> pass **91/91 locally in mock mode** (including the PoC stories AUTH-01 and
-> E2E-01/02/03).
+> Status: all 38 cases catalogued in section 5 are defined as AI-native YAML
+> workflows under `tests/midscene/cases/`. Six CI shards split them
+> 5/8/7/7/6/5. Each case uses `aiAct` for interaction and `aiAssert` for
+> its visible outcome.
 
 ## 1. Background and Goals
 
 Rome is a conversation-centric personal AI OS that integrates routines,
 approvals, an activity feed and installed apps. Much of its product experience
-is made of **rich interactive cards** and **cross-page state coupling**: a
-routine is proposed in chat, enabled with one click, and lands on the Routines
-page; an approval is completed on a chat card and syncs to Activity; an app
-link in chat opens in a workspace tile beside the conversation and shows up in
-the installed Apps list.
+uses rich interactive cards. A routine proposal changes state inside Chat, an
+approval completes inside its card, and an app link opens beside the current
+conversation.
 
 This kind of experience has two testing problems:
 
@@ -28,15 +26,16 @@ This kind of experience has two testing problems:
 This proposal uses [Midscene](https://midscenejs.com/) visual-semantic driving
 for problem 1, and Rome's built-in **MSW mock mode** (`pnpm dev:mock`) for
 problem 2: every case runs only against in-repo synthetic fixtures, with no
-real accounts and no external side effects, and is reproducible on a fork PR.
+  real accounts and no external side effects.
 
 Goals:
 
-- Establish a **long-lived guard** visual E2E baseline for Rome's core product
+- Establish a long-lived AI-native E2E baseline for Rome's core product
   stories.
 - Serve as a reference implementation for offering Midscene CI to open-source
   projects (deterministic fixtures + visual-semantic assertions + sharded CI).
-- Keep every case offline-runnable, repeatable and mutually non-polluting.
+- Keep browser traffic local, repeatable and mutually non-polluting. The
+  Node-side Midscene agent still calls the configured model endpoint.
 
 ## 2. Architecture
 
@@ -77,27 +76,27 @@ GitHub Actions (6 shards)
   Projects by default; other entries live behind the "all apps" popover. Cases
   write `rome-sidebar-pins` (the shell's own localStorage contract) so every
   built-in entry is expanded and cross-page sidebar clicks are deterministic.
-- **Layered AI and deterministic nodes**: mechanical operations (navigation,
-  URLs, scrolling) use the custom Playwright nodes; only visual-semantic
-  judgments go to `aiTap`/`aiAssert`, which cuts both runtime and flakiness.
+- **AI-native interaction**: `aiAct` performs navigation, typing, scrolling,
+  menu selection, and other user actions from a goal. `aiAssert` checks visible
+  outcomes. Deterministic nodes handle setup and local debugging only.
 - **Env-driven selection**: `MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
 
-The custom nodes (full list and parameters in `midscene-node-reference.md`):
+The harness registers only the custom nodes used by committed cases. Each case
+uses one `app.open` and may use `app.expectUrl` when the browser address is not
+visible to the model. Run `npm run nodes` in `tests/midscene` to generate a
+local reference for the full node list.
 
 | Node | Purpose |
 | --- | --- |
 | `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
-| `app.reload` | Hard reload (in-memory state resets to the default fixtures; for "after refresh" behavior) |
-| `app.goBack` | Browser back (client navigation, **keeps** in-memory state) |
 | `app.expectUrl` | URL substring / `re:` regex assertion |
-| `app.clickContentLink` | Deterministically click a link by text outside the sidebar (avoids same-name sidebar ambiguity) |
+| `app.expectResponse` | Check an API response for a transient outcome that a later screenshot cannot capture |
 | `app.clickByLabel` | Deterministically click repeated icon buttons by accessible name (tile kebab, chip clear), piercing open shadow DOM |
 | `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere; works locally and on Linux CI) |
-| `app.typeText` | Locate a field by placeholder/label and type; supports clear-only (`clear: true` without `text`) |
-| `app.scrollContent` | Scroll the main content area (including shadow-DOM recorded apps and window-level pages like Sessions) to top/bottom, idempotent |
 | `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport; pierces shadow DOM |
+| `app.expectTexts` | Check long-page or toast text that cannot fit in one screenshot |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 
@@ -145,9 +144,9 @@ reasons behind them.
   collection step that parses every case and resolves node references
   exactly like the runner — no browser, mock server, or model calls), so a
   broken custom node or malformed case fails before merge without exposing
-  any credentials. The model-backed `midscene` matrix stays bound to the
-  main ref by `if: github.ref == 'refs/heads/main'`. The matrix does not
-  run on `pull_request`: model calls are billable and a PR job checks out
+  any credentials. The model-backed `midscene` matrix runs on the upstream
+  `main` branch or by manual dispatch in a fork using that fork's secrets.
+  The matrix does not run on `pull_request`: model calls are billable and a PR job checks out
   contributor-controlled code. Note that merely naming a protected
   environment in the workflow does **not** create its reviewer gate — an
   absent environment is provisioned open — so until a maintainer actually
@@ -184,28 +183,26 @@ reasons behind them.
   minutes); its log is uploaded as an artifact on failure.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
   every case carries exactly one `shard-N` tag. `fail-fast: false`,
-  `max-parallel: 6`, a 45-minute per-job timeout, and 2 case-level retries.
-- **Evidence**: every shard always uploads the `midscene_run/` and
-  `.midscene/` report artifacts (14-day retention); the mock server log is
-  attached on failure.
+  `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
+- **Evidence**: runs in `quanru/rome` upload the `midscene_run/` and
+  `.midscene/` report artifacts. The aggregation job puts abnormal cases first
+  in the Actions Summary and passed cases in a collapsed appendix. Each case
+  has a screenshot and exact report-step link when available. It also publishes
+  the combined HTML and native reports through GitHub Pages. Runs in
+  `rome-os/rome` execute the cases without these report jobs.
 - **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
   --no-network-family-autoselection` works around runner-side IPv6 racing when
   the model endpoint is only stable over IPv4.
-- **Possible follow-up**: aggregate reports and publish a GitHub Pages history,
-  reusing Midscene's report-bundle + deploy reusable workflow. That needs an
-  extra Rome-side report build script and is out of scope for this iteration.
-
-Shard split (grouped by measured runtime and module; six parallel shards take
-roughly 8–12 minutes of wall time):
+Shard split:
 
 | Shard | Cases | Contents |
 | --- | --- | --- |
-| shard-1 | 14 | Chat core: home, conversation list, composer, basic transcript |
-| shard-2 | 15 | Chat rich cards (7) + apps (7) + E2E-03 install story |
-| shard-3 | 14 | Sessions (7) + routines (5) + E2E-01/02 stories |
-| shard-4 | 20 | Activity (6) + people (6) + files/memory (8) |
-| shard-5 | 17 | Settings (11) + auth (3) + SHELL-01/04/06 |
-| shard-6 | 11 | Recorded apps deep walkthrough (5) + SHELL-02/03/05/07 + GLOBAL-01/02 (i18n, mobile) |
+| shard-1 | 5 | Chat core journeys |
+| shard-2 | 8 | Apps, rich chat cards, and E2E-03 |
+| shard-3 | 7 | Sessions, routines, and E2E-01/02 |
+| shard-4 | 7 | Activity, people, files, and memory |
+| shard-5 | 6 | Settings, auth, and desktop shell cases |
+| shard-6 | 5 | Recorded apps, global search, and mobile navigation |
 
 The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
 shard-2, AUTH-01 → shard-5).
@@ -217,147 +214,10 @@ shard-2, AUTH-01 → shard-5).
 > no YAML).
 
 <!-- CASE-CATALOG -->
-This iteration lands **91** ✅ mock-drivable cases (15 YAML files), grouped by
-suite. The Shard column shows CI ownership.
-
-### auth-shell (12, shard-5/6)
-
-| ID | Case |
-| --- | --- |
-| AUTH-01 | Mock guardian opens the root route and lands on the chat home |
-| AUTH-02 | `/dev/login` renders the local sign-in form with required-field validation |
-| AUTH-03 | Submitting the login form hits the generic "Login failed" error (unmocked login write endpoint) |
-| SHELL-01 | Sidebar entries navigate to every built-in page |
-| SHELL-02 | ⌘/Ctrl+K opens chat search and matches a conversation |
-| SHELL-03 | ⌘/Ctrl+B collapses/expands the sidebar |
-| SHELL-04 | Edit mode removes a pin and Add restores it |
-| SHELL-05 | The sidebar becomes a closable drawer at mobile viewport (`mobile`) |
-| SHELL-06 | The account menu shows identity and account actions |
-| SHELL-07 | Logout is unsupported in mock mode and reports an error toast |
-| GLOBAL-01 | Unknown routes silently redirect to the chat home |
-| GLOBAL-02 | Switching to Chinese localizes the whole shell (`zh`) |
-
-### chat (21, shard-1/2)
-
-| ID | Case |
-| --- | --- |
-| CHAT-01 | Home composer placeholder, upload, project and reasoning controls |
-| CHAT-02 | Reasoning effort menu offers Fast / Think / Ultrathink |
-| CHAT-03 | Project selector lists projects and a create entry |
-| CHAT-04 | Sending from the home composer fails clearly without a backend |
-| CHAT-05 | In-conversation send fails without losing the draft |
-| CHAT-06 | Slash skill menu loads and reports its unavailable state |
-| CHAT-07 | @ agent picker offers the two fixture agents |
-| CHAT-08 | Recent conversations are grouped by date (curated + older) |
-| CHAT-09 | Opening a conversation from the sidebar loads its transcript |
-| CHAT-10 | A successful tool trace expands from its collapsed summary |
-| CHAT-11 | A failed turn trace surfaces the model provider error |
-| CHAT-12 | A subagent delegation trace shows its recorded-not-available state |
-| CHAT-13 | Helpful feedback can be submitted and is recorded |
-| CHAT-14 | Copy message copies a plain-text assistant turn |
-| CHAT-15 | An answered design-question card locks the chosen answers |
-| CHAT-16 | The built-app final reply renders sections and a collapsible mermaid diagram |
-| CHAT-17 | A learning-kit link opens YouTube Distill in a workspace tile |
-| CHAT-18 | A workout-plan link opens Fitness Tracker in a tile |
-| CHAT-19 | A market-recap link opens a specific Stock Daily report in a tile |
-| CHAT-20 | The live question card keeps Send disabled until all answers are in, then submits to the designed failure |
-| CHAT-21 | Rejecting the plumber approval turns the card rejected |
-
-### apps (13, shard-2/6)
-
-| ID | Case |
-| --- | --- |
-| APPS-01 | Installed apps grid lists the five fixture apps and built-in entries |
-| APPS-02 | Search narrows the grid ("1 result") |
-| APPS-03 | Empty-state copy for a search with no matches |
-| APPS-04 | Tile-menu Disable/Enable toggles instantly |
-| APPS-05 | Uninstall confirmation dialog and post-uninstall count/toast |
-| APPS-06 | App details page manage rows and capability cards |
-| APPS-07 | Install page not-found state for an unknown store handle |
-| RAPP-01 | Issue Triage recorded panel (Repos/Triaged/Succeeded/Failed + #363) |
-| RAPP-02 | YouTube Distill recorded session and 15-section mind map |
-| RAPP-03 | Code Review recorded PR review (timeline + Verdict + Findings P1–P3) |
-| RAPP-04 | Fitness Tracker weekly plan and beginner/20-min settings |
-| RAPP-05 | Stock Daily weekday schedule and full daily report (sections 1/4/8) |
-| E2E-03 | Open a built app from its chat link and find it in Apps (`story`) |
-
-### sessions (7, shard-3)
-
-| ID | Case |
-| --- | --- |
-| SES-01 | List columns, type badges and pagination (13 rows in the 7-day window) |
-| SES-02 | Search across title/context (three plumber hits under All time) |
-| SES-03 | Type facet filters to Channel and shows a clearable chip |
-| SES-04 | Switching the time range to All time expands the list to 22 rows |
-| SES-05 | "No sessions found" empty state for an unmatched search |
-| SES-06 | Channel session read-only detail and Details sheet (Technical details) |
-| SES-07 | Webchat session detail offers Open chat back to the conversation |
-
-### routines (6, shard-3)
-
-| ID | Case |
-| --- | --- |
-| ROUT-01 | Summary cards (Total/Active/Paused/Next up), groups, schedules and switches |
-| ROUT-02 | Calendar month view with recurring/one-time legend |
-| ROUT-03 | Timeline orders upcoming runs and action names on a time axis |
-| ROUT-04 | Create Routine dialog presents the three trigger types |
-| ROUT-05 | Toggling an on-demand routine updates the Active/Paused counts instantly |
-| E2E-01 | Enable a routine in chat and verify it on the Routines page (`story`) |
-
-### activity (7, shard-3/4*)
-
-| ID | Case |
-| --- | --- |
-| ACT-01 | Live indicator, count chips, pending-approval banner and status filters |
-| ACT-02 | Three channel connection requests with pairing-code guidance |
-| ACT-03 | Running filter isolates the single in-flight action and offers Cancel |
-| ACT-04 | Rejecting a send_message approval in Activity decrements the banner |
-| ACT-05 | A webhook delivery's payload JSON can be expanded |
-| ACT-06 | Error filter lists the three failed executions with Details |
-| E2E-02 | Approve send_message in chat and verify it in Activity (`story`) |
-
-> *E2E-02 also carries the `activity` topic tag but is sharded to shard-3
-> alongside E2E-01.
-
-### people (6, shard-4)
-
-| ID | Case |
-| --- | --- |
-| PPL-01 | Latest recent-conversation previews |
-| PPL-02 | Directory grouped by bond (Inner circle/Acquaintance/Other) with counts |
-| PPL-03 | Bond filter chip narrows the directory |
-| PPL-04 | Person detail message timeline, channel labels and composer |
-| PPL-05 | Timeline channel filter (WhatsApp / All) |
-| PPL-06 | Person actions menu (Change bond / Link account / Merge / Memory profile) |
-
-### files / memory (8, shard-4)
-
-| ID | Case |
-| --- | --- |
-| FILE-01 | Projects file-tree root and the unmocked error state of the right-hand dashboard |
-| FILE-02 | Read-only viewing of demo-app/README.md |
-| FILE-03 | Editing todo.md stays in memory across file switches |
-| FILE-04 | A newly created file appears in the tree |
-| FILE-05 | Renaming onto a duplicate name hits 409 "Already exists." |
-| FILE-06 | Memory tree with journal/projects/relationship and BONDS.md |
-| FILE-07 | Today's journal entry exists at its dated path |
-| FILE-08 | Memory-note edits persist across file switches |
-
-### settings (11, shard-5)
-
-| ID | Case |
-| --- | --- |
-| SET-01 | /settings redirects to Appearance and exposes six tabs |
-| SET-02 | Appearance switches to dark mode instantly |
-| SET-03 | Connections lists the nine fixture connections |
-| SET-04 | Revoking a connection grant updates the card instantly (reset on refresh) |
-| SET-05 | App-key creation input validation and save |
-| SET-06 | Channels conversation activation cards and per-conversation configuration |
-| SET-07 | AI Tools shows the Claude connection status/usage and supports logout |
-| SET-08 | Favors balance, pending decisions and ledger |
-| SET-09 | Advanced access control, computer use and developer toggles |
-| SET-10 | Adding an allowed dashboard email saves and toasts |
-| SET-11 | Developer toggles save via PUT /api/settings and persist across navigation |
+The suite contains **38** ✅ mock-drivable cases in 15 YAML files. The
+[case catalog](midscene-e2e-cases.md#case-catalog) lists their names and shard
+assignments. `npm run collect` validates the expected total and each shard
+count against a committed manifest.
 
 ### ⚠️ Candidates blocked by section 6 mock gaps (no YAML yet)
 
@@ -467,17 +327,16 @@ MIDSCENE_INCLUDE_TAGS=poc npm test   # PoC stories only
 
 ## 8. Authoring and Maintenance Conventions
 
-1. Every case starts with `app.open`; use `app.reload` only to test "after
-   refresh" behavior. For cross-page linkage use `aiTap` on the sidebar plus
-   `app.goBack` (which keeps in-memory state).
-2. Mechanical operations (navigation/URL/scrolling/same-name links) always use
-   custom nodes; reserve AI nodes for visual semantics. AI assertions quote
-   the English UI copy and state element presence/absence explicitly (e.g.
-   "the button is gone").
-3. Parameter-less custom nodes are written `app.goBack: {}` in YAML.
-4. A case carries exactly one `shard-N` tag; functional tags
-   (chat/routines/…) are added as needed.
-5. New cases must pass repeatedly in a fresh context; inter-case dependencies
+1. Every case starts with exactly one `app.open`. Use `aiAct` for navigation
+   within the case.
+2. Every case contains at least one `aiAct` and one `aiAssert`. The collection
+   check rejects atomic AI nodes and operational `app.*` nodes.
+3. Write each `aiAct` as a user goal. Combine related clicks, typing,
+   scrolling, and navigation when they serve one intent.
+4. Write `aiAssert` prompts against visible outcomes and stable product text.
+5. A case carries exactly one `shard-N` tag. Add functional tags such as
+   `chat` or `routines` as needed.
+6. New cases must pass repeatedly in a fresh context. Inter-case dependencies
    are forbidden.
-6. When fixtures change, update case assertions in lockstep; when a new product
+7. When fixtures change, update case assertions in lockstep. When a new product
    capability is added, add the mock handler before the ⚠️ case.

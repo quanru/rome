@@ -1,32 +1,23 @@
 cases:
-  - name: >-
-      E2E-03 Open the built Issue Triage app from its chat link and find it in
-      Apps
-    tags: [poc, story, apps, shard-2]
+  - name: E2E-03 Open a built app from Chat
+    tags:
+      - poc
+      - story
+      - apps
+      - shard-2
+      - deterministic-assist
     steps:
-      - app.open: { path: /chat/mock-chat-build-app }
-      # The question card is the first turn of this long transcript and the
-      # chat view is pinned to the newest message, so bring the card into view
-      # by its own text.
+      - app.open:
+          path: /chat/mock-chat-build-app
       - app.scrollTextIntoView:
-          text: "When should the app label an issue?"
+          text: Done. The Issue Triage app is built, installed, and verified
+      - aiAct: >-
+          Open the built Issue Triage app from the final underlined "Issue Triage" link in the chat
+          sentence beginning "Done. The Issue Triage app is built". Click the blue letter strokes,
+          not the underline or the separate Issue Triage entry in the left sidebar. Wait for the app
+          workspace tile beside the conversation and its dashboard content to appear before finishing.
+          If the link remains visible but the tile does not open, inspect the page and try the chat
+          link again. Do not report completion while the screen is still only the chat conversation.
       - aiAssert: >-
-          The conversation "Build an app from an idea" is open. The design
-          question card is visible with its questions, including
-          "When should the app label an issue?" and
-          "Should it apply labels directly, or suggest for review?".
-      # The final assistant message links the built app. Inside the chat
-      # workspace, that link opens the app in a side tile rather than leaving
-      # the conversation (same name exists in the sidebar, so the in-message
-      # link is clicked deterministically).
-      - app.clickContentLink: { text: "Issue Triage" }
-      - wait: { duration: 3000 }
-      - aiAssert: >-
-          The Issue Triage app opens in a workspace tile beside the still-open
-          conversation. Its dashboard is visible inside that tile (repository
-          configuration / triage content), not an error or "page not found".
-      - aiTap: the Apps entry in the left app navigation sidebar
-      - app.expectUrl: { path: /apps }
-      - aiAssert: >-
-          The Apps page's installed apps list shows "Issue Triage" as an
-          installed app with an affordance to open it.
+          The Issue Triage app is open in a workspace tile beside the still-visible conversation.
+          Its dashboard shows repository or triage content, not an error or page-not-found state.

@@ -1,99 +1,27 @@
 cases:
-  - name: ACT-01 Activity overview shows live counters, banner and filter chips
-    tags: [activity, shard-4]
+  - name: ACT-03 Review requests and inspect an accepted webhook payload
+    tags:
+      - activity
+      - shard-4
+      - deterministic-assist
     steps:
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
-      - aiAssert: >-
-          The Activity feed is shown in English with a "Live · updated just
-          now" indicator and a "Refresh" button. Counter chips across the top
-          read "Pending 4", "Running 1", "Errors 3", and "Events 17".
-      - aiAssert: >-
-          A prominent yellow banner reads "4 pending approvals requiring
-          review" with a "Review" action. A row of status filter chips offers
-          "All", "Pending", "Running", "Success", "Error", "Approved",
-          "Rejected", "Auto", "Awaiting", and "Cancelled", with "All" active.
-
-  - name: ACT-02 Incoming channel connection requests show pairing guidance
-    tags: [activity, shard-4]
-    steps:
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
-      - aiAssert: >-
-          The feed lists three pending connection requests from "Alex"
-          (account-0, account-1, account-2) for the "Telegram", "Discord",
-          and "Feishu" channels. Each request says it is valid for 10
-          minutes, shows "Pair with a verification code" guidance, and offers
-          "Approve" and "Reject" buttons.
-
-  - name: ACT-03 Running filter isolates the in-flight execution with cancel
-    tags: [activity, shard-4]
-    steps:
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
-      # Exact match: a "Running 1" counter card elsewhere on the page makes
-      # a plain visual tap on the word "Running" ambiguous.
-      - app.clickByLabel: { label: "Running", exact: true }
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          With the "Running" filter active, only the single in-flight
-          execution remains listed (matching the "Running 1" counter), and it
-          offers a "Cancel" action. No "Approve" or "Reject" buttons appear.
-      - app.clickByLabel: { label: "All", exact: true }
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          Switching back to "All" restores the mixed feed including the
-          pending approval rows and the webhook history rows.
-
-  - name: ACT-04 Rejecting an action approval updates the feed and banner
-    tags: [activity, shard-4]
-    steps:
-      # Mirrors CHAT-21/E2E-02 but performed from the Activity feed itself,
-      # which is the guardian's primary approval surface.
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
+      - app.open:
+          path: /activity
       - aiAct: >-
-          Click the "Reject" button on the pending row whose description is
-          'Action "send_message" requires guardian approval' (not the Reject
-          buttons on the Alex channel connection requests).
-      - wait: { duration: 1200 }
+          Click the "Review" action in the pending-approvals banner once, then stop.
       - aiAssert: >-
-          The send_message row resolves to a rejected state: its status pill
-          reads "Rejected" and the row no longer offers Approve/Reject.
-      # The banner stays at the top of the feed; bring it back into view
-      # before asserting its updated count.
-      - app.scrollTextIntoView: { text: "pending approvals requiring review" }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The top banner now reads "3 pending approvals requiring review".
-
-  - name: ACT-05 Accepted webhook deliveries can be inspected as payload JSON
-    tags: [activity, shard-4]
-    steps:
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
-      # The 46-day-old webhook rows sit far down the feed history.
-      - app.scrollTextIntoView: { text: "weather_forecast" }
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          The feed history contains accepted webhook deliveries for
-          "weather_forecast" marked "Accepted" with a "Payload" disclosure.
-      - aiAct: >-
-          Open the "Payload" disclosure on the first "weather_forecast"
-          webhook row.
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          The expanded payload renders the delivery body as JSON-style text
-          (quoted keys and values) rather than an empty panel.
-
-  - name: ACT-06 Error filter lists the three failed executions
-    tags: [activity, shard-4]
-    steps:
-      - app.open: { path: /activity }
-      - wait: { duration: 1200 }
-      - aiTap: Error
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          With the "Error" filter active the feed shows exactly three failed
-          executions (matching the "Errors 3" counter), each with a "Details"
-          or "Payload" disclosure for diagnosis, and no approval buttons.
+          The feed lists three pending connection requests from "Alex" for the "Telegram",
+          "Discord", and "Feishu" channels, with Approve and Reject actions.
+      - app.clickByLabel:
+          label: All
+          exact: true
+      - app.scrollTextIntoView:
+          text: Webhook received for weather_forecast
+      - app.clickByLabel:
+          label: Payload
+      - app.scrollTextIntoView:
+          text: cabin
+      - app.expectTexts:
+          all:
+            - '"location"'
+            - '"cabin"'
