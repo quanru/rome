@@ -126,11 +126,16 @@ test("builds one combined Markdown and HTML Summary for all shards", async (cont
   assert.deepEqual(data.models, ["deepseek-v3.2 (deepseek)"]);
   const markdown = await readFile(markdownFile, "utf8");
   assert.match(markdown, /Rome × Midscene · failure captured/);
-  assert.match(markdown, /1\/2 cases · 50% passed/);
-  assert.match(markdown, /web-shard-3 \(missing\)/);
+  assert.match(markdown, /2 need attention · 1 passed/);
+  assert.match(markdown, /web-shard-3 \| — \| — \| ❌ missing/);
   assert.match(markdown, /CHAT-09 sends a message.*button missing/);
-  assert.match(markdown, /Case reports \(2\)/);
-  assert.match(markdown, /\| Screenshot \| Report \| Result \| Shard \| Duration \|/);
+  assert.match(markdown, /<summary>Appendix: passed cases \(1\)<\/summary>/);
+  assert.match(markdown, /\| Shard \| Case \| Screenshot \| Status \/ reason \| Duration \|/);
+  const appendix = markdown.indexOf("<details>");
+  assert.ok(markdown.indexOf("CHAT-09 sends a message") < appendix);
+  assert.ok(markdown.indexOf("AUTH-01 opens chat") > appendix);
+  assert.match(markdown.slice(0, appendix), /<img[^>]+screenshots\/screenshot-1\.jpeg/);
+  assert.match(markdown.slice(appendix), /<img[^>]+screenshots\/screenshot-1\.jpeg/);
   assert.match(markdown, /#runner-step=step-1/);
   assert.match(markdown, /screenshots\/screenshot-1\.jpeg/);
   const page = await readFile(htmlFile, "utf8");
@@ -149,7 +154,14 @@ test("escapes Markdown table content", () => {
         status: "failed",
         durationMs: 1000,
         cases: [
-          { name: "Case | name", status: "failed", durationMs: 1000, reason: "line 1\nline 2" },
+          {
+            name: "Case | name",
+            status: "failed",
+            durationMs: 1000,
+            reason: "line 1\nline 2",
+            reportPath: "web-shard/report/index.html",
+            screenshotPath: "web-shard/previews/case.jpg",
+          },
         ],
       },
     ],
@@ -161,6 +173,7 @@ test("escapes Markdown table content", () => {
   assert.match(markdown, /web\\\|shard/);
   assert.match(markdown, /Case \\\| name/);
   assert.match(markdown, /line 1 line 2/);
+  assert.match(markdown, /alt="Case &#124; name"/);
 });
 
 test("reports a missing expected shard as an overall failure", () => {
@@ -186,7 +199,33 @@ test("reports a missing expected shard as an overall failure", () => {
   });
 
   assert.match(markdown, /Rome × Midscene · failure captured/);
-  assert.match(markdown, /Incomplete shards \(1\)/);
+  assert.match(markdown, /### Needs attention/);
   assert.match(markdown, /web-shard-2.*missing/);
   assert.doesNotMatch(markdown, /All 1 cases passed/);
+});
+
+test("celebrates a complete run and keeps passed cases in the appendix", () => {
+  const markdown = renderMarkdown({
+    projects: [{
+      name: "web-shard-1",
+      status: "success",
+      durationMs: 1000,
+      cases: [{
+        name: "AUTH-01",
+        status: "success",
+        durationMs: 1000,
+        reportPath: "web-shard-1/report/index.html",
+        screenshotPath: "web-shard-1/screenshots/one.jpeg",
+        stepId: "step-1",
+      }],
+    }],
+    models: [],
+    runUrl: "https://example.test/run",
+    pagesUrl: "https://example.test/reports/",
+  });
+  assert.match(markdown, /\*\*✅ 0 need attention · 1 passed\*\*/);
+  assert.match(markdown, /🎉 All 1 cases passed/);
+  assert.match(markdown, /<details>\n<summary>Appendix: passed cases \(1\)<\/summary>/);
+  assert.match(markdown, /<a href="[^"]+runner-step/);
+  assert.doesNotMatch(markdown.slice(0, markdown.indexOf("<details>")), /AUTH-01/);
 });

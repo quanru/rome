@@ -113,6 +113,8 @@ HEADLESS=false npm test
   model names, shard counts, case results, durations, screenshots, and links to
   exact steps in the native Midscene reports. The fork publishes the HTML
   through GitHub Pages so links and images work from the Actions run Summary.
+  The Actions Summary shows failed, not-run, and incomplete-shard results first;
+  passed cases and their screenshots appear in a collapsed appendix.
 - Runs in `rome-os/rome` execute the cases without uploading reports or
   publishing a Summary or GitHub Pages site.
 - Pull requests run only the secret-free harness validation job. The

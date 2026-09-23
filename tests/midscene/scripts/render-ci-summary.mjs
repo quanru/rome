@@ -41,7 +41,11 @@ const markdownCell = (value) =>
   String(value ?? "")
     .replaceAll("\\", "\\\\")
     .replaceAll("|", "\\|")
-    .replaceAll("\n", " ");
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll(/[\r\n]+/g, " ");
 
 const html = (value) =>
   String(value ?? "")
@@ -299,82 +303,94 @@ const totalsFor = (projects) => {
   return { cases, passed, failed: cases.length - passed, total: cases.length };
 };
 
-const evidenceRows = (pagesUrl, cases) =>
-  cases.map((testCase) => {
-    const target = caseUrl(pagesUrl, testCase);
-    const name = markdownCell(testCase.name);
-    const screenshot = testCase.screenshotPath
-      ? `[![${name}](${reportUrl(pagesUrl, testCase.screenshotPath)})](${target})`
-      : "Not available";
-    return `| ${screenshot} | [${name}](${target}) | ${testCase.status === "success" ? "✅ Passed" : "❌ Failed"} | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} |`;
-  });
+const caseName = (pagesUrl, testCase) => {
+  const name = markdownCell(testCase.name);
+  return testCase.reportPath
+    ? `[${name}](${caseUrl(pagesUrl, testCase)})`
+    : name;
+};
+
+const caseScreenshot = (pagesUrl, testCase) => {
+  if (!testCase.reportPath || !testCase.screenshotPath) return "—";
+  const target = html(caseUrl(pagesUrl, testCase));
+  const image = html(reportUrl(pagesUrl, testCase.screenshotPath));
+  const name = html(testCase.name).replaceAll("|", "&#124;").replaceAll(/[\r\n]+/g, " ");
+  return `<a href="${target}"><img src="${image}" alt="${name}" width="160"></a>`;
+};
+
+const caseRow = (pagesUrl, testCase, detail) =>
+  `| ${markdownCell(testCase.project)} | ${caseName(pagesUrl, testCase)} | ${caseScreenshot(pagesUrl, testCase)} | ${markdownCell(detail)} | ${formatDuration(testCase.durationMs)} |`;
 
 export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success" }) {
   const totals = totalsFor(projects);
   const incompleteProjects = projects.filter((project) => project.status !== "success");
+  const failures = totals.cases.filter((testCase) => testCase.status !== "success");
+  const passedCases = totals.cases.filter((testCase) => testCase.status === "success");
+  const infrastructureFailures = incompleteProjects.filter(
+    (project) => !failures.some((testCase) => testCase.project === project.name),
+  );
+  const unreportedFailure =
+    producerResult !== "success" &&
+    failures.length === 0 &&
+    infrastructureFailures.length === 0;
+  const needsAttention = failures.length + infrastructureFailures.length + Number(unreportedFailure);
   const complete =
     producerResult === "success" &&
     totals.total > 0 &&
-    totals.failed === 0 &&
-    incompleteProjects.length === 0;
+    needsAttention === 0;
   const sections = [
     `## Rome × Midscene · ${complete ? "passed" : "failure captured"}`,
     "",
-    `**${totals.passed}/${totals.total} cases · ${totals.total ? Math.round((totals.passed / totals.total) * 100) : 0}% passed**`,
+    `**${complete ? "✅ " : ""}${needsAttention} need attention · ${passedCases.length} passed**`,
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",
     `**[Open the published HTML report](${reportUrl(pagesUrl, "index.html")})** · [Download the artifact](${runUrl}#artifacts)`,
     "",
-    "| Shard | Passed | Failed | Duration |",
-    "|:--|--:|--:|--:|",
-    ...projects.map((project) => {
-      const passed = project.cases.filter((testCase) => testCase.status === "success").length;
-      const failed = project.cases.length - passed;
-      const label = project.status === "missing" ? `${project.name} (missing)` : project.name;
-      return `| ${markdownCell(label)} | ${passed} | ${failed} | ${formatDuration(project.durationMs)} |`;
-    }),
-    "",
   ];
 
-  if (incompleteProjects.length) {
+  if (needsAttention) {
     sections.push(
-      `### Incomplete shards (${incompleteProjects.length})`,
+      "### Needs attention",
       "",
-      "| Shard | Status |",
-      "|:--|:--|",
-      ...incompleteProjects.map(
-        (project) => `| ${markdownCell(project.name)} | ❌ ${markdownCell(project.status)} |`,
+      "| Shard | Case | Screenshot | Status / reason | Duration |",
+      "|:--|:--|:--|:--|--:|",
+      ...infrastructureFailures.map(
+        (project) => `| ${markdownCell(project.name)} | — | — | ❌ ${markdownCell(project.status)} · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
       ),
+      ...(unreportedFailure
+        ? [`| Workflow | — | — | ❌ ${markdownCell(producerResult)} · [Workflow run](${runUrl}) | — |`]
+        : []),
+      ...failures
+        .sort((left, right) =>
+          Number(left.status === "not-run") - Number(right.status === "not-run"),
+        )
+        .map((testCase) => caseRow(
+          pagesUrl,
+          testCase,
+          `${testCase.status === "not-run" ? "⏭️ Not run" : "❌ Failed"}: ${testCase.reason}`,
+        )),
       "",
     );
-  }
-
-  const failures = totals.cases.filter((testCase) => testCase.status !== "success");
-  if (failures.length) {
-    sections.push(
-      `### Failures (${failures.length})`,
-      "",
-      "| Case | Shard | Duration | Reason |",
-      "|:--|:--|--:|:--|",
-      ...failures.map(
-        (testCase) =>
-          `| ❌ [${markdownCell(testCase.name)}](${caseUrl(pagesUrl, testCase)}) | ${markdownCell(testCase.project)} | ${formatDuration(testCase.durationMs)} | ${markdownCell(testCase.reason)} |`,
-      ),
-      "",
-    );
-  } else if (incompleteProjects.length === 0) {
-    sections.push(`**All ${totals.total} cases passed.**`, "");
+  } else if (complete) {
+    sections.push(`🎉 All ${passedCases.length} cases passed.`, "");
+  } else {
+    sections.push("No cases were reported.", "");
   }
 
   sections.push(
-    `### Case reports (${totals.total})`,
+    "<details>",
+    `<summary>Appendix: passed cases (${passedCases.length})</summary>`,
     "",
-    "| Screenshot | Report | Result | Shard | Duration |",
+    "| Shard | Case | Screenshot | Status | Duration |",
     "|:--|:--|:--|:--|--:|",
-    ...evidenceRows(pagesUrl, totals.cases),
+    ...passedCases.map((testCase) =>
+      caseRow(pagesUrl, testCase, "✅ Passed")
+      ),
     "",
-    "Each image is the original Midscene node screenshot. Click the screenshot or report name to open that exact step in the native report.",
+    "</details>",
+    "",
+    "Click a screenshot or case name to open its exact step in the native Midscene report.",
     "",
   );
   return sections.join("\n");

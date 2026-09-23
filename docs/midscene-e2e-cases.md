@@ -86,7 +86,8 @@ The case names and shard assignments above match the executable YAML. Run
   shards run on the upstream `main` branch or by manual dispatch in a fork
   using that fork's model secrets.
 - The `quanru/rome` fork uploads each shard's native report and publishes a
-  Summary table with a screenshot and an exact report-step link per case.
+  Summary table for abnormal cases, followed by a collapsed appendix of passed
+  cases. Each case has a screenshot and an exact report-step link when available.
 - The upstream repository runs the cases without uploading reports or
   publishing the Summary.
 
