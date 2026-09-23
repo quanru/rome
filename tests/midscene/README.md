@@ -27,18 +27,14 @@ Midscene agent calls the configured model endpoint.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.
-- The suite contains 36 AI-native cases. Related page states share one case so
-  the model completes a product goal instead of replaying isolated UI checks.
-- The collector validates a 36-case per-shard manifest. A missing or moved case
+- The suite contains 38 AI-native cases. Each case starts one isolated product
+  goal. Related page states share a case only when they belong to that goal.
+- The collector validates a 38-case per-shard manifest. A missing or moved case
   fails the secret-free validation job.
-- The package also registers deterministic nodes for harness setup and focused
-  debugging:
-  `app.open`, `app.reload`, `app.goBack`, `app.expectUrl`,
-  `app.clickContentLink`, `app.clickByLabel`, `app.expectControl`,
-  `app.expectMenuItem`, `app.expectTexts`, `app.expectDom`, `app.monacoEdit`,
-  `app.scrollContent`, `app.scrollTextIntoView`, `app.pressKey`, and
-  `app.typeText` (see `midscene-node-reference.md` for the full node list and
-  their parameters).
+- The package also registers focused deterministic nodes:
+  `app.open`, `app.expectUrl`, `app.expectResponse`, `app.clickByLabel`, `app.expectTexts`,
+  `app.scrollTextIntoView`, and `app.pressKey`. Run `npm run nodes` to generate
+  a local node reference with their parameters.
 - All cases live in `cases/**/*.yaml`, organized by suite file, with tags for
   shard and topic.
 
@@ -125,8 +121,8 @@ HEADLESS=false npm test
 
 ## Authoring Conventions
 
-1. Start every case with `app.open`. This resets the fixture state. Use
-   `app.reload` only when the scenario tests refresh behavior.
+1. Start every case with exactly one `app.open`. This resets the fixture state.
+   Use `aiAct` for navigation within the case.
 2. Give `aiAct` a user goal and enough context to choose the right control.
    Combine related clicks, typing, scrolling, and navigation into one task when
    they form one user intent.

@@ -3,12 +3,15 @@
 > Evaluation target: [Rome](https://github.com/rome-os/rome)
 >
 > Cases live in `tests/midscene/cases/` and run against the local MSW mock
-> build with synthetic fixtures. The latest complete run passed all 36 cases
-> with retries disabled: [Actions run 35692389115](https://github.com/quanru/rome/actions/runs/35692389115).
+> build with synthetic fixtures. The latest complete run of the prior 36-case
+> suite passed:
+> [Actions run 35734638707](https://github.com/quanru/rome/actions/runs/35734638707).
+> The 38-case suite passed locally without case retries on 2026-09-23. A full
+> remote run of this revision has not yet completed.
 
 ## Suite shape
 
-The suite contains 36 AI-native cases in 15 YAML files. Every case starts with
+The suite contains 38 AI-native cases in 15 YAML files. Every case starts with
 `app.open`, uses `aiAct` for user interaction, and uses `aiAssert` for its
 visible outcome. A small number of cases tagged `deterministic-assist` also use
 targeted `app.*` nodes for state that cannot be read reliably from one
@@ -23,10 +26,10 @@ CI.
 | shard-1 | 5 | Chat composer, menus, send failure, traces, question card |
 | shard-2 | 8 | Apps, rich chat cards, E2E-03 |
 | shard-3 | 7 | Sessions, routines, E2E-01 and E2E-02 |
-| shard-4 | 6 | Activity, files, memory, people |
+| shard-4 | 7 | Activity, files, memory, people |
 | shard-5 | 6 | Settings, auth, shell navigation |
-| shard-6 | 4 | Recorded apps, global search, mobile navigation |
-| **Total** | **36** | |
+| shard-6 | 5 | Recorded apps, global search, mobile navigation |
+| **Total** | **38** | |
 
 ## Case catalog
 
@@ -54,8 +57,9 @@ CI.
 | E2E-02 | Approve a pending outbound message | shard-3 |
 | ACT-03 | Review requests and inspect an accepted webhook payload | shard-4 |
 | FILE-01 | Search the project tree | shard-4 |
-| FILE-02 | Open project and Memory files | shard-4 |
+| FILE-02 | Open a project file | shard-4 |
 | FILE-03 | Handle a duplicate project-file rename | shard-4 |
+| FILE-04 | Open a Memory file | shard-4 |
 | PPL-01 | Open the people directory | shard-4 |
 | PPL-02 | Filter a person timeline by channel | shard-4 |
 | SET-01 | Open the appearance-mode choices | shard-5 |
@@ -65,7 +69,8 @@ CI.
 | AUTH-01 | Inspect the authenticated account identity | shard-5 |
 | AUTH-02 | Login validation and failed submission preserve the form | shard-5 |
 | RAPP-01 | Inspect recent Issue Triage activity | shard-6 |
-| RAPP-02 | Inspect completed Code Review and Stock Daily records | shard-6 |
+| RAPP-02 | Inspect a completed Code Review record | shard-6 |
+| RAPP-03 | Inspect a completed Stock Daily report | shard-6 |
 | SHELL-02 | Open global chat search | shard-6 |
 | SHELL-03 | Open the mobile navigation drawer | shard-6 |
 

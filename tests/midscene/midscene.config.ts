@@ -5,7 +5,7 @@ import type { NodeExecutionContext } from "@midscene/test";
 import { defineProjectSetup, defineTestProject } from "@midscene/test/config";
 import { createMidsceneNodes } from "@midscene/test/midscene";
 import { PlaywrightAgent } from "@midscene/web/playwright/agent";
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 
 loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
@@ -23,6 +23,7 @@ interface ProjectContext {
   browserContext?: BrowserContext;
   page?: Page;
   agent?: PlaywrightAgent;
+  apiResponses?: Array<{ method: string; path: string; status: number; requestBody: string }>;
 }
 
 const AI_ACT_CONTEXT = `
@@ -155,6 +156,17 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
     const page = await browserContext.newPage();
     context.browserContext = browserContext;
     context.page = page;
+    context.apiResponses = [];
+    page.on("response", (response) => {
+      const url = new URL(response.url());
+      if (url.origin !== BASE_ORIGIN || !url.pathname.startsWith("/api/")) return;
+      context.apiResponses?.push({
+        method: response.request().method(),
+        path: url.pathname,
+        status: response.status(),
+        requestBody: response.request().postData() ?? "",
+      });
+    });
 
     const url = input.path.startsWith("http")
       ? input.path
@@ -177,54 +189,6 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
         timeout: 60_000,
       });
     }
-  },
-});
-
-const scrollInput = z.strictObject({
-  position: z.enum(["top", "bottom"]),
-});
-
-const appScrollContent = defineNode<typeof scrollInput, void, ProjectContext>({
-  name: "app.scrollContent",
-  description:
-    "Scroll the main content scroll container (right of the sidebar) to its " +
-    "top or bottom, deterministically.",
-  inputSchema: scrollInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    // Kept as a *string* expression and evaluated via page.evaluate(string):
-    // esbuild rewrites nested function declarations inside evaluate callbacks
-    // with __name() helpers that do not exist in the browser runtime. The walk
-    // descends into open shadow roots (recorded apps render inside one) and
-    // also considers the document scrolling element (pages like Sessions that
-    // scroll the window itself). It pins the tallest scroller twice because
-    // the transcript snaps itself back to the newest content while replaying.
-    const scrollExpr =
-      "(() => {" +
-      "  const scrollables = [];" +
-      "  const doc = document.scrollingElement;" +
-      "  if (doc && doc.scrollHeight > window.innerHeight + 50) scrollables.push(doc);" +
-      "  const stack = [document];" +
-      "  while (stack.length) {" +
-      "    const root = stack.pop();" +
-      '    root.querySelectorAll("*").forEach((el) => {' +
-      "      if (el.shadowRoot) stack.push(el.shadowRoot);" +
-      "      const o = getComputedStyle(el).overflowY;" +
-      '      if ((o === "auto" || o === "scroll" || o === "overlay") &&' +
-      "          el.clientHeight > 100 && el.scrollHeight > el.clientHeight + 50) {" +
-      "        scrollables.push(el);" +
-      "      }" +
-      "    });" +
-      "  }" +
-      '  if (!scrollables.length) throw new Error("No scrollable content container found");' +
-      "  const target = scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];" +
-      `  target.scrollTop = ${input.position === "top" ? "0" : "target.scrollHeight"};` +
-      "})()";
-    await page.evaluate(scrollExpr);
-    await page.waitForTimeout(900);
-    await page.evaluate(scrollExpr);
-    await page.waitForTimeout(400);
   },
 });
 
@@ -256,35 +220,6 @@ const appScrollTextIntoView = defineNode<typeof scrollTextInput, void, ProjectCo
     await target.waitFor({ state: "visible", timeout: 30_000 });
     await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await page.waitForTimeout(500);
-  },
-});
-
-const contentLinkInput = z.strictObject({
-  text: z.string().min(1),
-});
-
-// The same app name appears as both a sidebar entry and a link inside chat
-// markdown (e.g. "Issue Triage"), so a vision-based tap is ambiguous. The
-// conversation content always sits right of the 255px sidebar.
-const appClickContentLink = defineNode<typeof contentLinkInput, void, ProjectContext>({
-  name: "app.clickContentLink",
-  description:
-    "Click a hyperlink by its visible text inside the main content area " +
-    "(excludes the left sidebar), deterministically via Playwright.",
-  inputSchema: contentLinkInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    const candidates = await page.locator("a:visible").filter({ hasText: input.text }).all();
-    for (const anchor of candidates) {
-      const box = await anchor.boundingBox();
-      if (box && box.x >= 255) {
-        await anchor.scrollIntoViewIfNeeded();
-        await anchor.click({ timeout: 15_000 });
-        return;
-      }
-    }
-    throw new Error(`No content-area link containing "${input.text}"`);
   },
 });
 
@@ -346,92 +281,6 @@ const appClickByLabel = defineNode<typeof clickByLabelInput, void, ProjectContex
     throw new Error(
       `app.clickByLabel: no visible control labelled "${input.label}" at index ${input.index}`,
     );
-  },
-});
-
-const goBackInput = z.strictObject({});
-
-const expectControlInput = z.strictObject({
-  // Accessible name of the button to inspect (aria-label / inner text).
-  label: z.string().min(1),
-  // Exact accessible-name match; defaults to true.
-  exact: z.boolean().default(true),
-  // Require the control enabled (false) or disabled (true). Disabled state is
-  // a DOM property that is easy to misread from a screenshot (a disabled
-  // accent button can still look pink), so assert it deterministically.
-  disabled: z.boolean().optional(),
-  // For <button role="radio"> segmented controls, require aria-checked
-  // true/false. The checked fill is subtle and easy to misread visually
-  // (neighbouring radios can look equally dark in a screenshot).
-  checked: z.boolean().optional(),
-  // Accessible role to match; segmented controls use "radio" and routine
-  // toggle switches use "switch". Defaults to "button".
-  role: z.enum(["button", "radio", "switch"]).default("button"),
-  // Require the control to be present and visible (default) or absent.
-  present: z.boolean().default(true),
-  // When several controls share the name, which match to inspect in DOM order
-  // (0-based). Defaults to the first.
-  index: z.number().int().min(0).default(0),
-});
-
-const appExpectControl = defineNode<typeof expectControlInput, void, ProjectContext>({
-  name: "app.expectControl",
-  description:
-    "Assert a button or radio-segment control state deterministically via " +
-    "Playwright instead of a screenshot: whether it exists/is visible, " +
-    'whether it is disabled, and (for role:"radio") whether it is checked. ' +
-    "Use for disabled-vs-enabled distinctions that look identical in a " +
-    "screenshot (e.g. a question card Send button), for transient aria-label " +
-    'swaps such as "Copied" or "Feedback recorded", and for segmented-control ' +
-    "selection whose checked fill is visually ambiguous.",
-  inputSchema: expectControlInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    const escaped = input.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const name = input.exact ? new RegExp(`^${escaped}$`, "i") : new RegExp(escaped, "i");
-    const matched = page.getByRole(input.role, { name, exact: input.exact });
-    const count = await matched.count();
-    if (!input.present) {
-      for (let i = 0; i < count; i += 1) {
-        if (
-          await matched
-            .nth(i)
-            .isVisible()
-            .catch(() => false)
-        ) {
-          throw new Error(
-            `app.expectControl: a visible "${input.label}" ${input.role} still exists`,
-          );
-        }
-      }
-      return;
-    }
-    if (count <= input.index) {
-      throw new Error(
-        `app.expectControl: found ${count} ${input.role}(s) labelled "${input.label}", need index ${input.index}`,
-      );
-    }
-    const target = matched.nth(input.index);
-    await target.waitFor({ state: "visible", timeout: 10_000 });
-    if (input.disabled !== undefined) {
-      const isDisabled = await target.isDisabled();
-      if (isDisabled !== input.disabled) {
-        throw new Error(
-          `app.expectControl: "${input.label}" expected ${input.disabled ? "disabled" : "enabled"}, ` +
-            `got ${isDisabled ? "disabled" : "enabled"}`,
-        );
-      }
-    }
-    if (input.checked !== undefined) {
-      const isChecked = (await target.getAttribute("aria-checked")) === "true";
-      if (isChecked !== input.checked) {
-        throw new Error(
-          `app.expectControl: "${input.label}" expected ${input.checked ? "checked" : "unchecked"}, ` +
-            `got ${isChecked ? "checked" : "unchecked"}`,
-        );
-      }
-    }
   },
 });
 
@@ -503,254 +352,6 @@ const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>
   },
 });
 
-const expectDomInput = z.strictObject({
-  // CSS selector scoped to the page's <main> region.
-  selector: z.string().min(1),
-  // Require exactly this many *visible* matches (e.g. count: 0 to assert a
-  // control is gone).
-  count: z.number().int().min(0).optional(),
-  // Require at least this many visible matches.
-  minCount: z.number().int().min(0).optional(),
-  // Require every match to be disabled/enabled (form-field property).
-  disabled: z.boolean().optional(),
-  // Require every match to carry the attribute; when value is given it must
-  // equal it (e.g. aria-pressed="true").
-  attribute: z.strictObject({ name: z.string().min(1), value: z.string().optional() }).optional(),
-});
-
-const appExpectDom = defineNode<typeof expectDomInput, void, ProjectContext>({
-  name: "app.expectDom",
-  description:
-    "Assert structural/state facts about the main content via a CSS selector " +
-    "and the DOM, instead of a screenshot: how many visible elements match, " +
-    "whether they are disabled, and whether they carry an attribute such as " +
-    "aria-pressed. Use for state that is invisible or ambiguous in an image " +
-    "(a <fieldset disabled> locking an answered card, pressed option " +
-    "buttons, absence of a footer action).",
-  inputSchema: expectDomInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    const locator = page.locator(`main ${input.selector}`);
-    const total = await locator.count();
-    const visible: Locator[] = [];
-    for (let i = 0; i < total; i += 1) {
-      const el = locator.nth(i);
-      if (await el.isVisible().catch(() => false)) visible.push(el);
-    }
-    const n = visible.length;
-    if (input.count !== undefined && n !== input.count) {
-      throw new Error(
-        `app.expectDom: "${input.selector}" expected ${input.count} visible match(es), got ${n}`,
-      );
-    }
-    if (input.minCount !== undefined && n < input.minCount) {
-      throw new Error(
-        `app.expectDom: "${input.selector}" expected at least ${input.minCount} visible match(es), got ${n}`,
-      );
-    }
-    if (input.disabled !== undefined) {
-      for (const el of visible) {
-        const isDisabled = await el.isDisabled().catch(() => true);
-        if (isDisabled !== input.disabled) {
-          throw new Error(
-            `app.expectDom: "${input.selector}" expected ${input.disabled ? "disabled" : "enabled"}`,
-          );
-        }
-      }
-    }
-    if (input.attribute) {
-      for (const el of visible) {
-        const actual = await el.getAttribute(input.attribute.name).catch(() => null);
-        if (
-          actual === null ||
-          (input.attribute.value !== undefined && actual !== input.attribute.value)
-        ) {
-          throw new Error(
-            `app.expectDom: "${input.selector}" expected attribute ${input.attribute.name}` +
-              (input.attribute.value !== undefined ? `="${input.attribute.value}"` : "") +
-              `, got ${actual === null ? "absent" : `"${actual}"`}`,
-          );
-        }
-      }
-    }
-  },
-});
-
-const expectMenuItemInput = z.strictObject({
-  // Visible text of the dropdown menu item.
-  label: z.string().min(1),
-  // Exact text match; defaults to true.
-  exact: z.boolean().default(true),
-  // Require the item's selected/check indicator present (true) or absent
-  // (false). Radix dropdowns mark the current choice with a lucide check
-  // icon rather than aria-checked, and that small tick is easy to miss in a
-  // screenshot, so assert it from the DOM.
-  checked: z.boolean().optional(),
-  // Require the item to be present and visible (default) or absent.
-  present: z.boolean().default(true),
-});
-
-const appExpectMenuItem = defineNode<typeof expectMenuItemInput, void, ProjectContext>({
-  name: "app.expectMenuItem",
-  description:
-    "Assert the state of an open dropdown-menu item deterministically via " +
-    "Playwright: whether it is visible, and whether it carries the selected " +
-    "check icon (the current choice). Use for option menus such as the " +
-    'composer "Reasoning effort" picker, whose current value is marked only ' +
-    "with a small check tick instead of aria-checked. Open the menu first " +
-    "(e.g. app.clickByLabel).",
-  inputSchema: expectMenuItemInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    const items = await page.getByRole("menuitem").all();
-    const visible: { text: string; handle: (typeof items)[number] }[] = [];
-    for (const item of items) {
-      if (!(await item.isVisible().catch(() => false))) continue;
-      const text = (await item.innerText().catch(() => "")).trim();
-      const matches = input.exact ? text === input.label : text.includes(input.label);
-      if (matches) visible.push({ text, handle: item });
-    }
-    if (!input.present) {
-      if (visible.length > 0) {
-        throw new Error(`app.expectMenuItem: a visible "${input.label}" menu item still exists`);
-      }
-      return;
-    }
-    if (visible.length === 0) {
-      const menuText = (await Promise.all(items.map((item) => item.innerText().catch(() => ""))))
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .join(" | ");
-      throw new Error(
-        `app.expectMenuItem: no visible menu item labelled "${input.label}" (open items: ${menuText || "none"})`,
-      );
-    }
-    if (input.checked !== undefined) {
-      const hasCheck =
-        (await visible[0].handle.locator("svg.lucide-check").count()) > 0 ||
-        (await visible[0].handle.locator("[data-check]").count()) > 0;
-      if (hasCheck !== input.checked) {
-        throw new Error(
-          `app.expectMenuItem: "${input.label}" expected ${input.checked ? "checked" : "unchecked"}, ` +
-            `got ${hasCheck ? "checked" : "unchecked"}`,
-        );
-      }
-    }
-  },
-});
-
-const monacoEditInput = z.strictObject({
-  // Text to insert into the editor.
-  text: z.string().min(1),
-  // Append at the end of the document (default) or replace the whole buffer.
-  append: z.boolean().default(true),
-  // Click the file view's Save button and wait for the PUT /file write to
-  // complete and the button to return to its disabled (saved) state.
-  save: z.boolean().default(false),
-});
-
-const appMonacoEdit = defineNode<typeof monacoEditInput, void, ProjectContext>({
-  name: "app.monacoEdit",
-  description:
-    "Edit the currently open Monaco file editor (Projects/Memory file view) " +
-    "deterministically via the monaco editor API, instead of steering the " +
-    "editor with vision actions. The file must already be open in Edit mode " +
-    "(click the Preview/Edit segmented control first). Appends text at the " +
-    "end by default; set append:false to replace the whole file, and save:true " +
-    "to press Save and wait for the write to finish.",
-  inputSchema: monacoEditInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    // @monaco-editor/react leaves the loader global; wait for a mounted,
-    // visible editor instance (the recorded-apps surface never mounts one).
-    await page.waitForFunction(
-      "() => (window.monaco?.editor?.getEditors?.() ?? []).some((e) => e.getDomNode()?.offsetParent)",
-      null,
-      { timeout: 15_000 },
-    );
-    // String expression on purpose: esbuild injects __name() helpers into
-    // nested functions inside evaluate callbacks, which then fail in-page.
-    // Playwright only forwards the second argument to *function* scripts, not
-    // string expressions, so the parameters are embedded as JSON literals.
-    const argJson = JSON.stringify({ text: input.text, append: input.append });
-    await page.evaluate(
-      "((arg) => {" +
-        "  const eds = window.monaco.editor.getEditors();" +
-        "  const ed = eds.find((e) => e.getDomNode()?.offsetParent) ?? eds[eds.length - 1];" +
-        '  if (!ed) throw new Error("no visible monaco editor");' +
-        "  if (arg.append) {" +
-        "    const m = ed.getModel();" +
-        "    const line = m.getLineCount();" +
-        "    const col = m.getLineMaxColumn(line);" +
-        '    ed.executeEdits("midscene", [{' +
-        "      range: new window.monaco.Range(line, col, line, col)," +
-        "      text: arg.text, forceMoveMarkers: true," +
-        "    }]);" +
-        "  } else {" +
-        "    ed.setValue(arg.text);" +
-        "  }" +
-        "  ed.focus();" +
-        `})(${argJson})`,
-    );
-    // Let React's onChange flush into the file store (enables Save).
-    await page.waitForTimeout(300);
-    if (input.save) {
-      const saveButton = page
-        .locator("main")
-        .getByRole("button", { name: "Save", exact: true })
-        .first();
-      await saveButton.waitFor({ state: "visible", timeout: 10_000 });
-      await page.waitForFunction(
-        "() => {" +
-          '  const b = Array.from(document.querySelectorAll("main button"))' +
-          '    .find((x) => /^Save$/.test((x.textContent || "").trim()));' +
-          "  return b ? !b.disabled : false;" +
-          "}",
-        null,
-        { timeout: 10_000 },
-      );
-      const putDone = page.waitForResponse(
-        (response) =>
-          /\/api\/(projects|memory)\/file/.test(response.url()) &&
-          response.request().method() === "PUT",
-        { timeout: 15_000 },
-      );
-      await saveButton.click();
-      await putDone;
-      // Button label briefly becomes "Saving"; once it reads "Save" again and
-      // is disabled, the store has settled back to a clean state.
-      await page.waitForFunction(
-        "() => {" +
-          '  const b = Array.from(document.querySelectorAll("main button"))' +
-          '    .find((x) => /^Save$/.test((x.textContent || "").trim()));' +
-          "  return Boolean(b && b.disabled);" +
-          "}",
-        null,
-        { timeout: 10_000 },
-      );
-    }
-  },
-});
-
-const appGoBack = defineNode<typeof goBackInput, void, ProjectContext>({
-  name: "app.goBack",
-  description:
-    "Go back one entry in browser history (client-side navigation), keeping " +
-    "the in-memory mock state of the current browser context.",
-  inputSchema: goBackInput,
-  async execute({ context }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    await page.goBack({ waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.locator('a[href="/chat"]').first().waitFor({
-      state: "visible",
-      timeout: 60_000,
-    });
-  },
-});
 
 const expectUrlInput = z.strictObject({
   // Substring matched against the full URL; prefix with "re:" for a regex.
@@ -774,24 +375,44 @@ const appExpectUrl = defineNode<typeof expectUrlInput, void, ProjectContext>({
   },
 });
 
-const reloadInput = z.strictObject({});
+const expectResponseInput = z.strictObject({
+  method: z.string().min(1),
+  path: z.string().startsWith("/api/"),
+  status: z.number().int().min(100).max(599),
+  requestBodyIncludes: z.array(z.string().min(1)).default([]),
+});
 
-const appReload = defineNode<typeof reloadInput, void, ProjectContext>({
-  name: "app.reload",
+const appExpectResponse = defineNode<typeof expectResponseInput, void, ProjectContext>({
+  name: "app.expectResponse",
   description:
-    "Reload the current page. The mock keeps writes in memory, so a reload " +
-    "restores the default fixtures while keeping one story within a case.",
-  inputSchema: reloadInput,
-  async execute({ context }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.locator('a[href="/chat"]').first().waitFor({
-      state: "visible",
-      timeout: 60_000,
-    });
+    "Assert an API response observed since app.open, including the request method, path, status, " +
+    "and optional request-body fragments. Use for transient outcomes that disappear before a " +
+    "second model screenshot.",
+  inputSchema: expectResponseInput,
+  async execute({ context, input }) {
+    if (!context.page || !context.apiResponses) {
+      throw new Error("No page is open; call app.open first");
+    }
+    const matches = () =>
+      context.apiResponses?.some(
+        (response) =>
+          response.method === input.method &&
+          response.path === input.path &&
+          response.status === input.status &&
+          input.requestBodyIncludes.every((part) => response.requestBody.includes(part)),
+      );
+    const deadline = Date.now() + 10_000;
+    while (!matches() && Date.now() < deadline) {
+      await context.page.waitForTimeout(250);
+    }
+    if (!matches()) {
+      throw new Error(
+        `No ${input.method} ${input.path} response with status ${input.status} and requested body fragments`,
+      );
+    }
   },
 });
+
 
 const pressKeyInput = z.strictObject({
   // Combo like "mod+k", "mod+b", "mod+shift+o", or a single key
@@ -821,61 +442,6 @@ const appPressKey = defineNode<typeof pressKeyInput, void, ProjectContext>({
   },
 });
 
-const typeInput = z.strictObject({
-  // Text to type. Omit together with clear:true to empty a field only.
-  text: z.string().optional(),
-  // Optional visible label/placeholder of the field to focus first.
-  target: z.string().optional(),
-  // Clear the field before typing (Playwright fill for React controlled
-  // inputs; Ctrl/Cmd+A when typing into the already focused element).
-  clear: z.boolean().default(false),
-});
-
-const appTypeText = defineNode<typeof typeInput, void, ProjectContext>({
-  name: "app.typeText",
-  description:
-    "Focus a text field by its visible label/placeholder and type text " +
-    "deterministically with the keyboard. If target is omitted, types into " +
-    "the currently focused element. With clear:true and no text, empties the " +
-    "field only.",
-  inputSchema: typeInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    let field: Locator | undefined;
-    if (input.target) {
-      // Try candidate locators one at a time instead of joining them into one
-      // selector: Playwright switches engines at ">>", so a comma CSS list with
-      // a trailing xpath union parses as a chain and never matches.
-      const candidates = [
-        page.getByPlaceholder(input.target).first(),
-        page.getByRole("textbox", { name: input.target }).first(),
-        page.getByLabel(input.target).first(),
-      ];
-      for (const loc of candidates) {
-        if (await loc.isVisible().catch(() => false)) {
-          field = loc;
-          break;
-        }
-      }
-      if (!field) throw new Error(`app.typeText: no visible field matches "${input.target}"`);
-      await field.click();
-    }
-    if (input.clear) {
-      // Playwright fill drives React controlled inputs reliably; the
-      // Ctrl/Cmd+A fallback covers the focused-field case without a target.
-      if (field) {
-        await field.fill("");
-      } else {
-        await page.keyboard.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
-        await page.keyboard.press("Delete");
-      }
-    }
-    if (input.text) await page.keyboard.type(input.text, { delay: 15 });
-    await page.waitForTimeout(200);
-  },
-});
-
 const tagList = (raw: string | undefined): string[] =>
   (raw ?? "")
     .split(",")
@@ -899,19 +465,11 @@ export default defineTestProject<ProjectContext>({
   nodes: [
     ...createMidsceneNodes<ProjectContext>({ agentClass: PlaywrightAgent, getAgent }),
     appOpen,
-    appReload,
-    appGoBack,
     appExpectUrl,
-    appClickContentLink,
+    appExpectResponse,
     appClickByLabel,
-    appExpectControl,
-    appExpectMenuItem,
     appExpectTexts,
-    appExpectDom,
-    appMonacoEdit,
-    appScrollContent,
     appScrollTextIntoView,
     appPressKey,
-    appTypeText,
   ],
 });

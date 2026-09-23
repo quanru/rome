@@ -11,11 +11,10 @@ cases:
       - aiAssert: >-
           The project search field contains "todo.md" and the matching todo.md file is visible in
           the project tree.
-  - name: FILE-02 Open project and Memory files
+  - name: FILE-02 Open a project file
     tags:
       - files
       - shard-4
-      - deterministic-assist
     steps:
       - app.open:
           path: /projects
@@ -25,21 +24,11 @@ cases:
       - aiAssert: >-
           todo.md is open in Preview mode and displays "Mock file content for the dashboard mock
           mode." rather than a loading or error state.
-      - app.open:
-          path: /memory
-      - app.clickByLabel:
-          label: relationship
-          exact: true
-      - app.clickByLabel:
-          label: BONDS.md
-          exact: true
-      - aiAssert: >-
-          The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
-          Circle" section listing ray-oster and nadia-petrova.
   - name: FILE-03 Handle a duplicate project-file rename
     tags:
       - files
       - shard-4
+      - deterministic-assist
     steps:
       - app.open:
           path: /projects
@@ -57,6 +46,27 @@ cases:
           6. The duplicate-name rejection is the expected successful result of this test. Stop when
           the UI shows "Already exists." and report the action as complete; do not return a task
           failure because the rename was rejected.
+      # The duplicate-name toast auto-dismisses before a second model screenshot can inspect it.
+      - app.expectResponse:
+          method: PATCH
+          path: /api/projects/file
+          status: 409
+          requestBodyIncludes:
+            - notes.txt
+            - README.md
       - aiAssert: >-
-          The duplicate rename is rejected: both "notes.txt" and the existing "README.md" remain
-          listed in the demo-app tree.
+          Both "notes.txt" and the existing "README.md" remain listed in the demo-app tree after
+          the rejected rename.
+  - name: FILE-04 Open a Memory file
+    tags:
+      - files
+      - shard-4
+    steps:
+      - app.open:
+          path: /memory
+      - aiAct: >-
+          In the Memory file tree, expand the relationship folder and open BONDS.md. Finish when
+          the right-hand file viewer shows the rendered file in Preview mode.
+      - aiAssert: >-
+          The file renders in Preview mode with the heading "Relationship Bonds" and an "Inner
+          Circle" section listing ray-oster and nadia-petrova.

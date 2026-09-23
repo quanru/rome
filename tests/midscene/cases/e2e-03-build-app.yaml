@@ -12,12 +12,12 @@ cases:
       - app.scrollTextIntoView:
           text: Done. The Issue Triage app is built, installed, and verified
       - aiAct: >-
-          Inside the chat conversation, find the visible sentence beginning "Done. The Issue Triage
-          app is built". Click near the upper-middle of the visible blue letter strokes in its final
-          underlined "Issue Triage" link, avoiding the underline and lower edge. Click once, then stop
-          immediately. Regardless of whether the screen visibly changes, declare the action complete
-          after that one click and never retry it. Do not click the separate Issue Triage entry in the
-          left sidebar.
+          Open the built Issue Triage app from the final underlined "Issue Triage" link in the chat
+          sentence beginning "Done. The Issue Triage app is built". Click the blue letter strokes,
+          not the underline or the separate Issue Triage entry in the left sidebar. Wait for the app
+          workspace tile beside the conversation and its dashboard content to appear before finishing.
+          If the link remains visible but the tile does not open, inspect the page and try the chat
+          link again. Do not report completion while the screen is still only the chat conversation.
       - aiAssert: >-
           The Issue Triage app is open in a workspace tile beside the still-visible conversation.
           Its dashboard shows repository or triage content, not an error or page-not-found state.

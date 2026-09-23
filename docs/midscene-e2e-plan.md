@@ -2,9 +2,9 @@
 
 > Onboarding attachment for Rome maintainers.
 >
-> Status: all 36 cases catalogued in section 5 are defined as AI-native YAML
+> Status: all 38 cases catalogued in section 5 are defined as AI-native YAML
 > workflows under `tests/midscene/cases/`. Six CI shards split them
-> 5/8/7/6/6/4. Each case uses `aiAct` for interaction and `aiAssert` for
+> 5/8/7/7/6/5. Each case uses `aiAct` for interaction and `aiAssert` for
 > its visible outcome.
 
 ## 1. Background and Goals
@@ -83,22 +83,20 @@ GitHub Actions (6 shards)
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
 
-The harness registers custom nodes for setup and local debugging. Committed
-cases use `app.open` and may use `app.expectUrl` when the browser address is not
-visible to the model. The full list remains in `midscene-node-reference.md`.
+The harness registers only the custom nodes used by committed cases. Each case
+uses one `app.open` and may use `app.expectUrl` when the browser address is not
+visible to the model. Run `npm run nodes` in `tests/midscene` to generate a
+local reference for the full node list.
 
 | Node | Purpose |
 | --- | --- |
 | `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
-| `app.reload` | Hard reload (in-memory state resets to the default fixtures; for "after refresh" behavior) |
-| `app.goBack` | Browser back (client navigation, **keeps** in-memory state) |
 | `app.expectUrl` | URL substring / `re:` regex assertion |
-| `app.clickContentLink` | Deterministically click a link by text outside the sidebar (avoids same-name sidebar ambiguity) |
+| `app.expectResponse` | Check an API response for a transient outcome that a later screenshot cannot capture |
 | `app.clickByLabel` | Deterministically click repeated icon buttons by accessible name (tile kebab, chip clear), piercing open shadow DOM |
 | `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere; works locally and on Linux CI) |
-| `app.typeText` | Locate a field by placeholder/label and type; supports clear-only (`clear: true` without `text`) |
-| `app.scrollContent` | Scroll the main content area (including shadow-DOM recorded apps and window-level pages like Sessions) to top/bottom, idempotent |
 | `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport; pierces shadow DOM |
+| `app.expectTexts` | Check long-page or toast text that cannot fit in one screenshot |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 
@@ -201,9 +199,9 @@ Shard split:
 | shard-1 | 5 | Chat core journeys |
 | shard-2 | 8 | Apps, rich chat cards, and E2E-03 |
 | shard-3 | 7 | Sessions, routines, and E2E-01/02 |
-| shard-4 | 6 | Activity, people, files, and memory |
+| shard-4 | 7 | Activity, people, files, and memory |
 | shard-5 | 6 | Settings, auth, and desktop shell cases |
-| shard-6 | 4 | Recorded apps, global search, and mobile navigation |
+| shard-6 | 5 | Recorded apps, global search, and mobile navigation |
 
 The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
 shard-2, AUTH-01 → shard-5).
@@ -215,7 +213,7 @@ shard-2, AUTH-01 → shard-5).
 > no YAML).
 
 <!-- CASE-CATALOG -->
-The suite contains **36** ✅ mock-drivable cases in 15 YAML files. The
+The suite contains **38** ✅ mock-drivable cases in 15 YAML files. The
 [case catalog](midscene-e2e-cases.md#case-catalog) lists their names and shard
 assignments. `npm run collect` validates the expected total and each shard
 count against a committed manifest.
@@ -328,8 +326,8 @@ MIDSCENE_INCLUDE_TAGS=poc npm test   # PoC stories only
 
 ## 8. Authoring and Maintenance Conventions
 
-1. Every case starts with `app.open`. Use `app.reload` only to test refresh
-   behavior.
+1. Every case starts with exactly one `app.open`. Use `aiAct` for navigation
+   within the case.
 2. Every case contains at least one `aiAct` and one `aiAssert`. The collection
    check rejects atomic AI nodes and operational `app.*` nodes.
 3. Write each `aiAct` as a user goal. Combine related clicks, typing,

@@ -22,9 +22,10 @@ let fileCount = 0;
 let caseCount = 0;
 const failures = [];
 const atomicAiNode = /^ai(?:Tap|Scroll|Input|Hover|Keyboard)/;
-const infrastructureNodes = new Set(["app.open", "app.reload", "app.expectUrl"]);
+const infrastructureNodes = new Set(["app.open", "app.expectUrl"]);
 const deterministicAssistNodes = new Set([
   "app.clickByLabel",
+  "app.expectResponse",
   "app.expectTexts",
   "app.pressKey",
   "app.scrollTextIntoView",
@@ -33,9 +34,9 @@ const expectedCasesByShard = new Map([
   ["shard-1", 5],
   ["shard-2", 8],
   ["shard-3", 7],
-  ["shard-4", 6],
+  ["shard-4", 7],
   ["shard-5", 6],
-  ["shard-6", 4],
+  ["shard-6", 5],
 ]);
 const collectedCasesByShard = new Map([...expectedCasesByShard.keys()].map((shard) => [shard, 0]));
 
@@ -47,6 +48,9 @@ const validateAiNativeCase = (testCase) => {
   const shardTags = [...tags].filter((tag) => expectedCasesByShard.has(tag));
 
   if (nodes[0] !== "app.open") problems.push("the first step must be app.open");
+  if (nodes.filter((node) => node === "app.open").length !== 1) {
+    problems.push("each case must have exactly one app.open");
+  }
   if (!nodes.includes("aiAct")) problems.push("at least one aiAct is required");
   if (!nodes.includes("aiAssert")) problems.push("at least one aiAssert is required");
   if (shardTags.length !== 1) {
