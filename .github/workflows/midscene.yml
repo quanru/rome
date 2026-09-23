@@ -40,8 +40,8 @@ on:
 # bearing path (the `midscene` matrix) is restricted to the protected main
 # branch in the upstream repository. Fork owners may explicitly dispatch a
 # fork branch with their fork's own secrets. Pull requests still run only the
-# secret-free `harness-validation` job (npm ci, type-check, YAML case
-# collection, and Summary renderer tests).
+# secret-free `harness-validation` job (npm ci, type-check, and YAML case
+# collection). Only quanru/rome renders and publishes reports.
 
 permissions:
   contents: read
@@ -92,6 +92,7 @@ jobs:
         run: npm run collect
 
       - name: Test CI Summary renderer
+        if: github.repository == 'quanru/rome'
         working-directory: tests/midscene
         run: npm run test:summary
 
@@ -228,7 +229,7 @@ jobs:
           NODE
 
       - name: Upload Midscene shard report
-        if: always()
+        if: always() && github.repository == 'quanru/rome'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: midscene-${{ matrix.shard }}
@@ -251,7 +252,9 @@ jobs:
   report-summary:
     name: Assemble Midscene report and Summary
     needs: midscene
-    if: always() && !cancelled() && needs.midscene.result != 'skipped'
+    if: >-
+      always() && !cancelled() && needs.midscene.result != 'skipped' &&
+      github.repository == 'quanru/rome'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -326,7 +329,7 @@ jobs:
   deploy-report:
     name: Publish Midscene HTML report
     needs: report-summary
-    if: needs.report-summary.result == 'success'
+    if: github.repository == 'quanru/rome' && needs.report-summary.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:

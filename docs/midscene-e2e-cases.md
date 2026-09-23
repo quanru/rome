@@ -80,9 +80,12 @@ The case names and shard assignments above match the executable YAML. Run
 - Every case gets a fresh BrowserContext, so MSW state is isolated between
   cases while client-side navigation within one case preserves mock writes.
 - CI pull requests run only secret-free harness validation. The six model-backed
-  shards run only on the protected `main` branch.
-- Each shard uploads its native Midscene report. The aggregation job publishes
-  one Summary table with a screenshot and an exact report-step link per case.
+  shards run on the upstream `main` branch or by manual dispatch in a fork
+  using that fork's model secrets.
+- The `quanru/rome` fork uploads each shard's native report and publishes a
+  Summary table with a screenshot and an exact report-step link per case.
+- The upstream repository runs the cases without uploading reports or
+  publishing the Summary.
 
 ## Local run
 

@@ -112,13 +112,16 @@ HEADLESS=false npm test
   `.midscene/test-results/<runId>/summary.json` (includes collection-error
   details)
 - Both are covered by `.gitignore`.
-- CI uploads each shard separately and also produces a combined
+- Runs in `quanru/rome` upload each shard and a combined
   `midscene-e2e-report` artifact. Its `index.html` contains the overall Summary,
   model names, shard counts, case results, durations, screenshots, and links to
-  exact steps in the native Midscene reports. CI publishes the HTML through
-  GitHub Pages so links and images work from the Actions run Summary.
+  exact steps in the native Midscene reports. The fork publishes the HTML
+  through GitHub Pages so links and images work from the Actions run Summary.
+- Runs in `rome-os/rome` execute the cases without uploading reports or
+  publishing a Summary or GitHub Pages site.
 - Pull requests run only the secret-free harness validation job. The
-  model-backed shard matrix runs only on the protected `main` branch.
+  model-backed shard matrix runs on the upstream `main` branch or by manual
+  dispatch in a fork using that fork's model secrets.
 
 ## Authoring Conventions
 

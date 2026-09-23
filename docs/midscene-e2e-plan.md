@@ -146,9 +146,9 @@ reasons behind them.
   collection step that parses every case and resolves node references
   exactly like the runner — no browser, mock server, or model calls), so a
   broken custom node or malformed case fails before merge without exposing
-  any credentials. The model-backed `midscene` matrix stays bound to the
-  main ref by `if: github.ref == 'refs/heads/main'`. The matrix does not
-  run on `pull_request`: model calls are billable and a PR job checks out
+  any credentials. The model-backed `midscene` matrix runs on the upstream
+  `main` branch or by manual dispatch in a fork using that fork's secrets.
+  The matrix does not run on `pull_request`: model calls are billable and a PR job checks out
   contributor-controlled code. Note that merely naming a protected
   environment in the workflow does **not** create its reviewer gate — an
   absent environment is provisioned open — so until a maintainer actually
@@ -186,10 +186,11 @@ reasons behind them.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
   every case carries exactly one `shard-N` tag. `fail-fast: false`,
   `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
-- **Evidence**: every shard uploads the `midscene_run/` and `.midscene/`
-  report artifacts. The aggregation job publishes an Actions Summary table
-  with one screenshot and an exact report-step link for every case. It also
-  publishes the combined HTML and native reports through GitHub Pages.
+- **Evidence**: runs in `quanru/rome` upload the `midscene_run/` and
+  `.midscene/` report artifacts. The aggregation job publishes an Actions
+  Summary table with one screenshot and an exact report-step link for every
+  case. It also publishes the combined HTML and native reports through GitHub
+  Pages. Runs in `rome-os/rome` execute the cases without these report jobs.
 - **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
   --no-network-family-autoselection` works around runner-side IPv6 racing when
   the model endpoint is only stable over IPv4.
