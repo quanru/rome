@@ -22,6 +22,10 @@ test("keeps historical root links and publishes recent runs at stable paths", as
   await shard(previous, "recent-old");
   await shard(legacy, "affected-old");
   await shard(reports, "new");
+  await mkdir(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots"));
+  await mkdir(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots"));
+  await writeFile(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/recent.jpeg"), "recent");
+  await writeFile(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"), "affected");
   await writeFile(path.join(legacy, "index.html"), "affected summary");
   await writeFile(path.join(reports, "index.html"), "new summary");
   await mkdir(path.join(previous, "runs", "100"), { recursive: true });
@@ -39,6 +43,10 @@ test("keeps historical root links and publishes recent runs at stable paths", as
     await readFile(path.join(site, "midscene-shard-1/midscene_run/report/recent-old/index.html"), "utf8"),
     "recent-old",
   );
+  assert.equal(
+    await readFile(path.join(site, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"), "utf8"),
+    "affected",
+  );
   assert.equal(await readFile(path.join(site, "runs/101/index.html"), "utf8"), "new summary");
 
   const next = path.join(root, "next");
@@ -55,4 +63,24 @@ test("keeps historical root links and publishes recent runs at stable paths", as
 
 test("rejects nonnumeric run IDs", async () => {
   await assert.rejects(preparePagesSite({ site: "unused", runId: "../escape" }), /numeric/);
+});
+
+test("rejects conflicting historical screenshot IDs", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-pages-conflict-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const previous = path.join(root, "previous");
+  const legacy = path.join(root, "legacy");
+  const reports = path.join(root, "reports");
+  await shard(previous, "old");
+  await shard(legacy, "older");
+  await mkdir(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots"));
+  await mkdir(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots"));
+  await writeFile(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"), "first");
+  await writeFile(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"), "second");
+  await mkdir(reports);
+  await writeFile(path.join(reports, "index.html"), "summary");
+  await assert.rejects(
+    preparePagesSite({ site: path.join(root, "site"), reports, runId: "101", previous, legacy }),
+    /Conflicting report asset/,
+  );
 });

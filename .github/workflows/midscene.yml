@@ -30,6 +30,11 @@ on:
       - "packages/web-content/**"
       - "pnpm-lock.yaml"
   workflow_dispatch:
+    inputs:
+      report_source_run_id:
+        description: Rebuild the Summary from an existing run's shard artifacts without model calls
+        required: false
+        type: string
 
 # Credential trust model:
 # The four MIDSCENE_MODEL_* secrets are billable, and a pull_request job runs
@@ -103,8 +108,9 @@ jobs:
     # on main; a fork owner may explicitly dispatch a fork ref with that fork's
     # own secrets.
     if: >-
-      github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && github.repository != 'rome-os/rome')
+      inputs.report_source_run_id == '' &&
+      (github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && github.repository != 'rome-os/rome'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -253,7 +259,8 @@ jobs:
     name: Assemble Midscene report and Summary
     needs: midscene
     if: >-
-      always() && !cancelled() && needs.midscene.result != 'skipped' &&
+      always() && !cancelled() &&
+      (needs.midscene.result != 'skipped' || inputs.report_source_run_id != '') &&
       github.repository == 'quanru/rome'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -268,12 +275,21 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate report source run
+        if: inputs.report_source_run_id != ''
+        env:
+          REPORT_SOURCE_RUN_ID: ${{ inputs.report_source_run_id }}
+        run: |
+          [[ "$REPORT_SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+
       # Separate directories preserve reports whose generated filenames match
       # across serial shards.
       - name: Download every Midscene shard
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: midscene-shard-*
+          run-id: ${{ inputs.report_source_run_id || github.run_id }}
+          github-token: ${{ github.token }}
           path: ${{ runner.temp }}/midscene-report-shards
           merge-multiple: false
 
@@ -327,7 +343,7 @@ jobs:
 
       - name: Render case table
         env:
-          PRODUCER_RESULT: ${{ needs.midscene.result }}
+          PRODUCER_RESULT: ${{ inputs.report_source_run_id != '' && 'success' || needs.midscene.result }}
         run: |
           node tests/midscene/scripts/render-ci-summary.mjs \
             --reports-dir "$RUNNER_TEMP/midscene-report-shards" \
@@ -350,7 +366,14 @@ jobs:
             --legacy-run-id "35734638707"
 
       - name: Add case table to the run Summary
-        run: cat "$RUNNER_TEMP/midscene-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REPORT_SOURCE_RUN_ID: ${{ inputs.report_source_run_id }}
+        run: |
+          if [ -n "$REPORT_SOURCE_RUN_ID" ]; then
+            echo "Report rebuilt from [run $REPORT_SOURCE_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$REPORT_SOURCE_RUN_ID) without new model calls." >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          fi
+          cat "$RUNNER_TEMP/midscene-summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload combined Midscene report
         if: always()

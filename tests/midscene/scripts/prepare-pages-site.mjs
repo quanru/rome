@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,24 @@ const bytesIn = async (filename) => {
   );
 };
 
+const mergeReports = async (source, destination) => {
+  await mkdir(destination, { recursive: true });
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(destination, entry.name);
+    if (entry.isDirectory()) {
+      await mergeReports(from, to);
+    } else if (entry.isFile()) {
+      if (await exists(to)) {
+        const [oldBytes, newBytes] = await Promise.all([readFile(to), readFile(from)]);
+        if (!oldBytes.equals(newBytes)) throw new Error(`Conflicting report asset: ${to}`);
+      } else {
+        await cp(from, to);
+      }
+    }
+  }
+};
+
 const copyShardReports = async (source, destination) => {
   if (!(await exists(source))) return;
   for (const entry of await readdir(source, { withFileTypes: true })) {
@@ -41,14 +59,7 @@ const copyShardReports = async (source, destination) => {
     const reports = path.join(source, entry.name, "midscene_run", "report");
     if (!(await exists(reports))) continue;
     const destinationReports = path.join(destination, entry.name, "midscene_run", "report");
-    await mkdir(destinationReports, { recursive: true });
-    for (const report of await readdir(reports)) {
-      await cp(path.join(reports, report), path.join(destinationReports, report), {
-        recursive: true,
-        force: false,
-        errorOnExist: true,
-      });
-    }
+    await mergeReports(reports, destinationReports);
   }
 };
 
