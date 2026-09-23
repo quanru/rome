@@ -398,7 +398,7 @@ jobs:
   deploy-report:
     name: Publish Midscene HTML report
     needs: report-summary
-    if: github.repository == 'quanru/rome' && needs.report-summary.result == 'success'
+    if: always() && github.repository == 'quanru/rome' && needs.report-summary.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
