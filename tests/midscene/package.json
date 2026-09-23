@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "collect": "node scripts/collect-cases.mjs",
     "check:model-vision": "node scripts/check-model-vision.mjs",
-    "test:summary": "node --test scripts/render-ci-summary.test.mjs"
+    "test:summary": "node --test scripts/render-ci-summary.test.mjs scripts/prepare-pages-site.test.mjs"
   },
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
