@@ -36,6 +36,7 @@
 @source "./layout-list.tsx";
 @source "./list-row.tsx";
 @source "./markdown.tsx";
+@source "./mermaid-download-menu.tsx";
 @source "./page.tsx";
 @source "./popover.tsx";
 @source "./radio-group.tsx";

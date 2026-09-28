@@ -53,6 +53,7 @@ export class SessionsRepository {
     agentName: string;
     channelThreadKey?: string;
     status?: "active" | "completed" | "error";
+    workingDir?: string;
   }) {
     const id = data.id ?? uuid();
     const now = new Date();
@@ -60,6 +61,7 @@ export class SessionsRepository {
       id,
       agentName: data.agentName,
       channelThreadKey: data.channelThreadKey ?? null,
+      workingDir: data.workingDir ?? null,
       createdAt: now,
       lastActiveAt: now,
       status: data.status ?? "active",
@@ -105,6 +107,10 @@ export class SessionsRepository {
     });
   }
 
+  async setWorkingDir(id: string, workingDir: string): Promise<void> {
+    await this.db.update(sessions).set({ workingDir }).where(eq(sessions.id, id));
+  }
+
   async touch(id: string) {
     await this.db.update(sessions).set({ lastActiveAt: new Date() }).where(eq(sessions.id, id));
   }
@@ -138,6 +144,10 @@ export class SessionsRepository {
       .update(sessions)
       .set({ provider, providerThreadId: providerThreadId ?? null, model: model ?? null })
       .where(eq(sessions.id, id));
+  }
+
+  async setReasoningEffort(id: string, reasoningEffort: string): Promise<void> {
+    await this.db.update(sessions).set({ reasoningEffort }).where(eq(sessions.id, id));
   }
 
   async setTurnCheckpoint(input: StoredSessionTurnCheckpoint): Promise<void> {

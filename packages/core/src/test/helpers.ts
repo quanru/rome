@@ -649,6 +649,14 @@ export async function buildTestDeps(
     publicAccessState,
     dashboardAccessState,
     relayDrainer: new RelayDrainer([], async () => ({ status: 200 })),
+    nodeDevices: {
+      start: async () => {},
+      getStatus: async () => ({
+        connection: "not_configured",
+        checkedAt: new Date().toISOString(),
+        devices: [],
+      }),
+    },
     computerUse: {
       getStatus: async () => ({
         daemon: { status: "unavailable", version: null },

@@ -24,6 +24,8 @@ export class SessionManager {
         provider: string | null;
         providerThreadId: string | null;
         model: string | null;
+        reasoningEffort: string | null;
+        workingDir?: string | null;
         createdAt: Date;
         lastActiveAt: Date;
       }
@@ -41,6 +43,8 @@ export class SessionManager {
       provider: row.provider,
       providerThreadId: row.providerThreadId,
       model: row.model,
+      reasoningEffort: row.reasoningEffort,
+      workingDir: row.workingDir,
       createdAt: row.createdAt,
       lastActiveAt: row.lastActiveAt,
     };
@@ -69,6 +73,7 @@ export class SessionManager {
         provider: string | null;
         providerThreadId: string | null;
         model: string | null;
+        workingDir?: string | null;
       }
     | undefined
   > {
@@ -81,6 +86,7 @@ export class SessionManager {
       provider: row.provider,
       providerThreadId: row.providerThreadId,
       model: row.model,
+      workingDir: row.workingDir,
     };
   }
 
@@ -90,7 +96,12 @@ export class SessionManager {
       agentName: session.agentName,
       channelThreadKey: session.channelThreadKey,
       status: session.status,
+      workingDir: session.workingDir,
     });
+  }
+
+  async setWorkingDir(sessionId: string, workingDir: string): Promise<void> {
+    await this.sessionsRepository.setWorkingDir(sessionId, workingDir);
   }
 
   /** Update lastActiveAt timestamp. */
@@ -117,6 +128,11 @@ export class SessionManager {
     model?: string,
   ): Promise<void> {
     await this.sessionsRepository.setProviderInfo(sessionId, provider, providerThreadId, model);
+  }
+
+  /** Persist the provider-reported effort the session's last successful model turn ran with. */
+  async setReasoningEffort(sessionId: string, reasoningEffort: string): Promise<void> {
+    await this.sessionsRepository.setReasoningEffort(sessionId, reasoningEffort);
   }
 
   /** Persist the provider-native history anchor for a completed Rome turn. */

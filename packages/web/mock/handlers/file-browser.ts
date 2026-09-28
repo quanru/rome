@@ -149,12 +149,13 @@ export function fileBrowserHandlers({
    * until a full refresh, because the tree slice short-circuits already
    * loaded folders from its in-memory cache.
    */
-  const subscribers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  const subscribers = new Map<ReadableStreamDefaultController<Uint8Array>, Set<string>>();
   const encoder = new TextEncoder();
   const emit = (kind: FileBrowserWatchEventKind, path: string): void => {
     const payload = JSON.stringify({ at: Date.now(), kind, logicalRoot, path });
     const frame = encoder.encode(`event: change\ndata: ${payload}\n\n`);
-    for (const controller of subscribers) {
+    for (const [controller, watchedDirectories] of subscribers) {
+      if (!watchedDirectories.has(path) && !watchedDirectories.has(parentPathOf(path))) continue;
       try {
         controller.enqueue(frame);
       } catch {
@@ -289,14 +290,20 @@ export function fileBrowserHandlers({
     // File-watch EventSource. A `ready` frame triggers the frontend's
     // initial rebaseline, and writes elsewhere in these handlers enqueue
     // `change` frames so the tree reconciles the way it does against core.
-    http.get(`${apiBasePath}/events`, () => {
+    http.get(`${apiBasePath}/events`, ({ request }) => {
+      const watchedDirectories = new Set([logicalRoot]);
+      for (const path of new URL(request.url).searchParams.getAll("watch")) {
+        if (path === logicalRoot) continue;
+        const node = findNode(tree, path);
+        if (node?.type === "directory") watchedDirectories.add(path);
+      }
       // `cancel()` receives the cancellation reason, not the controller, so
       // keep the controller in the stream closure to unsubscribe reliably.
       let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
       const stream = new ReadableStream<Uint8Array>({
         start(c) {
           controller = c;
-          subscribers.add(controller);
+          subscribers.set(controller, watchedDirectories);
           const ready = encoder.encode(
             `event: ready\ndata: ${JSON.stringify({ at: Date.now(), logicalRoot })}\n\n`,
           );

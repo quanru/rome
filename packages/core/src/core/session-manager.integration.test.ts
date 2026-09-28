@@ -28,6 +28,8 @@ describe("Session continuity (integration)", () => {
       provider: "openai",
       providerThreadId: "provider-thread",
       model: "gpt-5",
+      reasoningEffort: null,
+      workingDir: null,
       createdAt: expect.any(Date),
       lastActiveAt: expect.any(Date),
     });

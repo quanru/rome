@@ -19,6 +19,7 @@ const API = `${BASE}/api/files`;
 // projects/memory fixtures do); there is no node named after the root itself.
 const fixture = [
   dir("projects/notes", [file("projects/notes/a.md", "hi")]),
+  dir("projects/watch-scope", [file("projects/watch-scope/nested.md", "first")]),
   file("projects/readme.txt", "x"),
 ];
 
@@ -32,6 +33,7 @@ test("tree for the root and an existing directory lists children", async () => {
   const root = await (await fetch(`${API}/tree?depth=1`)).json();
   expect(root.map((n: { path: string }) => n.path)).toEqual([
     "projects/notes",
+    "projects/watch-scope",
     "projects/readme.txt",
   ]);
 
@@ -45,6 +47,37 @@ test("tree returns 404 for a missing explicit path and 400 for a file path", asy
 
   const filePath = await fetch(`${API}/tree?path=projects/readme.txt&depth=1`);
   expect(filePath.status).toBe(400);
+});
+
+test("events reach only streams watching the changed directory", async () => {
+  const rootReader = (await fetch(`${API}/events`)).body!.getReader();
+  const nestedReader = (
+    await fetch(`${API}/events?watch=${encodeURIComponent("projects/watch-scope")}`)
+  ).body!.getReader();
+  const decoder = new TextDecoder();
+  await rootReader.read();
+  await nestedReader.read();
+
+  const nestedWrite = await fetch(`${API}/file`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "projects/watch-scope/nested.md", content: "second" }),
+  });
+  expect(nestedWrite.ok).toBe(true);
+  expect(decoder.decode((await nestedReader.read()).value)).toContain(
+    '"path":"projects/watch-scope/nested.md"',
+  );
+
+  const rootWrite = await fetch(`${API}/file`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "projects/readme.txt", content: "updated" }),
+  });
+  expect(rootWrite.ok).toBe(true);
+  expect(decoder.decode((await rootReader.read()).value)).toContain('"path":"projects/readme.txt"');
+
+  rootReader.cancel().catch(() => {});
+  nestedReader.cancel().catch(() => {});
 });
 
 test("deleting a directory emits unlinkDir and its tree path then resolves 404", async () => {

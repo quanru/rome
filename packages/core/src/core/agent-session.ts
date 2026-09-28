@@ -1,6 +1,7 @@
 // Long-lived, serialized agent sessions. Session model: docs/concepts/sessions.md.
 
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { Mutex } from "async-mutex";
 import {
   AgentInputQueue,
@@ -64,7 +65,7 @@ import {
 } from "./model-selector.js";
 import { type ForkRunMode, type ForkSourceCheckpoint, type ThreadContext } from "./types.js";
 import { createLogger } from "../logger.js";
-import { ensureDefaultAgentWorkingDir } from "../paths.js";
+import { ensureDefaultAgentWorkingDir, getDefaultAgentWorkingDir } from "../paths.js";
 import { enterSession } from "../telemetry-context.js";
 import {
   getTracer,
@@ -342,6 +343,12 @@ export interface AgentSessionManager {
     init?: AgentSessionInit,
   ): Promise<AgentSession>;
   peek(key: AgentSessionKey): AgentSession | undefined;
+  /**
+   * Working directory of the open session with this runtime id, searching this
+   * manager's sessions and the subagent sessions they own. Undefined when no
+   * open session has the id. Never opens a session.
+   */
+  findWorkingDirBySessionId?(sessionId: string): string | undefined;
   shutdown(): Promise<void>;
 }
 
@@ -638,6 +645,17 @@ export function createAgentSessionManager(
       const sess = sessions.get(keyOf(canonicalKey));
       return sess && sess.status !== "closed" ? sess : undefined;
     },
+    findWorkingDirBySessionId(sessionId) {
+      for (const sess of sessions.values()) {
+        if (sess.status === "closed") continue;
+        if (sess.sessionId === sessionId || sess.hasActiveFork(sessionId)) {
+          return sess.workingDirectory;
+        }
+        const nested = sess.openedChildManager?.findWorkingDirBySessionId?.(sessionId);
+        if (nested) return nested;
+      }
+      return undefined;
+    },
     async shutdown() {
       if (sweeperTimer) clearInterval(sweeperTimer);
       const all = [...sessions.values()];
@@ -749,6 +767,16 @@ function resolveSelectionFromChannelThreadKey(
   );
 }
 
+/** The recorded dir when it still exists, else undefined. The default project is recreated. */
+async function reachableRecordedWorkingDir(recorded: string): Promise<string | undefined> {
+  if (recorded === getDefaultAgentWorkingDir()) return await ensureDefaultAgentWorkingDir();
+  const isDirectory = await stat(recorded).then(
+    (entry) => entry.isDirectory(),
+    () => false,
+  );
+  return isDirectory ? recorded : undefined;
+}
+
 async function openSession(
   deps: ManagerDeps,
   key: AgentSessionKey,
@@ -760,7 +788,6 @@ async function openSession(
     metadata.ownerType === "app" ? deps.appCatalog?.get(metadata.ownerId) : undefined;
   const appStoreListingId =
     owningApp?.source.mode === "appstore" ? owningApp.source.listingId : undefined;
-  const workingDir = init.workingDir ?? (await ensureDefaultAgentWorkingDir());
 
   // Try to resume an existing SDK session through the stable channelThreadKey.
   // Scoping by agentName is load-bearing: subagents reuse the parent's key, so
@@ -774,6 +801,7 @@ async function openSession(
         provider: string | null;
         providerThreadId: string | null;
         model: string | null;
+        workingDir?: string | null;
       }
     | undefined;
   if (init.preparedSessionId) {
@@ -798,7 +826,41 @@ async function openSession(
     );
   }
 
-  const sessionId = init.preparedSessionId ?? resumeResult?.id ?? uuidv4();
+  // The provider keeps a transcript per cwd, so a resumed row reopens where it
+  // was written unless the caller names a dir. Legacy rows record none.
+  let preparedSessionId = init.preparedSessionId;
+  let recordedWorkingDir: string | undefined;
+  if (init.workingDir === undefined && resumeResult?.workingDir) {
+    recordedWorkingDir = await reachableRecordedWorkingDir(resumeResult.workingDir);
+    if (!recordedWorkingDir) {
+      // The transcript is unreachable. An explicit resume names that exact
+      // conversation, so it fails. An implicit reuse by channel-thread key
+      // retires the row and starts a fresh generation, so the thread keeps working.
+      if (init.resumeSessionId) {
+        throw new Error(
+          `Agent session "${resumeResult.id}" ran in "${resumeResult.workingDir}", which no ` +
+            "longer exists; it cannot be resumed there",
+        );
+      }
+      log.warn("agent session working dir is gone; starting a fresh generation", {
+        sessionId: resumeResult.id,
+        agentName: key.agentName,
+        channelThreadKey: key.channelThreadKey,
+        workingDir: resumeResult.workingDir,
+      });
+      const replacement = await deps.sessionManager.rotateProviderGeneration({
+        agentName: key.agentName,
+        channelThreadKey: key.channelThreadKey,
+        newSessionId: uuidv4(),
+      });
+      preparedSessionId = replacement.id;
+      resumeResult = undefined;
+    }
+  }
+
+  const sessionId = preparedSessionId ?? resumeResult?.id ?? uuidv4();
+  const workingDir =
+    init.workingDir ?? recordedWorkingDir ?? (await ensureDefaultAgentWorkingDir());
   const romeSessionId = requestedRomeSessionId;
   const isNewSession = !resumeResult;
   const providerThreadId = resumeResult?.providerThreadId ?? undefined;
@@ -817,16 +879,19 @@ async function openSession(
       : undefined;
   const selectionId = init.selectionId ?? persistedSelection?.id;
 
-  if (isNewSession && !init.preparedSessionId) {
+  if (isNewSession && !preparedSessionId) {
     const dbSession: DbAgentSession = {
       id: sessionId,
       agentName: key.agentName,
       channelThreadKey: key.channelThreadKey,
+      workingDir,
       createdAt: new Date(),
       lastActiveAt: new Date(),
       status: "active",
     };
     await deps.sessionManager.createSession(dbSession);
+  } else if (preparedSessionId) {
+    await deps.sessionManager.setWorkingDir(sessionId, workingDir);
   }
 
   if (config.outputSchema && init.handback) {
@@ -1562,6 +1627,11 @@ async function openSession(
       providerThreadId,
     );
   }
+  // A resume the caller moved to another dir now writes its transcript there,
+  // so the row follows it once the provider has opened.
+  if (resumeResult && resumeResult.workingDir !== workingDir) {
+    await deps.sessionManager.setWorkingDir(sessionId, workingDir);
+  }
 
   impl = new AgentSessionImpl({
     key,
@@ -1816,6 +1886,8 @@ class AgentSessionImpl implements AgentSession {
   currentTurnId?: string;
   lastActiveAt = Date.now();
   private activeForkedTurnCount = 0;
+  // Forks run in this session's working dir; actions they call carry the fork's id.
+  private activeForkSessionIds = new Set<string>();
   // Manager built lazily for subagent runs; keeps subagents owned by this session.
   private _childManager?: AgentSessionManager;
   private modelSession: ModelSession;
@@ -1864,6 +1936,8 @@ class AgentSessionImpl implements AgentSession {
    * this model (never a tier re-map) once a pin exists.
    */
   private sessionPin?: { providerId: ProviderId; model: string };
+  /** Last effort written to the session row, so an unchanged effort skips the write. */
+  private storedReasoningEffort?: string;
   private openModelSession: ImplArgs["openModelSession"];
   private modelEventsLoop: Promise<void> | null = null;
   private modelSessionAvailable = true;
@@ -1946,6 +2020,19 @@ class AgentSessionImpl implements AgentSession {
       !this.hasActiveForkedTurns &&
       !this.inputs.busy
     );
+  }
+
+  get workingDirectory(): string {
+    return this.workingDir;
+  }
+
+  hasActiveFork(forkSessionId: string): boolean {
+    return this.activeForkSessionIds.has(forkSessionId);
+  }
+
+  /** The subagent manager, or undefined when this session never ran a subagent. */
+  get openedChildManager(): AgentSessionManager | undefined {
+    return this._childManager;
   }
 
   get childManager(): AgentSessionManager {
@@ -2134,6 +2221,7 @@ class AgentSessionImpl implements AgentSession {
               sink.lifecycleInterrupted || outbound.accounting?.stopReason === "interrupted";
             if (!interrupted) await this.maybePersistTurnCheckpoint(session, sink.turnId);
             await this.maybePersistProviderInfo();
+            await this.maybePersistReasoningEffort(session.appliedReasoningEffort);
           }
           // Use `outbound` (not `msg`) so provider-output validation is
           // reflected in span status and the turn_end bracket. The turn_end
@@ -2336,6 +2424,19 @@ class AgentSessionImpl implements AgentSession {
 
   private providerInfoStored = false;
 
+  private async maybePersistReasoningEffort(reasoningEffort: string | undefined): Promise<void> {
+    if (!reasoningEffort || reasoningEffort === this.storedReasoningEffort) return;
+    try {
+      await this.deps.sessionManager.setReasoningEffort(this.sessionId, reasoningEffort);
+      this.storedReasoningEffort = reasoningEffort;
+    } catch (err) {
+      log.warn("failed to persist session reasoning effort", {
+        sessionId: this.sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   private async maybePersistTurnCheckpoint(session: ModelSession, turnId: string): Promise<void> {
     const checkpointId = session.lastCompletedTurnCheckpoint;
     const providerThreadId = session.providerThreadId;
@@ -2387,6 +2488,7 @@ class AgentSessionImpl implements AgentSession {
         id: forkSessionId,
         agentName: this.key.agentName,
         channelThreadKey,
+        workingDir: this.workingDir,
         createdAt: new Date(),
         lastActiveAt: new Date(),
         status: "active",
@@ -2402,6 +2504,18 @@ class AgentSessionImpl implements AgentSession {
         sessionId: this.sessionId,
         forkSessionId,
         channelThreadKey,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    const reasoningEffort = forkSession.appliedReasoningEffort;
+    if (!reasoningEffort) return;
+    try {
+      await this.deps.sessionManager.setReasoningEffort(forkSessionId, reasoningEffort);
+    } catch (err) {
+      log.warn("failed to persist fork reasoning effort", {
+        sessionId: this.sessionId,
+        forkSessionId,
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -2633,6 +2747,7 @@ class AgentSessionImpl implements AgentSession {
     // shim slated for removal (step 2 of the stream-shape cleanup), and
     // forked-stream consumers read identity off turn_start.
     const forkSessionId = uuidv4();
+    this.activeForkSessionIds.add(forkSessionId);
     const turnId = uuidv4();
     const startMs = Date.now();
 
@@ -2848,6 +2963,7 @@ class AgentSessionImpl implements AgentSession {
         }
       }
       this.activeForkedTurnCount = Math.max(0, this.activeForkedTurnCount - 1);
+      this.activeForkSessionIds.delete(forkSessionId);
       this.lastActiveAt = Date.now();
       this.emitStatus();
       try {

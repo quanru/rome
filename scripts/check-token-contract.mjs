@@ -33,6 +33,7 @@ const BUNDLE_RUNTIME_TOKENS = new Set([
   "--radix-context-menu-content-transform-origin",
   "--radix-dropdown-menu-content-available-height",
   "--radix-dropdown-menu-content-transform-origin",
+  "--radix-popover-content-available-height",
   "--radix-popover-content-transform-origin",
   "--radix-select-content-available-height",
   "--radix-select-content-transform-origin",
