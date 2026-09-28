@@ -24,6 +24,10 @@ try {
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => navigator.serviceWorker.ready);
+    // The first navigation can register an active worker without giving it
+    // control of that document. Reload so this request tests the MSW path.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     await page.evaluate(async (url) => {
       try {
         await fetch(url, { mode: "no-cors" });
