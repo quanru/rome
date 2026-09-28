@@ -38,6 +38,21 @@ try {
     await context.close();
   }
 
+  const httpContext = await browser.newContext({ serviceWorkers: "block" });
+  try {
+    await installBrowserNetworkGuard(httpContext, baseUrl);
+    const page = await httpContext.newPage();
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url, { mode: "no-cors" });
+      } catch {}
+    }, `http://127.0.0.1:${port}/foreign`);
+    assert.equal(externalRequests, 0, "the browser guard allowed an external HTTP request");
+  } finally {
+    await httpContext.close();
+  }
+
   const socketContext = await browser.newContext();
   try {
     await installBrowserNetworkGuard(socketContext, baseUrl);
@@ -59,4 +74,4 @@ try {
   await new Promise((resolve) => external.close(resolve));
 }
 
-console.log("Browser boundary OK: external HTTP and WebSocket traffic was blocked.");
+console.log("Browser boundary OK: MSW HTTP, browser HTTP, and WebSocket traffic was blocked.");
