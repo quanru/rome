@@ -93,10 +93,10 @@ The case names and shard assignments above match the executable YAML. Run
 
 ## Local run
 
-Start the mock build from the repository root:
+Start the strict E2E mock build from the repository root:
 
 ```bash
-pnpm start:web:mock
+pnpm start:web:mock:e2e
 ```
 
 Then run the suite from another shell:

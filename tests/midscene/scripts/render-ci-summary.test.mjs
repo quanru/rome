@@ -182,6 +182,7 @@ test("reports a missing expected shard as an overall failure", () => {
       {
         name: "web-shard-1",
         status: "success",
+        reportPath: "web-shard-1/report/index.html",
         durationMs: 1000,
         cases: [{ name: "AUTH-01", status: "success", durationMs: 1000, reason: "" }],
       },
@@ -265,12 +266,53 @@ test("keeps a failed case when its native report is missing", async (context) =>
   assert.match(markdown, /CHAT-09 sends a message.*button missing/);
 });
 
+test("marks a successful shard incomplete when its native report is missing", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-missing-report-"));
+  context.after(() =>
+    import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
+  );
+  await writeShard(root, "shard-1", "success", "AUTH-01 opens chat", "deepseek-v3.2");
+  const report = path.join(
+    root,
+    "midscene-shard-1",
+    "midscene_run",
+    "report",
+    "midscene-e2e-run-1",
+    "index.html",
+  );
+  await import("node:fs/promises").then(({ rm }) => rm(report));
+  const markdownFile = path.join(root, "summary.md");
+  const htmlFile = path.join(root, "index.html");
+  await buildSummary({
+    "reports-dir": root,
+    "expected-projects": "web-shard-1",
+    "run-url": "https://example.test/run",
+    "pages-url": "https://example.test/reports/",
+    "producer-result": "success",
+    output: markdownFile,
+    "html-output": htmlFile,
+  });
+
+  const markdown = await readFile(markdownFile, "utf8");
+  assert.match(markdown, /Rome × Midscene · failure captured/);
+  assert.match(markdown, /1 need attention · 1 passed/);
+  assert.match(markdown, /web-shard-1.*Native report missing/);
+  assert.doesNotMatch(markdown, /All 1 cases passed/);
+
+  const page = await readFile(htmlFile, "utf8");
+  assert.match(page, /Run incomplete or failed · 1\/1 cases passed/);
+  assert.match(page, /Report issues/);
+  assert.match(page, /web-shard-1: native report missing/);
+  assert.doesNotMatch(page, /Run passed/);
+});
+
 test("celebrates a complete run and keeps passed cases in the appendix", () => {
   const markdown = renderMarkdown({
     projects: [
       {
         name: "web-shard-1",
         status: "success",
+        reportPath: "web-shard-1/report/index.html",
         durationMs: 1000,
         cases: [
           {

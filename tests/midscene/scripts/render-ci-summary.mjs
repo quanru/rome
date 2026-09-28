@@ -316,6 +316,9 @@ const totalsFor = (projects) => {
   return { cases, passed, failed: cases.length - passed, total: cases.length };
 };
 
+const missingNativeReports = (projects) =>
+  projects.filter((project) => project.status === "success" && !project.reportPath);
+
 export function caseSetIssues(projects, manifest) {
   if (!manifest) return [];
   const reported = new Map();
@@ -370,6 +373,7 @@ export function renderMarkdown({
   const incompleteProjects = projects.filter((project) => project.status !== "success");
   const failures = totals.cases.filter((testCase) => testCase.status !== "success");
   const passedCases = totals.cases.filter((testCase) => testCase.status === "success");
+  const missingReports = missingNativeReports(projects);
   const infrastructureFailures = incompleteProjects.filter(
     (project) => !failures.some((testCase) => testCase.project === project.name),
   );
@@ -378,6 +382,7 @@ export function renderMarkdown({
   const needsAttention =
     failures.length +
     infrastructureFailures.length +
+    missingReports.length +
     Number(unreportedFailure) +
     caseInventoryIssues.length;
   const complete = producerResult === "success" && totals.total > 0 && needsAttention === 0;
@@ -403,6 +408,10 @@ export function renderMarkdown({
       ...infrastructureFailures.map(
         (project) =>
           `| ${markdownCell(project.name)} | — | — | ❌ ${markdownCell(project.status)} · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
+      ),
+      ...missingReports.map(
+        (project) =>
+          `| ${markdownCell(project.name)} | — | — | ❌ Native report missing · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
       ),
       ...(unreportedFailure
         ? [
@@ -453,11 +462,13 @@ export function renderHtml({
   caseInventoryIssues = [],
 }) {
   const totals = totalsFor(projects);
+  const missingReports = missingNativeReports(projects);
   const complete =
     producerResult === "success" &&
     totals.total > 0 &&
     totals.failed === 0 &&
     projects.every((project) => project.status === "success") &&
+    missingReports.length === 0 &&
     caseInventoryIssues.length === 0;
   const rows = totals.cases
     .map((testCase) => {
@@ -477,7 +488,10 @@ export function renderHtml({
       const name = project.reportPath
         ? `<a href="${html(reportUrl(pagesUrl, project.reportPath))}">${html(project.name)}</a>`
         : html(project.name);
-      return `<tr><td>${name}</td><td>${html(project.status)}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
+      const status = missingReports.includes(project)
+        ? `${project.status} · native report missing`
+        : project.status;
+      return `<tr><td>${name}</td><td>${html(status)}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -487,6 +501,7 @@ export function renderHtml({
 <body><h1>Rome × Midscene Summary</h1>
 <p class="meta"><strong>${complete ? "Run passed" : "Run incomplete or failed"} · ${totals.passed}/${totals.total} cases passed</strong> · Workflow result: ${html(producerResult)} · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
 ${caseInventoryIssues.length ? `<h2>Case inventory issues</h2><ul>${caseInventoryIssues.map((issue) => `<li>${html(issue)}</li>`).join("")}</ul>` : ""}
+${missingReports.length ? `<h2>Report issues</h2><ul>${missingReports.map((project) => `<li>${html(project.name)}: native report missing</li>`).join("")}</ul>` : ""}
 <h2>Shards</h2><table><thead><tr><th>Shard</th><th>Status</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
 <h2>Cases</h2><p>Click a case name or screenshot to open its exact Midscene step.</p><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Node screenshot</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
 }

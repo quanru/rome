@@ -7,9 +7,14 @@ cases:
       - app.open:
           path: /chat
       - aiAct: >-
-          On the Chat home, type "draft" in the bottom message composer and then delete it without
-          sending. Keep the current project and reasoning settings unchanged, and finish on the
-          Chat home with the composer empty.
+          On the Chat home, type "draft" in the bottom message composer without sending it. Keep
+          the current project and reasoning settings unchanged, and stop with the draft visible.
+      - aiAssert: >-
+          The bottom message composer visibly contains "draft". The Chat home still shows its
+          greeting, and no new conversation has opened.
+      - aiAct: >-
+          Clear the entire "draft" text from the bottom message composer without sending it. Stay
+          on the Chat home and leave the project and reasoning settings unchanged.
       - aiAssert: >-
           The chat home shows the greeting "Welcome," and the headline "What should we create?". The
           message composer shows the placeholder "How can I help you today?", the current project
