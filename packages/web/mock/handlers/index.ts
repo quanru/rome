@@ -1252,6 +1252,9 @@ export const handlers = [
   // dir and the memory dir a person's dossier links into.
   ...projectFileHandlers,
   ...memoryFileHandlers,
+];
+
+export const strictE2eHandlers = [
   http.post("/api/chat/sessions", () =>
     HttpResponse.json({ error: "/api/chat/sessions is unavailable in mock mode" }, { status: 503 }),
   ),

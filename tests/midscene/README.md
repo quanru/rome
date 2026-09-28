@@ -2,7 +2,7 @@
 
 Visual-driven end-to-end testing for Rome using
 [Midscene](https://midscenejs.com/) YAML cases. Tests run against Rome's
-**MSW mock mode** (`pnpm start:web:mock` from the repository root): they never hit a real backend or use real
+**strict MSW E2E mode** (`pnpm start:web:mock:e2e` from the repository root): they never hit a real backend or use real
 personal data. The browser only loads local synthetic fixtures. The Node-side
 Midscene agent calls the configured model endpoint.
 
@@ -22,9 +22,9 @@ Midscene agent calls the configured model endpoint.
     Chinese CI machine);
   - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
     pins only Apps/Chat/Projects by default).
-- The MSW worker rejects external HTTP requests. A BrowserContext guard also
+- The strict E2E worker rejects external HTTP requests. A BrowserContext guard also
   blocks external HTTP and WebSocket traffic. Run `npm run check:browser-boundary`
-  while the mock server is running to check both paths. The mock dev server
+  while the strict mock server is running to check both paths. Strict E2E mode
   disables the backend proxy, and unmatched `/api` requests return 503 locally.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
@@ -49,8 +49,8 @@ Midscene agent calls the configured model endpoint.
 ## Running Locally
 
 ```bash
-# 1. Start Rome mock mode at the repository root
-pnpm start:web:mock
+# 1. Start strict Rome E2E mock mode at the repository root
+pnpm start:web:mock:e2e
 # Served at http://localhost:3200; logs default to /tmp/rome-devmock.log
 
 # 2. Install test dependencies (first time only)

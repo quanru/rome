@@ -1,6 +1,6 @@
 name: Midscene E2E
 
-# Visual E2E against the MSW mock build (pnpm --filter rome-web dev:mock,
+# Visual E2E against the strict MSW mock build (pnpm --filter rome-web dev:mock:e2e,
 # port 3200). Every case uses only synthetic in-repo fixtures; no real backend
 # or personal data is involved. Model credentials come from repository secrets.
 
@@ -10,9 +10,10 @@ on:
     paths:
       - ".github/workflows/midscene.yml"
       - "tests/midscene/**"
+      - "docs/midscene-e2e-cases.md"
       - "packages/web/**"
       # Workspace dependencies rebuilt by `pnpm --filter rome-web^... build`
-      # (build:kit) before dev:mock serves the UI; changes there can alter
+      # (build:kit) before dev:mock:e2e serves the UI; changes there can alter
       # every flow under test.
       - "packages/api-types/**"
       - "packages/app-runtime-sdk/**"
@@ -23,6 +24,7 @@ on:
     paths:
       - ".github/workflows/midscene.yml"
       - "tests/midscene/**"
+      - "docs/midscene-e2e-cases.md"
       - "packages/web/**"
       - "packages/api-types/**"
       - "packages/app-runtime-sdk/**"
@@ -130,15 +132,15 @@ jobs:
 
       - name: Start Rome mock server
         run: |
-          nohup pnpm --filter rome-web dev:mock > /tmp/rome-devmock.log 2>&1 &
+          nohup pnpm --filter rome-web dev:mock:e2e > /tmp/rome-devmock.log 2>&1 &
           for _ in $(seq 1 180); do
             if curl -sf http://localhost:3200/ -o /dev/null; then
-              echo "dev:mock is ready"
+              echo "dev:mock:e2e is ready"
               exit 0
             fi
             sleep 2
           done
-          echo "dev:mock failed to become ready" >&2
+          echo "dev:mock:e2e failed to become ready" >&2
           tail -n 100 /tmp/rome-devmock.log >&2
           exit 1
 
@@ -239,19 +241,19 @@ jobs:
         working-directory: tests/midscene
         run: npm run typecheck
 
-      # dev:mock runs build:kit before rsbuild dev, so first-request readiness
+      # dev:mock:e2e runs build:kit before rsbuild dev, so first-request readiness
       # can take a few minutes after the job starts.
       - name: Start Rome mock server
         run: |
-          nohup pnpm --filter rome-web dev:mock > /tmp/rome-devmock.log 2>&1 &
+          nohup pnpm --filter rome-web dev:mock:e2e > /tmp/rome-devmock.log 2>&1 &
           for _ in $(seq 1 180); do
             if curl -sf http://localhost:3200/ -o /dev/null; then
-              echo "dev:mock is ready"
+              echo "dev:mock:e2e is ready"
               exit 0
             fi
             sleep 2
           done
-          echo "dev:mock failed to become ready" >&2
+          echo "dev:mock:e2e failed to become ready" >&2
           tail -n 100 /tmp/rome-devmock.log >&2
           exit 1
 

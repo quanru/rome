@@ -95,6 +95,7 @@
         ".storybook/*.test.ts",
         "mock/main.tsx",
         "mock/rsbuild.config.ts",
+        "mock/rsbuild.e2e.config.ts",
         "mock/rsbuild.static.config.ts",
         "mock/**/*.test.{ts,tsx}",
         // The mock build loads these through NormalModuleReplacementPlugin

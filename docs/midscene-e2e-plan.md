@@ -24,7 +24,7 @@ This kind of experience has two testing problems:
    be reproduced reliably in CI.
 
 This proposal uses [Midscene](https://midscenejs.com/) visual-semantic driving
-for problem 1, and Rome's built-in **MSW mock mode** (`pnpm dev:mock`) for
+for problem 1, and Rome's **strict MSW E2E mode** (`pnpm dev:mock:e2e`) for
 problem 2: every case runs only against in-repo synthetic fixtures, with no
   real accounts and no external side effects.
 
@@ -41,7 +41,7 @@ Goals:
 
 ```
 GitHub Actions (6 shards)
-  └─ pnpm --filter rome-web dev:mock        # MSW mock mode, localhost:3200
+  └─ pnpm --filter rome-web dev:mock:e2e    # strict MSW mode, localhost:3200
        └─ tests/midscene (standalone npm package)
             ├─ midscene.config.ts           # Playwright + Midscene config
             ├─ cases/**.yaml                # cases (suite + shard tags)
@@ -110,7 +110,7 @@ implementation**. If the implementation changes, the cases must change with it.
    approving an approval, installing an app) land in MSW memory and **persist
    across client routes within the same BrowserContext**. A hard reload,
    closing the context, or opening a new one restores fixture defaults.
-3. **Unmatched API requests fail locally**: the mock dev server has no backend
+3. **Unmatched API requests fail locally**: strict E2E mode has no backend
    proxy, and MSW returns 503 for unmocked `/api` calls. Cases must not depend
    on such capabilities (listed as gaps in section 6).
 4. **Synthetic fixture data only**: no real names, accounts, tokens or chat
@@ -135,7 +135,7 @@ timeouts, cache flags). This section records the design decisions and the
 reasons behind them.
 
 - **Triggers**: pushes to `main` on a scoped path set (the workflow itself,
-  `tests/midscene/**`, all of `packages/web/**`, the workspace packages
+  `tests/midscene/**`, the [case catalog](midscene-e2e-cases.md), all of `packages/web/**`, the workspace packages
   rebuilt by `build:kit` — `packages/ui`, `packages/web-content`,
   `packages/api-types`, `packages/app-runtime-sdk` — and `pnpm-lock.yaml`),
   the same paths on `pull_request`, plus manual `workflow_dispatch`. A PR
@@ -177,7 +177,7 @@ reasons behind them.
   that intranet (change the `runs-on` label) or a publicly reachable model
   endpoint. Correct credentials with no network route fail at the preflight
   just as quickly.
-- **Mock server**: `pnpm --filter rome-web dev:mock` starts in the background
+- **Mock server**: `pnpm --filter rome-web dev:mock:e2e` starts in the background
   (it runs `build:kit` first, so first-request readiness is polled for several
   minutes). Its log is uploaded as an artifact on failure.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`.
@@ -317,7 +317,7 @@ real external services.
 See `tests/midscene/README.md`. In short:
 
 ```bash
-pnpm start:web:mock             # terminal 1: localhost:3200, from repository root
+pnpm start:web:mock:e2e         # terminal 1: localhost:3200, from repository root
 cd tests/midscene
 npm install && npx playwright install chromium
 cp .env.example .env             # fill in model credentials; .env is gitignored
