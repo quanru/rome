@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { buildSummary, caseSetIssues, renderMarkdown } from "./render-ci-summary.mjs";
+import { buildSummary, caseSetIssues, renderHtml, renderMarkdown } from "./render-ci-summary.mjs";
 
 const writeShard = async (root, shard, status, caseName, modelName) => {
   const project = `web-${shard}`;
@@ -202,6 +202,35 @@ test("reports a missing expected shard as an overall failure", () => {
   assert.match(markdown, /### Needs attention/);
   assert.match(markdown, /web-shard-2.*missing/);
   assert.doesNotMatch(markdown, /All 1 cases passed/);
+});
+
+test("HTML does not present passing cases as a successful failed run", () => {
+  const base = {
+    projects: [{
+      name: "web-shard-1",
+      status: "failed",
+      cases: [{ name: "AUTH-01", status: "success", reason: "" }],
+    }],
+    models: [],
+    runUrl: "https://example.test/run",
+    pagesUrl: "https://example.test/reports/",
+  };
+  const page = renderHtml({ ...base, producerResult: "failure" });
+  assert.match(page, /Run incomplete or failed · 1\/1 cases passed/);
+  assert.match(page, /Workflow result: failure/);
+  assert.match(page, /<th>Shard<\/th><th>Status<\/th>/);
+  assert.match(page, /web-shard-1<\/td><td>failed/);
+  assert.doesNotMatch(page, /Run passed/);
+
+  const shardOnlyFailure = renderHtml({ ...base, producerResult: "success" });
+  assert.match(shardOnlyFailure, /Run incomplete or failed · 1\/1 cases passed/);
+
+  const workflowOnlyFailure = renderHtml({
+    ...base,
+    projects: [{ ...base.projects[0], status: "success" }],
+    producerResult: "failure",
+  });
+  assert.match(workflowOnlyFailure, /Run incomplete or failed · 1\/1 cases passed/);
 });
 
 test("keeps a failed case when its native report is missing", async (context) => {

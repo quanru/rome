@@ -70,8 +70,8 @@ GitHub Actions (6 shards)
   (`setupWorker`) and keep writes in memory; a new context is a cold start with
   fixtures reset. Zero shared state between cases.
 - **Pinned English UI**: an init script writes `rome.lang=en`, so a zh-CN CI
-  machine locale cannot drift the copy. A dedicated `zh`-tagged case covers the
-  localized Chinese shell.
+  machine locale cannot drift the copy. A localized Chinese-shell case is
+  future coverage; none is included in the current 38-case suite.
 - **Full sidebar-pin injection**: the mock guardian pins only Apps/Chat/
   Projects by default; other entries live behind the "all apps" popover. Cases
   write `rome-sidebar-pins` (the shell's own localStorage contract) so every
@@ -309,7 +309,8 @@ real external services.
   /chat. A blank dark placeholder was added at the dev-server static layer (an
   MSW browser Service Worker cannot intercept an iframe's initial document
   navigation, because the new frame has not registered the worker yet).
-  SHELL-01 asserts against the blank embedded desktop.
+  The placeholder is mock infrastructure only; a desktop iframe assertion is
+  future coverage and is not included in the current suite.
 
 ## 7. Running Locally
 

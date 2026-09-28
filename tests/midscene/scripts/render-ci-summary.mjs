@@ -424,8 +424,14 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
   return sections.join("\n");
 }
 
-export function renderHtml({ projects, models, pagesUrl, runUrl, caseInventoryIssues = [] }) {
+export function renderHtml({ projects, models, pagesUrl, runUrl, producerResult = "success", caseInventoryIssues = [] }) {
   const totals = totalsFor(projects);
+  const complete =
+    producerResult === "success" &&
+    totals.total > 0 &&
+    totals.failed === 0 &&
+    projects.every((project) => project.status === "success") &&
+    caseInventoryIssues.length === 0;
   const rows = totals.cases
     .map((testCase) => {
       const caseName = testCase.reportPath
@@ -443,8 +449,8 @@ export function renderHtml({ projects, models, pagesUrl, runUrl, caseInventoryIs
       const failed = project.cases.length - passed;
       const name = project.reportPath
         ? `<a href="${html(reportUrl(pagesUrl, project.reportPath))}">${html(project.name)}</a>`
-        : html(`${project.name} (missing)`);
-      return `<tr><td>${name}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
+        : html(project.name);
+      return `<tr><td>${name}</td><td>${html(project.status)}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
     })
     .join("\n");
   return `<!doctype html>
@@ -452,9 +458,9 @@ export function renderHtml({ projects, models, pagesUrl, runUrl, caseInventoryIs
 <title>Rome × Midscene Summary</title>
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:40px auto;padding:0 24px;color:#172033}h1{margin-bottom:4px}.meta{color:#596579}table{width:100%;border-collapse:collapse;margin:20px 0 32px}th,td{border:1px solid #d8dee9;padding:9px 12px;text-align:left;vertical-align:top}th{background:#f4f6f8}.status{width:30px;text-align:center}.preview{width:240px}.preview img{display:block;width:240px;height:150px;object-fit:cover;border-radius:6px}a{color:#0969da}code{background:#f4f6f8;padding:2px 5px;border-radius:4px}</style></head>
 <body><h1>Rome × Midscene Summary</h1>
-<p class="meta"><strong>${caseInventoryIssues.length ? "Incomplete case inventory" : `${totals.passed}/${totals.total} cases passed`}</strong> · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
+<p class="meta"><strong>${complete ? "Run passed" : "Run incomplete or failed"} · ${totals.passed}/${totals.total} cases passed</strong> · Workflow result: ${html(producerResult)} · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
 ${caseInventoryIssues.length ? `<h2>Case inventory issues</h2><ul>${caseInventoryIssues.map((issue) => `<li>${html(issue)}</li>`).join("")}</ul>` : ""}
-<h2>Shards</h2><table><thead><tr><th>Shard</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
+<h2>Shards</h2><table><thead><tr><th>Shard</th><th>Status</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
 <h2>Cases</h2><p>Click a case name or screenshot to open its exact Midscene step.</p><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Node screenshot</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
 }
 
