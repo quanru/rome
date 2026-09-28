@@ -5,6 +5,7 @@
 // launching Chromium or calling the model. The pull_request CI job runs this
 // so a malformed case or a broken node reference fails before merge.
 
+import { readFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { collectWorkflowDocument } from "@midscene/test";
 import {
@@ -15,6 +16,10 @@ import {
 
 const projectRoot = process.cwd();
 const configPath = resolve(projectRoot, "midscene.config.ts");
+const expectedCases = JSON.parse(
+  await readFile(resolve(projectRoot, "case-manifest.json"), "utf8"),
+);
+const collectedCases = new Map();
 
 const loaded = await loadTestProject(configPath);
 
@@ -30,14 +35,12 @@ const deterministicAssistNodes = new Set([
   "app.pressKey",
   "app.scrollTextIntoView",
 ]);
-const expectedCasesByShard = new Map([
-  ["shard-1", 5],
-  ["shard-2", 8],
-  ["shard-3", 7],
-  ["shard-4", 7],
-  ["shard-5", 6],
-  ["shard-6", 5],
-]);
+const expectedCasesByShard = new Map(
+  [1, 2, 3, 4, 5, 6].map((number) => {
+    const shard = `shard-${number}`;
+    return [shard, Object.values(expectedCases).filter((value) => value === shard).length];
+  }),
+);
 const collectedCasesByShard = new Map([...expectedCasesByShard.keys()].map((shard) => [shard, 0]));
 
 const validateAiNativeCase = (testCase) => {
@@ -58,6 +61,10 @@ const validateAiNativeCase = (testCase) => {
   } else {
     const shard = shardTags[0];
     collectedCasesByShard.set(shard, (collectedCasesByShard.get(shard) ?? 0) + 1);
+    if (collectedCases.has(testCase.definition.name)) {
+      problems.push("duplicate case name");
+    }
+    collectedCases.set(testCase.definition.name, shard);
   }
 
   const forbidden = nodes.filter(
@@ -115,6 +122,31 @@ for (const { sourcePath, error } of failures) {
 
 if (failures.length > 0) {
   console.error(`\nCollection failed: ${failures.length} invalid workflow file(s).`);
+  process.exit(1);
+}
+
+const expectedNames = Object.keys(expectedCases);
+const unexpectedNames = [...collectedCases.keys()].filter((name) => !(name in expectedCases));
+const missingNames = expectedNames.filter((name) => !collectedCases.has(name));
+const wrongShards = expectedNames.filter(
+  (name) => collectedCases.has(name) && collectedCases.get(name) !== expectedCases[name],
+);
+const catalog = await readFile(resolve(projectRoot, "../../docs/midscene-e2e-cases.md"), "utf8");
+const catalogCases = new Map();
+for (const match of catalog.matchAll(/^\| ([A-Z0-9]+-\d+) \| (.+) \| (shard-\d+) \|$/gm)) {
+  if (catalogCases.has(match[1])) throw new Error(`Duplicate catalog ID: ${match[1]}`);
+  catalogCases.set(match[1], { name: `${match[1]} ${match[2]}`, shard: match[3] });
+}
+const catalogMismatch = expectedNames.filter((name) => {
+  const id = name.split(" ")[0];
+  const row = catalogCases.get(id);
+  return !row || row.name !== name || row.shard !== expectedCases[name];
+});
+if (unexpectedNames.length || missingNames.length || wrongShards.length || catalogMismatch.length || catalogCases.size !== expectedNames.length) {
+  console.error("Case manifest or catalog differs from the executable YAML cases.");
+  for (const [label, names] of Object.entries({ unexpectedNames, missingNames, wrongShards, catalogMismatch })) {
+    if (names.length) console.error(`${label}: ${names.join(", ")}`);
+  }
   process.exit(1);
 }
 

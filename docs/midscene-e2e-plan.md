@@ -61,8 +61,8 @@ GitHub Actions (6 shards)
 - Midscene's dependency tree never enters Rome's product dependencies or
   affects production builds.
 - CI caches test dependencies and product dependencies separately.
-- `npm ci` installs non-interactively; the `esbuild`/`sharp` install scripts
-  are explicitly approved via the package's `allowScripts`.
+- `npm ci --strict-allow-scripts` runs only the approved `esbuild` and `sharp`
+  scripts. The optional `fsevents` script is denied. New scripts fail CI.
 
 ### 2.2 Test Harness (`midscene.config.ts`)
 
@@ -139,10 +139,10 @@ reasons behind them.
   rebuilt by `build:kit` — `packages/ui`, `packages/web-content`,
   `packages/api-types`, `packages/app-runtime-sdk` — and `pnpm-lock.yaml`),
   the same paths on `pull_request`, plus manual `workflow_dispatch`. A PR
-  runs only the **secret-free `harness-validation` job** (`npm ci` with the
+  runs only the **secret-free `harness-validation` job** (`npm ci --strict-allow-scripts` with the
   Playwright browser download skipped, `tsc --noEmit`, and a YAML case
   collection step that parses every case and resolves node references
-  exactly like the runner — no browser, mock server, or model calls), so a
+  exactly like the runner, then checks names and shards against the case catalog — no browser, mock server, or model calls), so a
   broken custom node or malformed case fails before merge without exposing
   any credentials. The model-backed `midscene` matrix runs on the upstream
   `main` branch or by manual dispatch in a fork using that fork's secrets.
@@ -160,7 +160,7 @@ reasons behind them.
   `packageManager` version) **before** `setup-node`, whose `cache: pnpm`
   requires pnpm to already exist on a clean runner. Product dependencies
   install with `pnpm install --frozen-lockfile --ignore-scripts`; the
-  `tests/midscene` package installs with `npm ci` against a lockfile whose
+  `tests/midscene` package installs with `npm ci --strict-allow-scripts` against a lockfile whose
   `resolved` URLs all point at the public `registry.npmjs.org`, followed by
   `playwright install --with-deps chromium`.
 - **Secret handling and trust boundary**: the four `MIDSCENE_MODEL_*` values
@@ -317,7 +317,7 @@ real external services.
 See `tests/midscene/README.md`. In short:
 
 ```bash
-pnpm dev:mock                    # terminal 1: localhost:3200
+pnpm start:web:mock             # terminal 1: localhost:3200, from repository root
 cd tests/midscene
 npm install && npx playwright install chromium
 cp .env.example .env             # fill in model credentials; .env is gitignored

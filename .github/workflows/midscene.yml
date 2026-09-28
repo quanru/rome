@@ -84,7 +84,7 @@ jobs:
         working-directory: tests/midscene
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-        run: npm ci
+        run: npm ci --strict-allow-scripts
 
       - name: Type-check custom nodes
         working-directory: tests/midscene
@@ -97,7 +97,6 @@ jobs:
         run: npm run collect
 
       - name: Test CI Summary renderer
-        if: github.repository == 'quanru/rome'
         working-directory: tests/midscene
         run: npm run test:summary
 
@@ -109,7 +108,7 @@ jobs:
     # own secrets.
     if: >-
       inputs.report_source_run_id == '' &&
-      (github.ref == 'refs/heads/main' ||
+      (github.repository == 'rome-os/rome' && github.ref == 'refs/heads/main' ||
       (github.event_name == 'workflow_dispatch' && github.repository != 'rome-os/rome'))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -171,7 +170,7 @@ jobs:
         # npm ci runs their (approved) install scripts non-interactively.
         working-directory: tests/midscene
         run: |
-          npm ci
+          npm ci --strict-allow-scripts
           npx playwright install --with-deps chromium
 
       - name: Check Midscene model vision
@@ -201,6 +200,10 @@ jobs:
           echo "dev:mock failed to become ready" >&2
           tail -n 100 /tmp/rome-devmock.log >&2
           exit 1
+
+      - name: Check browser network boundary
+        working-directory: tests/midscene
+        run: npm run check:browser-boundary
 
       - name: Run Midscene shard
         working-directory: tests/midscene

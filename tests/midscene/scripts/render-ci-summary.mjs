@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, readdir, writeFile, appendFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, writeFile, appendFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -161,6 +161,7 @@ const modelsFromReports = async (directory) => {
 const nativeReportFor = async (reportsDirectory, record) => {
   if (record.report) {
     const report = path.resolve(path.dirname(record.summaryFile), record.report);
+    if (!(await access(report).then(() => true, () => false))) return null;
     return {
       file: report,
       path: path.relative(reportsDirectory, report).split(path.sep).join("/"),
@@ -187,7 +188,8 @@ const nativeReportFor = async (reportsDirectory, record) => {
 
 const evidenceForCase = async (reportsDirectory, report, caseId, passed) => {
   if (!report || !caseId) return {};
-  const source = await readFile(report.file, "utf8");
+  const source = await readFile(report.file, "utf8").catch(() => null);
+  if (!source) return {};
   const reportCase = testRunDumps(source)
     .flatMap((run) => run.projects ?? [])
     .flatMap((project) => project.documents ?? [])
@@ -274,7 +276,9 @@ export async function collectReportData(reportsDirectory, expectedProjects = [])
       const attemptRef = testCase.attempts?.at(-1);
       const attempt = await loadAttempt(record.summaryFile, attemptRef).catch(() => null);
       const passed = testCase.status === "success";
-      const evidence = await evidenceForCase(reportsDirectory, report, testCase.caseId, passed);
+      const evidence = await evidenceForCase(reportsDirectory, report, testCase.caseId, passed).catch(
+        () => ({}),
+      );
       cases.push({
         name: testCase.name,
         status: testCase.status,

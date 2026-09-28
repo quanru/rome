@@ -204,6 +204,29 @@ test("reports a missing expected shard as an overall failure", () => {
   assert.doesNotMatch(markdown, /All 1 cases passed/);
 });
 
+test("keeps a failed case when its native report is missing", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-partial-"));
+  context.after(() =>
+    import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
+  );
+  await writeShard(root, "shard-1", "failed", "CHAT-09 sends a message", "deepseek-v3.2");
+  const report = path.join(root, "midscene-shard-1", "midscene_run", "report", "midscene-e2e-run-1", "index.html");
+  await import("node:fs/promises").then(({ rm }) => rm(report));
+  const data = await buildSummary({
+    "reports-dir": root,
+    "expected-projects": "web-shard-1",
+    "run-url": "https://example.test/run",
+    "pages-url": "https://example.test/reports/",
+    "producer-result": "failure",
+    output: path.join(root, "summary.md"),
+  });
+  assert.equal(data.projects[0].cases[0].reason, "button missing");
+  assert.equal(data.projects[0].cases[0].stepId, undefined);
+  assert.equal(data.projects[0].cases[0].reportPath, null);
+  const markdown = await readFile(path.join(root, "summary.md"), "utf8");
+  assert.match(markdown, /CHAT-09 sends a message.*button missing/);
+});
+
 test("celebrates a complete run and keeps passed cases in the appendix", () => {
   const markdown = renderMarkdown({
     projects: [{

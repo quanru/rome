@@ -15,9 +15,9 @@ visible outcome. A small number of cases tagged `deterministic-assist` also use
 targeted `app.*` nodes for state that cannot be read reliably from one
 screenshot.
 
-The secret-free collector validates the expected total and per-shard manifest,
-so deleting or moving a case without deliberately updating the manifest fails
-CI.
+The secret-free collector checks each case name and shard against
+`tests/midscene/case-manifest.json` and this catalog. Deleting, renaming, or
+moving a case fails CI.
 
 | Shard | Cases | Main coverage |
 | --- | ---: | --- |
@@ -35,7 +35,7 @@ CI.
 | --- | --- | --- |
 | CHAT-01 | Draft and clear a message from the home composer | shard-1 |
 | CHAT-02 | Exercise composer pickers and the failed-send state | shard-1 |
-| CHAT-03 | Preserve a draft after a failed send in an existing conversation | shard-1 |
+| CHAT-03 | Open the agent mention picker | shard-1 |
 | CHAT-04 | Inspect a successful execution trace | shard-1 |
 | CHAT-05 | Draft an answer in an unanswered question card | shard-1 |
 | CHAT-06 | Collapse the architecture diagram in a built-app reply | shard-2 |
@@ -69,7 +69,7 @@ CI.
 | RAPP-01 | Inspect recent Issue Triage activity | shard-6 |
 | RAPP-02 | Inspect a completed Code Review record | shard-6 |
 | RAPP-03 | Inspect a completed Stock Daily report | shard-6 |
-| SHELL-02 | Open global chat search | shard-6 |
+| SHELL-02 | Search global chat history | shard-6 |
 | SHELL-03 | Open the mobile navigation drawer | shard-6 |
 
 The case names and shard assignments above match the executable YAML. Run
@@ -77,8 +77,8 @@ The case names and shard assignments above match the executable YAML. Run
 
 ## Execution contract
 
-- Browser requests are limited to `ROME_E2E_BASE_URL`. The BrowserContext
-  request guard aborts unexpected CDN or third-party requests.
+- MSW rejects external HTTP requests. A BrowserContext guard blocks external
+  HTTP and WebSocket traffic.
 - Model calls run from the Node-side Midscene agent, not from the page.
 - Every case gets a fresh BrowserContext, so MSW state is isolated between
   cases while client-side navigation within one case preserves mock writes.
@@ -103,7 +103,7 @@ Then run the suite from another shell:
 
 ```bash
 cd tests/midscene
-npm ci
+npm ci --strict-allow-scripts
 npx playwright install chromium
 MIDSCENE_RETRY=0 HEADLESS=true npm test
 ```

@@ -6,6 +6,7 @@ import { defineProjectSetup, defineTestProject } from "@midscene/test/config";
 import { createMidsceneNodes } from "@midscene/test/midscene";
 import { PlaywrightAgent } from "@midscene/web/playwright/agent";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { installBrowserNetworkGuard } from "./browser-network-guard.js";
 
 loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
@@ -125,14 +126,7 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
     // to every other origin so a recorded app cannot silently add a CDN or
     // third-party dependency. Model calls are made by the Node-side agent and
     // are therefore outside this browser request guard.
-    await browserContext.route("**/*", async (route) => {
-      const requestUrl = route.request().url();
-      if (new URL(requestUrl).origin === BASE_ORIGIN) {
-        await route.continue();
-        return;
-      }
-      await route.abort("blockedbyclient");
-    });
+    await installBrowserNetworkGuard(browserContext, BASE_URL);
     // Pin the i18n language and sidebar entries before the app bundle runs.
     const pins = [...DEFAULT_PINS, ...(input.pins ?? [])].map((id) => ({
       type: "builtin" as const,

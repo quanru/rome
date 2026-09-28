@@ -8,6 +8,7 @@
     "nodes": "midscene-test nodes",
     "typecheck": "tsc --noEmit",
     "collect": "node scripts/collect-cases.mjs",
+    "check:browser-boundary": "node --experimental-strip-types scripts/check-browser-boundary.mjs",
     "check:model-vision": "node scripts/check-model-vision.mjs",
     "test:summary": "node --test scripts/render-ci-summary.test.mjs scripts/prepare-pages-site.test.mjs"
   },
@@ -24,6 +25,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
+    "fsevents@2.3.3": false,
     "sharp@0.34.5": true
   }
 }

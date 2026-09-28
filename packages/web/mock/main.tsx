@@ -1,3 +1,4 @@
+import { HttpResponse, http } from "msw";
 import { setupWorker } from "msw/browser";
 import { handlers } from "./handlers";
 
@@ -5,7 +6,12 @@ import { handlers } from "./handlers";
 // very first /api/health + /api/bootstrap probes are already answered by
 // fixtures. Unhandled requests fall through to the dev-server proxy (a real
 // backend, when one is running) untouched.
-const worker = setupWorker(...handlers);
+const worker = setupWorker(
+  http.all("*", ({ request }) => {
+    if (new URL(request.url).origin !== window.location.origin) return HttpResponse.error();
+  }),
+  ...handlers,
+);
 
 void worker
   .start({ onUnhandledRequest: "bypass" })

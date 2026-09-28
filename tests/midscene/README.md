@@ -2,7 +2,7 @@
 
 Visual-driven end-to-end testing for Rome using
 [Midscene](https://midscenejs.com/) YAML cases. Tests run against Rome's
-**MSW mock mode** (`pnpm dev:mock`): they never hit a real backend or use real
+**MSW mock mode** (`pnpm start:web:mock` from the repository root): they never hit a real backend or use real
 personal data. The browser only loads local synthetic fixtures. The Node-side
 Midscene agent calls the configured model endpoint.
 
@@ -22,15 +22,16 @@ Midscene agent calls the configured model endpoint.
     Chinese CI machine);
   - `rome-sidebar-pins`: expands every built-in sidebar entry (the mock user
     pins only Apps/Chat/Projects by default).
-- A BrowserContext request guard aborts every browser request outside
-  `ROME_E2E_BASE_URL`. Recorded apps cannot add hidden CDN dependencies.
+- The MSW worker rejects external HTTP requests. A BrowserContext guard also
+  blocks external HTTP and WebSocket traffic. Run `npm run check:browser-boundary`
+  while the mock server is running to check both paths.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.
 - The suite contains 38 AI-native cases. Each case starts one isolated product
   goal. Related page states share a case only when they belong to that goal.
-- The collector validates a 38-case per-shard manifest. A missing or moved case
-  fails the secret-free validation job.
+- The collector checks every case name and shard against `case-manifest.json`
+  and the documented catalog. Missing, renamed, or moved cases fail CI.
 - The package also registers focused deterministic nodes:
   `app.open`, `app.expectUrl`, `app.expectResponse`, `app.clickByLabel`, `app.expectTexts`,
   `app.scrollTextIntoView`, and `app.pressKey`. Run `npm run nodes` to generate
@@ -47,8 +48,8 @@ Midscene agent calls the configured model endpoint.
 ## Running Locally
 
 ```bash
-# 1. Start Rome mock mode (at the repo root or in packages/web)
-pnpm dev:mock
+# 1. Start Rome mock mode at the repository root
+pnpm start:web:mock
 # Served at http://localhost:3200; logs default to /tmp/rome-devmock.log
 
 # 2. Install test dependencies (first time only)

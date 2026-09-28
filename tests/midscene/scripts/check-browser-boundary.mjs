@@ -1,0 +1,58 @@
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { chromium } from "playwright";
+import { installBrowserNetworkGuard } from "../browser-network-guard.ts";
+
+const baseUrl = process.env.ROME_E2E_BASE_URL ?? "http://localhost:3200";
+let externalRequests = 0;
+let externalSockets = 0;
+const external = createServer((_request, response) => {
+  externalRequests += 1;
+  response.writeHead(200, { "Access-Control-Allow-Origin": "*" });
+  response.end("unexpected external request");
+});
+external.on("upgrade", (_request, socket) => {
+  externalSockets += 1;
+  socket.destroy();
+});
+await new Promise((resolve) => external.listen(0, "127.0.0.1", resolve));
+const port = external.address().port;
+const browser = await chromium.launch({ headless: true });
+try {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url, { mode: "no-cors" });
+      } catch {}
+    }, `http://127.0.0.1:${port}/foreign`);
+    assert.equal(externalRequests, 0, "MSW allowed an external HTTP request");
+  } finally {
+    await context.close();
+  }
+
+  const socketContext = await browser.newContext();
+  try {
+    await installBrowserNetworkGuard(socketContext, baseUrl);
+    const page = await socketContext.newPage();
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.evaluate(async (url) => {
+      await new Promise((resolve) => {
+        const socket = new WebSocket(url);
+        socket.onerror = resolve;
+        socket.onclose = resolve;
+      });
+    }, `ws://127.0.0.1:${port}/foreign`);
+    assert.equal(externalSockets, 0, "the browser guard allowed an external WebSocket");
+  } finally {
+    await socketContext.close();
+  }
+} finally {
+  await browser.close();
+  await new Promise((resolve) => external.close(resolve));
+}
+
+console.log("Browser boundary OK: external HTTP and WebSocket traffic was blocked.");
