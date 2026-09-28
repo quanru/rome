@@ -67,13 +67,13 @@ GitHub Actions (6 shards)
 ### 2.2 Test Harness (`midscene.config.ts`)
 
 - **Fresh BrowserContext per case**: MSW handlers run in a Service Worker
-  (`setupWorker`) and keep writes in memory; a new context is a cold start with
+  (`setupWorker`) and keep writes in memory. A new context is a cold start with
   fixtures reset. Zero shared state between cases.
 - **Pinned English UI**: an init script writes `rome.lang=en`, so a zh-CN CI
   machine locale cannot drift the copy. A localized Chinese-shell case is
-  future coverage; none is included in the current 38-case suite.
+  future coverage. None is included in the current 38-case suite.
 - **Full sidebar-pin injection**: the mock guardian pins only Apps/Chat/
-  Projects by default; other entries live behind the "all apps" popover. Cases
+  Projects by default. Other entries live behind the "all apps" popover. Cases
   write `rome-sidebar-pins` (the shell's own localStorage contract) so every
   built-in entry is expanded and cross-page sidebar clicks are deterministic.
 - **AI-native interaction**: `aiAct` performs navigation, typing, scrolling,
@@ -94,21 +94,21 @@ local reference for the full node list.
 | `app.expectUrl` | URL substring / `re:` regex assertion |
 | `app.expectResponse` | Check an API response for a transient outcome that a later screenshot cannot capture |
 | `app.clickByLabel` | Deterministically click repeated icon buttons by accessible name (tile kebab, chip clear), piercing open shadow DOM |
-| `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere; works locally and on Linux CI) |
-| `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport; pierces shadow DOM |
+| `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere). Works locally and on Linux CI. |
+| `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport. Pierces shadow DOM. |
 | `app.expectTexts` | Check long-page or toast text that cannot fit in one screenshot |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 
 Every case relies on the behavioral facts below. They **document the current
-implementation**; if the implementation changes, the cases must change with it.
+implementation**. If the implementation changes, the cases must change with it.
 
 1. **Fixed cold-start state**: `/api/health`, `/api/bootstrap` and
    `/api/auth/me` drop the app straight into an authenticated shell with the
-   synthetic guardian user; the browser is authenticated on open.
+   synthetic guardian user. The browser is authenticated on open.
 2. **Writes are in-memory only**: POST/PATCH operations (enabling a routine,
    approving an approval, installing an app) land in MSW memory and **persist
-   across client routes within the same BrowserContext**; a hard reload,
+   across client routes within the same BrowserContext**. A hard reload,
    closing the context, or opening a new one restores fixture defaults.
 3. **Unmatched API requests fail locally**: the mock dev server has no backend
    proxy, and MSW returns 503 for unmocked `/api` calls. Cases must not depend
@@ -116,22 +116,22 @@ implementation**; if the implementation changes, the cases must change with it.
 4. **Synthetic fixture data only**: no real names, accounts, tokens or chat
    content may be introduced.
 5. **Waiting strategy**: `app.open` waits for the shell (`a[href="/chat"]` in
-   the sidebar), which doubles as mock-readiness; async settling after a card
+   the sidebar), which doubles as mock-readiness. Async settling after a card
    mounts (e.g. a routine card re-running `GET /api/routines`) uses explicit
    `wait` steps.
 6. **Chat stick-to-bottom**: the transcript snaps to the latest message and
-   programmatic scrolling is pushed back by `useStickToBottom`; only a scroll
+   programmatic scrolling is pushed back by `useStickToBottom`. Only a scroll
    within 300 ms of a trusted gesture (wheel/touch/keyboard) releases it. This
    is encapsulated in `app.scrollTextIntoView`.
 7. **In-chat app links**: `/apps/<id>` links in markdown are intercepted by
    `ChatLink` and open in a workspace tile beside the chat while the URL stays
-   at `/chat/...`. This is real product behavior; assert on the tile, not on a
+   at `/chat/...`. This is real product behavior. Assert on the tile, not on a
    route change.
 
 ## 4. CI Design (`.github/workflows/midscene.yml`)
 
 The workflow file is the source of truth for step-level details (action pins,
-timeouts, cache flags); this section records the design decisions and the
+timeouts, cache flags). This section records the design decisions and the
 reasons behind them.
 
 - **Triggers**: pushes to `main` on a scoped path set (the workflow itself,
@@ -155,17 +155,17 @@ reasons behind them.
   model-backed PR runs later, create the protected environment in Settings
   first, then add an environment-gated `pull_request` matrix job back to
   the workflow.
-- **Runtime**: Ubuntu + Node.js 24; pnpm is enabled (reading the root
+- **Runtime**: Ubuntu + Node.js 24. Pnpm is enabled (reading the root
   `packageManager` version) **before** `setup-node`, whose `cache: pnpm`
   requires pnpm to already exist on a clean runner. Product dependencies
-  install with `pnpm install --frozen-lockfile --ignore-scripts`; the
+  install with `pnpm install --frozen-lockfile --ignore-scripts`. The
   `tests/midscene` package installs with `npm ci --strict-allow-scripts` against a lockfile whose
   `resolved` URLs all point at the public `registry.npmjs.org`, followed by
   `playwright install --with-deps chromium`.
 - **Secret handling and trust boundary**: the four `MIDSCENE_MODEL_*` values
   come from repository secrets and are scoped only to the steps that actually
-  call the model (configuration check, connectivity preflight, shard run);
-  dependency installation and the mock server never see them. The job starts
+  call the model (configuration check, connectivity preflight, shard run).
+  Dependency installation and the mock server never see them. The job starts
   with a non-empty check and a `/chat/completions` connectivity preflight
   (90-second timeout) so a missing secret or bad endpoint fails in seconds
   instead of burning the full 45-minute budget.
@@ -173,15 +173,15 @@ reasons behind them.
   `MIDSCENE_MODEL_BASE_URL` directly from the runner. Hosted GitHub runners can
   only reach public endpoints. If the model gateway lives on an intranet (for
   example a corporate-internal hostname), the preflight fails with a connect
-  timeout; the workflow then requires a **self-hosted runner** that can reach
+  timeout. The workflow then requires a **self-hosted runner** that can reach
   that intranet (change the `runs-on` label) or a publicly reachable model
   endpoint. Correct credentials with no network route fail at the preflight
   just as quickly.
 - **Mock server**: `pnpm --filter rome-web dev:mock` starts in the background
   (it runs `build:kit` first, so first-request readiness is polled for several
-  minutes); its log is uploaded as an artifact on failure.
-- **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`;
-  every case carries exactly one `shard-N` tag. `fail-fast: false`,
+  minutes). Its log is uploaded as an artifact on failure.
+- **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`.
+  Every case carries exactly one `shard-N` tag. `fail-fast: false`,
   `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
 - **Evidence**: runs in `quanru/rome` upload the `midscene_run/` and
   `.midscene/` report artifacts. The aggregation job puts abnormal cases first
@@ -208,7 +208,7 @@ shard-2, AUTH-01 → shard-5).
 
 ## 5. Case Catalog
 
-> Case ID convention: `<SUITE>-<number>`; ✅ = mock-drivable (all drafted in
+> Case ID convention: `<SUITE>-<number>`. ✅ = mock-drivable (all drafted in
 > this iteration), ⚠️ = blocked by a mock gap from section 6 (registered only,
 > no YAML).
 
@@ -242,7 +242,7 @@ real external services.
 ### 1. Chat turn streaming endpoint (SSE)
 
 - **Today**: sending a message and submitting a question/approval card share
-  `POST /api/.../turns`, which the mock does not serve; the UI can only reach
+  `POST /api/.../turns`, which the mock does not serve. The UI can only reach
   "Failed to send message". CHAT-04/05/20 therefore assert the designed failure
   state.
 - **Suggested**: a turn handler that accepts a synthetic prompt and returns a
@@ -255,7 +255,7 @@ real external services.
 ### 2. Sessions Overview metrics endpoint
 
 - **Today**: `/sessions` (the Overview segment) depends on
-  `POST /api/sessions/metrics`; unmocked, the whole page is unusable, so all
+  `POST /api/sessions/metrics`. Unmocked, the whole page is unusable, so all
   sessions cases land on `/sessions/all`.
 - **Suggested**: aggregate the existing sessions fixture into fixed-window
   metrics (run counts, success rate, token/cost totals, per-day/per-type
@@ -278,8 +278,8 @@ real external services.
 - **Today**: session writes — fork creation, share links, archive/delete — have
   no handlers, so only failure copy can be verified.
 - **Suggested**: in-memory handlers for session writes: fork produces a copy
-  with a new id; share issues a synthetic read-only link (fixed token);
-  archive/delete removes the row from the list and can be restored in memory.
+  with a new id. Share issues a synthetic read-only link (fixed token).
+  Archive/delete removes the row from the list and can be restored in memory.
 - **Unblocks**: content inheritance after fork, read-only share rendering,
   list disappearance/view filters after archiving, the delete confirmation
   flow.
@@ -290,7 +290,7 @@ real external services.
   (Telegram/Discord/Feishu) render and can be rejected, but Approve and the
   in-settings new-channel wizard have no success-path handlers.
 - **Suggested**: Approve writes to memory and returns a pairing code/success
-  state; add a multi-step GET/POST wizard (choose channel → generate code →
+  state. Add a multi-step GET/POST wizard (choose channel → generate code →
   verify → complete), fully synthetic.
 - **Unblocks**: request disappearing and banner decrement after approval, a
   full wizard walkthrough, the connection card appearing in Channels/Settings.
@@ -304,12 +304,12 @@ real external services.
   a full page reload (required by the files/memory cases).
 - **Desktop workspace placeholder**
   (`packages/web/mock/public/desktop-vnc.html`): the noVNC document embedded by
-  the Browser workspace iframe is served by @rome/core in production; in mock
+  the Browser workspace iframe is served by @rome/core in production. In mock
   mode the missing static asset fell through the SPA fallback into a nested
   /chat. A blank dark placeholder was added at the dev-server static layer (an
   MSW browser Service Worker cannot intercept an iframe's initial document
   navigation, because the new frame has not registered the worker yet).
-  The placeholder is mock infrastructure only; a desktop iframe assertion is
+  The placeholder is mock infrastructure only. A desktop iframe assertion is
   future coverage and is not included in the current suite.
 
 ## 7. Running Locally
