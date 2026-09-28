@@ -139,12 +139,11 @@ reasons behind them.
   rebuilt by `build:kit` — `packages/ui`, `packages/web-content`,
   `packages/api-types`, `packages/app-runtime-sdk` — and `pnpm-lock.yaml`),
   the same paths on `pull_request`, plus manual `workflow_dispatch`. A PR
-  runs only the **secret-free `harness-validation` job** (`npm ci --strict-allow-scripts` with the
-  Playwright browser download skipped, `tsc --noEmit`, and a YAML case
-  collection step that parses every case and resolves node references
-  exactly like the runner, then checks names and shards against the case catalog — no browser, mock server, or model calls), so a
-  broken custom node or malformed case fails before merge without exposing
-  any credentials. The model-backed `midscene` matrix runs on the upstream
+  runs two secret-free jobs. `harness-validation` installs the package,
+  type-checks it, collects YAML cases, checks the catalog, and tests report
+  scripts without starting a browser or model. `mock-boundary-validation`
+  starts the mock server and checks MSW, browser HTTP, and WebSocket blocking
+  without model credentials. The model-backed `midscene` matrix runs on the upstream
   `main` branch or by manual dispatch in a fork using that fork's secrets.
   The matrix does not run on `pull_request`: model calls are billable and a PR job checks out
   contributor-controlled code. Note that merely naming a protected

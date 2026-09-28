@@ -119,7 +119,7 @@ HEADLESS=false npm test
   passed cases and their screenshots appear in a collapsed appendix.
 - Runs in `rome-os/rome` execute the cases without uploading reports or
   publishing a Summary or GitHub Pages site.
-- Pull requests run only the secret-free harness validation job. The
+- Pull requests run secret-free harness and mock-browser boundary jobs. The
   model-backed shard matrix runs on the upstream `main` branch or by manual
   dispatch in a fork using that fork's model secrets.
 
