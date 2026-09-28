@@ -30,7 +30,10 @@ afterAll(() => server.close());
 
 test("tree for the root and an existing directory lists children", async () => {
   const root = await (await fetch(`${API}/tree?depth=1`)).json();
-  expect(root.map((n: { path: string }) => n.path)).toEqual(["projects/notes", "projects/readme.txt"]);
+  expect(root.map((n: { path: string }) => n.path)).toEqual([
+    "projects/notes",
+    "projects/readme.txt",
+  ]);
 
   const notes = await (await fetch(`${API}/tree?path=projects/notes&depth=1`)).json();
   expect(notes.map((n: { name: string }) => n.name)).toEqual(["a.md"]);

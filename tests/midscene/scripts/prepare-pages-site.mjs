@@ -21,7 +21,11 @@ const parseArguments = (argv) => {
   return options;
 };
 
-const exists = async (filename) => stat(filename).then(() => true, () => false);
+const exists = async (filename) =>
+  stat(filename).then(
+    () => true,
+    () => false,
+  );
 
 const bytesIn = async (filename) => {
   const info = await stat(filename);
@@ -63,7 +67,16 @@ const copyShardReports = async (source, destination) => {
   }
 };
 
-export async function preparePagesSite({ site, reports, runId, previous, previousRunId, legacy, legacyRunId, maxSiteBytes = MAX_SITE_BYTES }) {
+export async function preparePagesSite({
+  site,
+  reports,
+  runId,
+  previous,
+  previousRunId,
+  legacy,
+  legacyRunId,
+  maxSiteBytes = MAX_SITE_BYTES,
+}) {
   if (!/^\d+$/.test(runId)) throw new Error("run-id must be numeric");
   await mkdir(site, { recursive: true });
 
@@ -74,10 +87,14 @@ export async function preparePagesSite({ site, reports, runId, previous, previou
     await copyShardReports(previous, site);
     const previousEntries = await readdir(previous);
     for (const entry of previousEntries) {
-      if (/^index-\d+\.html$/.test(entry)) await cp(path.join(previous, entry), path.join(site, entry));
+      if (/^index-\d+\.html$/.test(entry))
+        await cp(path.join(previous, entry), path.join(site, entry));
     }
-    if (previousRunId && !previousEntries.some((entry) => /^index-\d+\.html$/.test(entry)) &&
-        (await exists(path.join(previous, "index.html")))) {
+    if (
+      previousRunId &&
+      !previousEntries.some((entry) => /^index-\d+\.html$/.test(entry)) &&
+      (await exists(path.join(previous, "index.html")))
+    ) {
       await cp(path.join(previous, "index.html"), path.join(site, `index-${previousRunId}.html`));
     }
   }

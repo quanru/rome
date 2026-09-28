@@ -346,7 +346,6 @@ const appExpectTexts = defineNode<typeof expectTextsInput, void, ProjectContext>
   },
 });
 
-
 const expectUrlInput = z.strictObject({
   // Substring matched against the full URL; prefix with "re:" for a regex.
   path: z.string().min(1),
@@ -406,7 +405,6 @@ const appExpectResponse = defineNode<typeof expectResponseInput, void, ProjectCo
     }
   },
 });
-
 
 const pressKeyInput = z.strictObject({
   // Combo like "mod+k", "mod+b", "mod+shift+o", or a single key

@@ -142,9 +142,20 @@ const catalogMismatch = expectedNames.filter((name) => {
   const row = catalogCases.get(id);
   return !row || row.name !== name || row.shard !== expectedCases[name];
 });
-if (unexpectedNames.length || missingNames.length || wrongShards.length || catalogMismatch.length || catalogCases.size !== expectedNames.length) {
+if (
+  unexpectedNames.length ||
+  missingNames.length ||
+  wrongShards.length ||
+  catalogMismatch.length ||
+  catalogCases.size !== expectedNames.length
+) {
   console.error("Case manifest or catalog differs from the executable YAML cases.");
-  for (const [label, names] of Object.entries({ unexpectedNames, missingNames, wrongShards, catalogMismatch })) {
+  for (const [label, names] of Object.entries({
+    unexpectedNames,
+    missingNames,
+    wrongShards,
+    catalogMismatch,
+  })) {
     if (names.length) console.error(`${label}: ${names.join(", ")}`);
   }
   process.exit(1);

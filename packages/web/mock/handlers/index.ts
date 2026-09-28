@@ -1253,14 +1253,9 @@ export const handlers = [
   ...projectFileHandlers,
   ...memoryFileHandlers,
   http.post("/api/chat/sessions", () =>
-    HttpResponse.json(
-      { error: "/api/chat/sessions is unavailable in mock mode" },
-      { status: 503 },
-    ),
+    HttpResponse.json({ error: "/api/chat/sessions is unavailable in mock mode" }, { status: 503 }),
   ),
-  http.post("/api/auth/login", () =>
-    HttpResponse.json({ error: "Login failed" }, { status: 401 }),
-  ),
+  http.post("/api/auth/login", () => HttpResponse.json({ error: "Login failed" }, { status: 401 })),
   http.all("/api/*", ({ request }) =>
     HttpResponse.json(
       { error: `Unmocked API request: ${request.method} ${new URL(request.url).pathname}` },

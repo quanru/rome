@@ -161,7 +161,13 @@ const modelsFromReports = async (directory) => {
 const nativeReportFor = async (reportsDirectory, record) => {
   if (record.report) {
     const report = path.resolve(path.dirname(record.summaryFile), record.report);
-    if (!(await access(report).then(() => true, () => false))) return null;
+    if (
+      !(await access(report).then(
+        () => true,
+        () => false,
+      ))
+    )
+      return null;
     return {
       file: report,
       path: path.relative(reportsDirectory, report).split(path.sep).join("/"),
@@ -276,9 +282,12 @@ export async function collectReportData(reportsDirectory, expectedProjects = [])
       const attemptRef = testCase.attempts?.at(-1);
       const attempt = await loadAttempt(record.summaryFile, attemptRef).catch(() => null);
       const passed = testCase.status === "success";
-      const evidence = await evidenceForCase(reportsDirectory, report, testCase.caseId, passed).catch(
-        () => ({}),
-      );
+      const evidence = await evidenceForCase(
+        reportsDirectory,
+        report,
+        testCase.caseId,
+        passed,
+      ).catch(() => ({}));
       cases.push({
         name: testCase.name,
         status: testCase.status,
@@ -317,7 +326,9 @@ export function caseSetIssues(projects, manifest) {
       const actualShard = project.name.replace(/^web-/, "");
       if (!expectedShard) issues.push(`Unexpected case: ${testCase.name} (${actualShard})`);
       else if (expectedShard !== actualShard) {
-        issues.push(`Wrong shard: ${testCase.name} (expected ${expectedShard}, found ${actualShard})`);
+        issues.push(
+          `Wrong shard: ${testCase.name} (expected ${expectedShard}, found ${actualShard})`,
+        );
       }
       if (reported.has(testCase.name)) issues.push(`Duplicate case: ${testCase.name}`);
       reported.set(testCase.name, true);
@@ -331,23 +342,30 @@ export function caseSetIssues(projects, manifest) {
 
 const caseName = (pagesUrl, testCase) => {
   const name = markdownCell(testCase.name);
-  return testCase.reportPath
-    ? `[${name}](${caseUrl(pagesUrl, testCase)})`
-    : name;
+  return testCase.reportPath ? `[${name}](${caseUrl(pagesUrl, testCase)})` : name;
 };
 
 const caseScreenshot = (pagesUrl, testCase) => {
   if (!testCase.reportPath || !testCase.screenshotPath) return "—";
   const target = html(caseUrl(pagesUrl, testCase));
   const image = html(reportUrl(pagesUrl, testCase.screenshotPath));
-  const name = html(testCase.name).replaceAll("|", "&#124;").replaceAll(/[\r\n]+/g, " ");
+  const name = html(testCase.name)
+    .replaceAll("|", "&#124;")
+    .replaceAll(/[\r\n]+/g, " ");
   return `<a href="${target}"><img src="${image}" alt="${name}" width="160"></a>`;
 };
 
 const caseRow = (pagesUrl, testCase, detail) =>
   `| ${markdownCell(testCase.project)} | ${caseName(pagesUrl, testCase)} | ${caseScreenshot(pagesUrl, testCase)} | ${markdownCell(detail)} | ${formatDuration(testCase.durationMs)} |`;
 
-export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success", caseInventoryIssues = [] }) {
+export function renderMarkdown({
+  projects,
+  models,
+  pagesUrl,
+  runUrl,
+  producerResult = "success",
+  caseInventoryIssues = [],
+}) {
   const totals = totalsFor(projects);
   const incompleteProjects = projects.filter((project) => project.status !== "success");
   const failures = totals.cases.filter((testCase) => testCase.status !== "success");
@@ -356,14 +374,13 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
     (project) => !failures.some((testCase) => testCase.project === project.name),
   );
   const unreportedFailure =
-    producerResult !== "success" &&
-    failures.length === 0 &&
-    infrastructureFailures.length === 0;
-  const needsAttention = failures.length + infrastructureFailures.length + Number(unreportedFailure) + caseInventoryIssues.length;
-  const complete =
-    producerResult === "success" &&
-    totals.total > 0 &&
-    needsAttention === 0;
+    producerResult !== "success" && failures.length === 0 && infrastructureFailures.length === 0;
+  const needsAttention =
+    failures.length +
+    infrastructureFailures.length +
+    Number(unreportedFailure) +
+    caseInventoryIssues.length;
+  const complete = producerResult === "success" && totals.total > 0 && needsAttention === 0;
   const sections = [
     `## Rome × Midscene · ${complete ? "passed" : "failure captured"}`,
     "",
@@ -384,20 +401,25 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
       "| Shard | Case | Screenshot | Status / reason | Duration |",
       "|:--|:--|:--|:--|--:|",
       ...infrastructureFailures.map(
-        (project) => `| ${markdownCell(project.name)} | — | — | ❌ ${markdownCell(project.status)} · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
+        (project) =>
+          `| ${markdownCell(project.name)} | — | — | ❌ ${markdownCell(project.status)} · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
       ),
       ...(unreportedFailure
-        ? [`| Workflow | — | — | ❌ ${markdownCell(producerResult)} · [Workflow run](${runUrl}) | — |`]
+        ? [
+            `| Workflow | — | — | ❌ ${markdownCell(producerResult)} · [Workflow run](${runUrl}) | — |`,
+          ]
         : []),
       ...failures
-        .sort((left, right) =>
-          Number(left.status === "not-run") - Number(right.status === "not-run"),
+        .sort(
+          (left, right) => Number(left.status === "not-run") - Number(right.status === "not-run"),
         )
-        .map((testCase) => caseRow(
-          pagesUrl,
-          testCase,
-          `${testCase.status === "not-run" ? "⏭️ Not run" : "❌ Failed"}: ${testCase.reason}`,
-        )),
+        .map((testCase) =>
+          caseRow(
+            pagesUrl,
+            testCase,
+            `${testCase.status === "not-run" ? "⏭️ Not run" : "❌ Failed"}: ${testCase.reason}`,
+          ),
+        ),
       "",
     );
   } else if (complete) {
@@ -412,9 +434,7 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
     "",
     "| Shard | Case | Screenshot | Status | Duration |",
     "|:--|:--|:--|:--|--:|",
-    ...passedCases.map((testCase) =>
-      caseRow(pagesUrl, testCase, "✅ Passed")
-      ),
+    ...passedCases.map((testCase) => caseRow(pagesUrl, testCase, "✅ Passed")),
     "",
     "</details>",
     "",
@@ -424,7 +444,14 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
   return sections.join("\n");
 }
 
-export function renderHtml({ projects, models, pagesUrl, runUrl, producerResult = "success", caseInventoryIssues = [] }) {
+export function renderHtml({
+  projects,
+  models,
+  pagesUrl,
+  runUrl,
+  producerResult = "success",
+  caseInventoryIssues = [],
+}) {
   const totals = totalsFor(projects);
   const complete =
     producerResult === "success" &&

@@ -6,11 +6,7 @@ import sharp from "sharp";
 
 loadEnv();
 
-const required = [
-  "MIDSCENE_MODEL_API_KEY",
-  "MIDSCENE_MODEL_NAME",
-  "MIDSCENE_MODEL_BASE_URL",
-];
+const required = ["MIDSCENE_MODEL_API_KEY", "MIDSCENE_MODEL_NAME", "MIDSCENE_MODEL_BASE_URL"];
 for (const key of required) {
   if (!process.env[key]) throw new Error(`${key} is required`);
 }
@@ -68,11 +64,7 @@ if (!response.ok) {
 const payload = await response.json();
 const answer = payload?.choices?.[0]?.message?.content?.trim() ?? "";
 const normalized = answer.toLowerCase().replace(/\s/g, "");
-if (
-  !normalized.includes(code) ||
-  !normalized.includes("triangle") ||
-  !normalized.includes("red")
-) {
+if (!normalized.includes(code) || !normalized.includes("triangle") || !normalized.includes("red")) {
   throw new Error(
     `Model vision preflight could not read the generated image (response: ${JSON.stringify(answer.slice(0, 160))})`,
   );

@@ -24,27 +24,50 @@ test("keeps historical root links and publishes recent runs at stable paths", as
   await shard(reports, "new");
   await mkdir(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots"));
   await mkdir(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots"));
-  await writeFile(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/recent.jpeg"), "recent");
-  await writeFile(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"), "affected");
+  await writeFile(
+    path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/recent.jpeg"),
+    "recent",
+  );
+  await writeFile(
+    path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"),
+    "affected",
+  );
   await writeFile(path.join(legacy, "index.html"), "affected summary");
   await writeFile(path.join(reports, "index.html"), "new summary");
   await mkdir(path.join(previous, "runs", "100"), { recursive: true });
   await writeFile(path.join(previous, "runs", "100", "index.html"), "older run");
 
-  const first = await preparePagesSite({ site, reports, runId: "101", previous, previousRunId: "100", legacy, legacyRunId: "99" });
+  const first = await preparePagesSite({
+    site,
+    reports,
+    runId: "101",
+    previous,
+    previousRunId: "100",
+    legacy,
+    legacyRunId: "99",
+  });
   assert.deepEqual(first.runIds, ["100", "101"]);
   assert.match(await readFile(path.join(site, "index.html"), "utf8"), /index-99\.html/);
   assert.equal(await readFile(path.join(site, "index-99.html"), "utf8"), "affected summary");
   assert.equal(
-    await readFile(path.join(site, "midscene-shard-1/midscene_run/report/affected-old/index.html"), "utf8"),
+    await readFile(
+      path.join(site, "midscene-shard-1/midscene_run/report/affected-old/index.html"),
+      "utf8",
+    ),
     "affected-old",
   );
   assert.equal(
-    await readFile(path.join(site, "midscene-shard-1/midscene_run/report/recent-old/index.html"), "utf8"),
+    await readFile(
+      path.join(site, "midscene-shard-1/midscene_run/report/recent-old/index.html"),
+      "utf8",
+    ),
     "recent-old",
   );
   assert.equal(
-    await readFile(path.join(site, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"), "utf8"),
+    await readFile(
+      path.join(site, "midscene-shard-1/midscene_run/report/screenshots/affected.jpeg"),
+      "utf8",
+    ),
     "affected",
   );
   assert.equal(await readFile(path.join(site, "runs/101/index.html"), "utf8"), "new summary");
@@ -56,7 +79,10 @@ test("keeps historical root links and publishes recent runs at stable paths", as
   assert.deepEqual(result.runIds, ["101", "102", "103"]);
   await assert.rejects(stat(path.join(final, "runs", "100")), { code: "ENOENT" });
   assert.equal(
-    await readFile(path.join(final, "midscene-shard-1/midscene_run/report/affected-old/index.html"), "utf8"),
+    await readFile(
+      path.join(final, "midscene-shard-1/midscene_run/report/affected-old/index.html"),
+      "utf8",
+    ),
     "affected-old",
   );
 });
@@ -75,8 +101,14 @@ test("rejects conflicting historical screenshot IDs", async (context) => {
   await shard(legacy, "older");
   await mkdir(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots"));
   await mkdir(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots"));
-  await writeFile(path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"), "first");
-  await writeFile(path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"), "second");
+  await writeFile(
+    path.join(previous, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"),
+    "first",
+  );
+  await writeFile(
+    path.join(legacy, "midscene-shard-1/midscene_run/report/screenshots/same.jpeg"),
+    "second",
+  );
   await mkdir(reports);
   await writeFile(path.join(reports, "index.html"), "summary");
   await assert.rejects(
@@ -100,7 +132,13 @@ test("prunes older run directories before exceeding the Pages budget", async (co
   );
 
   const site = path.join(root, "site");
-  const result = await preparePagesSite({ site, reports, runId: "101", previous, maxSiteBytes: 20_000 });
+  const result = await preparePagesSite({
+    site,
+    reports,
+    runId: "101",
+    previous,
+    maxSiteBytes: 20_000,
+  });
   assert.deepEqual(result.runIds, ["101"]);
   assert.ok(result.bytes < 20_000);
   await assert.rejects(stat(path.join(site, "runs", "100")), { code: "ENOENT" });

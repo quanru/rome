@@ -206,11 +206,13 @@ test("reports a missing expected shard as an overall failure", () => {
 
 test("HTML does not present passing cases as a successful failed run", () => {
   const base = {
-    projects: [{
-      name: "web-shard-1",
-      status: "failed",
-      cases: [{ name: "AUTH-01", status: "success", reason: "" }],
-    }],
+    projects: [
+      {
+        name: "web-shard-1",
+        status: "failed",
+        cases: [{ name: "AUTH-01", status: "success", reason: "" }],
+      },
+    ],
     models: [],
     runUrl: "https://example.test/run",
     pagesUrl: "https://example.test/reports/",
@@ -239,7 +241,14 @@ test("keeps a failed case when its native report is missing", async (context) =>
     import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
   );
   await writeShard(root, "shard-1", "failed", "CHAT-09 sends a message", "deepseek-v3.2");
-  const report = path.join(root, "midscene-shard-1", "midscene_run", "report", "midscene-e2e-run-1", "index.html");
+  const report = path.join(
+    root,
+    "midscene-shard-1",
+    "midscene_run",
+    "report",
+    "midscene-e2e-run-1",
+    "index.html",
+  );
   await import("node:fs/promises").then(({ rm }) => rm(report));
   const data = await buildSummary({
     "reports-dir": root,
@@ -258,19 +267,23 @@ test("keeps a failed case when its native report is missing", async (context) =>
 
 test("celebrates a complete run and keeps passed cases in the appendix", () => {
   const markdown = renderMarkdown({
-    projects: [{
-      name: "web-shard-1",
-      status: "success",
-      durationMs: 1000,
-      cases: [{
-        name: "AUTH-01",
+    projects: [
+      {
+        name: "web-shard-1",
         status: "success",
         durationMs: 1000,
-        reportPath: "web-shard-1/report/index.html",
-        screenshotPath: "web-shard-1/screenshots/one.jpeg",
-        stepId: "step-1",
-      }],
-    }],
+        cases: [
+          {
+            name: "AUTH-01",
+            status: "success",
+            durationMs: 1000,
+            reportPath: "web-shard-1/report/index.html",
+            screenshotPath: "web-shard-1/screenshots/one.jpeg",
+            stepId: "step-1",
+          },
+        ],
+      },
+    ],
     models: [],
     runUrl: "https://example.test/run",
     pagesUrl: "https://example.test/reports/",

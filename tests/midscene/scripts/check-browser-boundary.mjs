@@ -90,4 +90,6 @@ try {
   await new Promise((resolve) => external.close(resolve));
 }
 
-console.log("Browser boundary OK: mock API, MSW HTTP, browser HTTP, and WebSocket traffic was blocked.");
+console.log(
+  "Browser boundary OK: mock API, MSW HTTP, browser HTTP, and WebSocket traffic was blocked.",
+);
