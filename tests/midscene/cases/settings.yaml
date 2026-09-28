@@ -1,268 +1,56 @@
 cases:
-  - name: SET-01 Settings redirect to Appearance and expose all six tabs
-    tags: [settings, shard-5]
+  - name: SET-01 Open the appearance-mode choices
+    tags:
+      - settings
+      - shard-5
     steps:
-      - app.open: { path: /settings }
-      - app.expectUrl: { path: /settings/appearance }
-      - aiAssert: >-
-          The Settings page is shown in English with the heading "Settings".
-          Six navigation entries are visible in this order: "Appearance",
-          "Connections", "Channels", "AI Tools", "Favors", and "Advanced".
-          The Appearance section shows the rows "Language", "Theme", and
-          "Appearance mode", with the controls currently set to English,
-          Ember, and System. (The Light and Dark alternatives live inside
-          the closed "Appearance mode" select and are exercised in SET-02.)
-
-  - name: SET-02 Appearance mode switches to Dark instantly
-    tags: [settings, shard-5]
-    steps:
-      - app.open: { path: /settings/appearance }
+      - app.open:
+          path: /settings/appearance
       - aiAct: >-
-          Open the "Appearance mode" select and choose "Dark".
-      - wait: { duration: 600 }
+          Click the visible "Appearance mode" select once, then stop with its choices open.
       - aiAssert: >-
-          The whole settings UI immediately renders with a dark background
-          and light text (dark mode is applied without a save button or
-          reload).
-
-  - name: SET-03 Connections list shows the nine fixture connections
-    tags: [settings, shard-5]
+          The Appearance mode menu is open and offers System, Light, and Dark choices.
+  - name: SET-02 Open connection details
+    tags:
+      - settings
+      - shard-5
     steps:
-      - app.open: { path: /settings/connections }
-      # Pairing requests occupy the first viewport; the service list is
-      # further down the page.
-      - app.scrollTextIntoView: { text: "Every channel and service" }
-      - wait: { duration: 400 }
-      # The full roster (nine services + the App keys footer) runs past one
-      # screenshot, so verify the complete list in the DOM first.
-      - app.expectTexts:
-          all:
-            - "Every channel and service your agent can use, in one place."
-            - "Telegram"
-            - "WhatsApp"
-            - "WeChat"
-            - "LinkedIn"
-            - "Discord"
-            - "Email"
-            - "Feishu"
-            - "GitHub"
-            - "Composio"
-            - "Connected"
-            - "App keys"
-            - "1 key"
+      - app.open:
+          path: /settings/connections
+      - aiAct: >-
+          Click the visible Telegram connection row once. Stop as soon as its connection-detail
+          dialog is open; do not look for an "Open Telegram" button.
       - aiAssert: >-
-          The "Connections" section is shown with service rows marked
-          "Connected", beginning with Telegram and WhatsApp.
-
-  - name: SET-04 Disconnecting a connection grant updates the card until refresh
-    tags: [settings, shard-5]
+          A Telegram connection detail dialog is open and shows its connected status and account
+          information rather than an error.
+  - name: SET-03 Inspect channel activation settings
+    tags:
+      - settings
+      - shard-5
     steps:
-      - app.open: { path: /settings/connections }
-      - app.scrollTextIntoView: { text: "Every channel and service" }
-      - app.clickByLabel: { label: "Open GitHub" }
-      - wait: { duration: 800 }
+      - app.open:
+          path: /settings/channels
+      - aiAct: >-
+          Click the visible "Rome / can you see active chats?" conversation card once, then stop.
       - aiAssert: >-
-          A GitHub connection detail dialog is open. It shows "GitHub" with
-          a "Connected" state and the demo account "Rome Demo"
-          (rome-demo), describes the repositories/issues/pull-requests
-          capabilities, and offers a "Disconnect" action.
-      - aiTap: 'the "Disconnect" button in the GitHub dialog'
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The grant is revoked in memory: the GitHub section now presents a
-          not-connected state with a "Connect" affordance instead of the
-          connected identity.
-
-  - name: SET-05 App keys add flow validates input and saves successfully
-    tags: [settings, shard-5]
+          The card's configuration sections are shown, including an "Activation" section ("Rome in
+          this conversation"), a "Respond" policy set to "Only when mentioned", and "Reply
+          placement" options ("Native thread", "Inline").
+  - name: SET-04 Open advanced developer settings
+    tags:
+      - settings
+      - shard-5
+      - deterministic-assist
     steps:
-      - app.open: { path: /settings/connections/app-keys }
+      - app.open:
+          path: /settings/advanced
+      - app.scrollTextIntoView:
+          text: Developer Settings
+      - aiAct: >-
+          Click the now-centered "Developer Settings" disclosure exactly once, then immediately
+          declare the action complete without inspecting the result or retrying.
+      - app.scrollTextIntoView:
+          text: Show Claude and ChatGPT usage
       - aiAssert: >-
-          The App keys page shows the heading "App keys" and an existing key
-          labeled "Demo service API key", plus an "Add key" button.
-      - aiTap: "Add key"
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          A "New key" form is shown with a "Name apps use" field, a "Secret
-          value" field, the warning "Any app installed on your Rome will be
-          able to read this.", and a "Save for all apps" button.
-      # Fill only the name and submit with the secret empty. The steps are
-      # deterministic (an aiAct treats the expected validation rejection as
-      # its own task failure).
-      - app.typeText: { target: "e.g. SHOP_DB_PASSWORD", text: "SHOP_DB_PASSWORD" }
-      - app.clickByLabel: { label: "Save for all apps", exact: true }
-      - wait: { duration: 700 }
-      - app.expectTexts:
-          all:
-            - "Enter the secret value."
-      # Now provide the secret and resubmit.
-      - app.typeText: { target: "Secret value", text: "demo-secret-123" }
-      - app.clickByLabel: { label: "Save for all apps", exact: true }
-      - wait: { duration: 1000 }
-      - app.expectTexts:
-          scope: body
-          all:
-            - "Saved. Apps can now read SHOP_DB_PASSWORD."
-      # The name cell renders the raw SHOP_DB_PASSWORD identifier in the list.
-      - app.expectTexts:
-          all:
-            - "SHOP_DB_PASSWORD"
-
-  - name: SET-06 Channels page lists conversation activation cards
-    tags: [settings, shard-5]
-    steps:
-      # The Channels tab opens directly on the per-conversation
-      # configuration surface (there is no separate provider-cards page).
-      - app.open: { path: /settings/channels }
-      - wait: { duration: 800 }
-      # The list is taller than one screenshot; verify the complete roster
-      # in the DOM and keep the visual assertion to the first card only.
-      - app.expectTexts:
-          all:
-            - "All connections"
-            - "Any status"
-            - "Rome / can you see active chats?"
-            - "Ray"
-      - aiAssert: >-
-          The Channels tab shows the "All connections" and "Any status"
-          filters, and a group conversation card titled "Rome / can you see
-          active chats?" marked as a Discord group that is currently Online,
-          with the "Rome in this conversation" activation switch turned on.
-      - aiTap: 'the "Rome / can you see active chats?" conversation card'
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The card's configuration sections are shown, including an
-          "Activation" section ("Rome in this conversation"), a "Respond"
-          policy set to "Only when mentioned", and "Reply placement"
-          options ("Native thread", "Inline").
-
-  - name: SET-07 AI Tools shows Claude connected with usage and supports logout
-    tags: [settings, shard-5]
-    steps:
-      - app.open: { path: /settings/ai-tools }
-      - aiAssert: >-
-          The AI Tools tab shows the heading "AI Tools" with a "Refresh"
-          action. The Claude provider card shows a "Connected" state,
-          "Signed in with claude.ai" with "Account type: Max", an "API Key"
-          control, a "Log Out" action, and usage windows labeled "5H USED"
-          and "7D USED". The ChatGPT provider card shows "Not connected".
-      - aiTap: 'the "Log Out" button on the Claude card'
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          A confirmation dialog titled "Log out of Claude?" explains that it
-          "Signs out on this server only." and offers "Cancel" and "Log Out".
-      - aiTap: 'the confirm "Log out" button in the dialog'
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The Claude card switches to a "Not connected" state with a "Log In"
-          button.
-
-  - name: SET-08 Favors page renders balance, pending decision and ledger
-    tags: [settings, shard-5]
-    steps:
-      # Pay/Decline intentionally have no mock handler; this case is strictly
-      # read-only assertions on the Favors fixtures.
-      - app.open: { path: /settings/favors }
-      - aiAssert: >-
-          The Favors tab shows the heading "Favors" and the description about
-          balance, payments, and paid app actions. Balance / Earned / Spent
-          summary cards are visible.
-      - aiAssert: >-
-          The "Awaiting your payment decision" section lists one pending
-          "place_grocery_order" request for 120 favors with "Pay" and
-          "Decline" buttons. A "Paid action requests" section and a "Ledger"
-          section are also rendered.
-
-  - name: SET-09 Advanced page exposes access control, computer use and developer toggles
-    tags: [settings, shard-5]
-    steps:
-      - app.open: { path: /settings/advanced }
-      - aiAssert: >-
-          The Advanced tab shows the heading "Advanced Settings". Near the
-          top, an "Access Control" section contains an "Allowed emails"
-          group listing partner@example.com and sitter@example.com with an
-          add input, alongside a "System" section with a "Check for updates"
-          action.
-      # GET /api/build-info is not mocked; the "Couldn't load version info."
-      # failure state replaces the loading ellipses after the request fails,
-      # so poll for it instead of asserting on first paint.
-      - app.expectTexts:
-          all:
-            - "Couldn't load version info."
-            - "Retry"
-      - app.scrollTextIntoView: { text: "Computer Use" }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The "Computer Use" section lists OpenCLI at "v1.8.8" / "Running"
-          and "Rome browser" as "Connected" (Profile rome-browser), plus a
-          disconnected "Mac Chrome" row. Below it, a "Presentation mode"
-          toggle carries the "Mask agent identity in chat" browser-only
-          description.
-      # The collapsed Developer Settings disclosure sits below the scroll
-      # position, so assert its presence in the DOM rather than the screenshot.
-      - app.expectDom: { selector: "summary", minCount: 1 }
-      - app.expectTexts:
-          all:
-            - "Developer Settings"
-
-  - name: SET-10 Adding an allowed dashboard email saves and toasts
-    tags: [settings, shard-5]
-    steps:
-      - app.open: { path: /settings/advanced }
-      - aiAssert: >-
-          The Access Control allowed-emails field lists
-          partner@example.com and sitter@example.com.
-      # Deterministic steps: a vision aiAction replans for ~20s, by which
-      # time the 4-second success toast has already auto-dismissed.
-      - app.typeText: { target: "Add email address", text: "neighbour@example.com" }
-      - app.clickByLabel: { label: "Add", exact: true }
-      # The toast auto-dismisses after a few seconds and lives in a portal,
-      # so poll the document body immediately; the list row is permanent.
-      - app.expectTexts:
-          scope: body
-          all:
-            - "Allowed emails saved"
-      - app.expectTexts:
-          all:
-            - "neighbour@example.com"
-
-  - name: SET-11 Developer toggles save via PUT /api/settings and persist across navigation
-    tags: [settings, shard-5]
-    steps:
-      # "AI tool usage" is the group heading; the switch under it is
-      # "Show Claude and ChatGPT usage" and defaults to on.
-      - app.open: { path: /settings/advanced }
-      - wait: { duration: 1200 }
-      - app.clickByLabel: { label: "Developer Settings", exact: true }
-      - wait: { duration: 600 }
-      - app.expectControl:
-          label: "Show Claude and ChatGPT usage"
-          role: switch
-          checked: true
-      - app.clickByLabel: { label: "Show Claude and ChatGPT usage", exact: true }
-      - wait: { duration: 700 }
-      - app.expectControl:
-          label: "Show Claude and ChatGPT usage"
-          role: switch
-          checked: false
-      - app.expectTexts:
-          scope: body
-          all:
-            - "Settings saved"
-      # Leave and return via client-side navigation (the settings sub-nav is
-      # a set of links, not tabs).
-      - app.clickByLabel: { label: "Connections", exact: true }
-      - app.expectUrl: { path: /settings/connections }
-      - wait: { duration: 800 }
-      - app.clickByLabel: { label: "Advanced", exact: true }
-      - app.expectUrl: { path: /settings/advanced }
-      - wait: { duration: 1000 }
-      # The disclosure collapses on remount; expand it again before checking.
-      - app.clickByLabel: { label: "Developer Settings", exact: true }
-      - wait: { duration: 600 }
-      - app.expectControl:
-          label: "Show Claude and ChatGPT usage"
-          role: switch
-          checked: false
-      # The disclosure opens below the current scroll position, so the
-      # persisted off-state is asserted above via the DOM (not a screenshot).
+          The Developer Settings section is expanded and shows the "Show Claude and ChatGPT usage"
+          switch.

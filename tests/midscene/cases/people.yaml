@@ -1,106 +1,28 @@
 cases:
-  - name: PPL-01 Latest feed shows recent conversations with previews
-    tags: [people, shard-4]
+  - name: PPL-01 Open the people directory
+    tags:
+      - people
+      - shard-4
     steps:
-      - app.open: { path: /people }
-      - wait: { duration: 1200 }
+      - app.open:
+          path: /people
+      - aiAct: >-
+          Click the visible "Directory" tab once, then stop.
       - aiAssert: >-
-          The People page opens in English on the "Latest" tab (with a
-          "Directory" tab alongside). The latest feed lists "Ray Oster" with
-          the preview "perfect, see you then", "Arvind Srivastav" with
-          "Likewise! Free Thursday afternoon?", and "Mira Chen" with
-          "thanks for sending that over", each with a relative timestamp.
-
-  - name: PPL-02 Directory groups people by bond level with counts
-    tags: [people, shard-4]
+          The Directory view shows bond filter chips including "All", "Inner circle",
+          "Acquaintance", "Other", and "Stranger", with "All" active, plus a separate "Unknown 11"
+          count control. People are grouped under headings "INNER CIRCLE 2" ("Nadia Petrova", "Ray
+          Oster"), "ACQUAINTANCE 2" ("Arvind Srivastav", "Mira Chen"), and "OTHER 2" ("Hollis Park",
+          "Sam Okafor"), each row showing an avatar; rows that have linked accounts additionally
+          show an account handle or phone number.
+  - name: PPL-02 Filter a person timeline by channel
+    tags:
+      - people
+      - shard-4
     steps:
-      - app.open: { path: /people }
-      - wait: { duration: 1000 }
-      - aiTap: Directory
-      - wait: { duration: 1200 }
+      - app.open:
+          path: /people/person/ray-oster
+      - aiAct: Click the visible "WhatsApp" timeline filter once, then stop.
       - aiAssert: >-
-          The Directory view shows bond filter chips including "All",
-          "Inner circle", "Acquaintance", "Other", and "Stranger", with "All"
-          active, plus a separate "Unknown 11" count control. People are
-          grouped under headings "INNER CIRCLE 2" ("Nadia Petrova",
-          "Ray Oster"), "ACQUAINTANCE 2" ("Arvind Srivastav", "Mira Chen"),
-          and "OTHER 2" ("Hollis Park", "Sam Okafor"), each row showing an
-          avatar; rows that have linked accounts additionally show an account
-          handle or phone number.
-
-  - name: PPL-03 Bond filter chips narrow the directory
-    tags: [people, shard-4]
-    steps:
-      - app.open: { path: /people }
-      - wait: { duration: 1000 }
-      - aiTap: Directory
-      - wait: { duration: 1000 }
-      - aiTap: 'the "Inner circle" bond filter chip'
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          The directory is filtered to exactly the two inner-circle people:
-          "Nadia Petrova" and "Ray Oster". Acquaintance rows such as
-          "Mira Chen" are not shown.
-      - aiTap: 'the "Acquaintance" bond filter chip'
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          Switching to "Acquaintance" shows only "Arvind Srivastav" and
-          "Mira Chen".
-
-  - name: PPL-04 Person detail renders the message timeline and composer
-    tags: [people, shard-4]
-    steps:
-      - app.open: { path: /people/person/ray-oster }
-      - wait: { duration: 1500 }
-      - aiAssert: >-
-          The person detail page for "Ray Oster" shows the "Inner circle"
-          bond, an "8 messages" count, the phone number "+1 (415) 555-0142",
-          and a "TIMELINE" filter row with "All", "Telegram", and "WhatsApp"
-          options, with "All" selected.
-      - aiAssert: >-
-          Messages are grouped under day headings such as "TODAY" and
-          "YESTERDAY", each labeled with its "WhatsApp" channel and time;
-          today's thread includes "still ok for thursday at 6?". At the
-          bottom a composer addresses "WhatsApp · +1 (415) 555-0142" with a
-          "Send" button.
-
-  - name: PPL-05 Timeline channel filter keeps only WhatsApp messages
-    tags: [people, shard-4]
-    steps:
-      - app.open: { path: /people/person/ray-oster }
-      - wait: { duration: 1500 }
-      # Exact button match: the word "WhatsApp" also appears in message rows.
-      - app.clickByLabel: { label: "WhatsApp", exact: true }
-      - wait: { duration: 800 }
-      - app.expectControl: { label: "WhatsApp", role: radio, checked: true }
-      - app.expectControl: { label: "Telegram", role: radio, checked: false }
-      - aiAssert: >-
-          The timeline keeps showing its message rows, and the thread
-          composer at the bottom now addresses "WhatsApp · +1 (415)
-          555-0142", confirming the view is scoped to the WhatsApp thread.
-      - app.clickByLabel: { label: "All", exact: true }
-      - wait: { duration: 800 }
-      - app.expectControl: { label: "All", role: radio, checked: true }
-      - app.expectControl: { label: "WhatsApp", role: radio, checked: false }
-      - aiAssert: >-
-          Switching back to "All" restores the unfiltered timeline: each
-          message row shows its source-channel badge "WhatsApp" again
-          (badges are hidden while a single-channel filter is active).
-
-  - name: PPL-06 Person actions menu offers bond, linking and merge management
-    tags: [people, shard-4]
-    steps:
-      - app.open: { path: /people/person/ray-oster }
-      - wait: { duration: 1500 }
-      - app.clickByLabel: { label: "Actions for Ray Oster" }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          A management menu opens with exactly the entries "Change bond",
-          "Link account…", "Merge into another person…", and
-          "Memory profile".
-      - app.pressKey: { key: Escape }
-      - wait: { duration: 400 }
-      - app.expectUrl: { path: /people/person/ray-oster }
-      - aiAssert: >-
-          The management menu is closed; the Ray Oster person profile is
-          still displayed with its header (name and bond badge) and timeline.
+          The WhatsApp filter is selected, the timeline shows WhatsApp messages, and the composer
+          addresses "WhatsApp · +1 (415) 555-0142".

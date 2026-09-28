@@ -258,8 +258,7 @@ export function fileBrowserHandlers({
       if (!siblings) return notFound();
       const node = detach(body.path);
       if (!node) return notFound();
-      const oldKind: FileBrowserWatchEventKind =
-        node.type === "directory" ? "unlinkDir" : "unlink";
+      const oldKind: FileBrowserWatchEventKind = node.type === "directory" ? "unlinkDir" : "unlink";
       repath(node, nextPath);
       siblings.push(node);
       emit(oldKind, body.path);

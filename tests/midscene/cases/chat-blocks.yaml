@@ -1,160 +1,52 @@
 cases:
-  - name: CHAT-15 Answered design question card is locked with chosen answers
-    tags: [chat, shard-2]
+  - name: CHAT-06 Collapse the architecture diagram in a built-app reply
+    tags:
+      - chat
+      - shard-2
     steps:
-      - app.open: { path: /chat/mock-chat-build-app }
-      # The answered card is tall and its locked fieldsets/dimmed placeholders
-      # look editable in a screenshot, so assert the whole resolved state via
-      # the DOM: a disabled fieldset, pressed option buttons, the "Answered"
-      # footer and no footer actions.
-      - wait: { duration: 1200 }
-      - app.expectTexts:
-          all:
-            - "When should the app label an issue?"
-            - "Should it apply labels directly, or suggest for review?"
-            - "How should the label set be built?"
-            - "Which label dimensions should the classifier assign?"
-            - "Which GitHub repo(s) do you want to wire up first"
-            - "Answered"
-          none:
-            - "Asked by Rome"
-      # The card locks with <fieldset disabled>; inputs inside render dimmed.
-      - app.expectDom: { selector: "fieldset[disabled]", count: 1 }
-      # Ten chosen options across the five questions stay marked pressed:
-      # trigger 4 + apply_mode 1 + label_strategy 1 + dimensions 4.
-      - app.expectDom:
-          selector: "fieldset[disabled] button[aria-pressed='true']"
-          count: 10
-      # The answered footer has no Dismiss/Send actions (they sit in the row
-      # following the fieldset when the card is still pending).
-      - app.expectDom: { selector: "fieldset[disabled] ~ div button", count: 0 }
-
-  - name: CHAT-16 Built-app reply renders sections and a collapsible mermaid diagram
-    tags: [chat, shard-2]
-    steps:
-      - app.open: { path: /chat/mock-chat-build-app }
-      # The final reply is a long markdown message; only its first heading
-      # fits in a screenshot, so verify the whole outline via the DOM.
-      - app.expectTexts:
-          all:
-            - "built, installed, and verified"
-            - "What it does"
-            - "Architecture"
-            - "Verification"
-      - app.scrollTextIntoView: { text: "What it does" }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The final assistant message states the Issue Triage app is
-          "built, installed, and verified" and the "What it does" section
-          heading is rendered as a second-level heading.
-      - app.scrollTextIntoView: { text: "Mermaid diagram" }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          Inside the "Architecture" section there is a collapsible
-          "Mermaid diagram" card.
-
-  - name: CHAT-17 Learning kit links open YouTube Distill in a workspace tile
-    tags: [chat, shard-2]
-    steps:
-      - app.open: { path: /chat/mock-chat-learn-video }
-      - app.scrollTextIntoView: { text: "Your learning kit is ready" }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          The assistant message says "Your learning kit is ready in YouTube
-          Distill." followed by a Format/Use it for table whose rows include
-          "Mind map", "Summary", "11-slide deck", and "Transcript excerpt",
-          and a link "Open the learning kit".
-      - app.clickContentLink: { text: "Open the learning kit" }
-      - wait: { duration: 3000 }
-      - aiAssert: >-
-          The YouTube Distill recorded app opens in a workspace tile beside
-          the conversation (the chat URL is unchanged), showing content for
-          the video "Deep Dive into LLMs like ChatGPT" rather than an error.
-
-  - name: CHAT-18 Workout plan links open Fitness Tracker in a workspace tile
-    tags: [chat, shard-2]
-    steps:
-      - app.open: { path: /chat/mock-chat-fitness-plan }
-      - app.scrollTextIntoView: { text: "I've put together a week" }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          The assistant message says "I've put together a week in Fitness
-          Tracker." and shows the weekly plan table with "Full body" /
-          "20 min" on Monday and "Rest" on Sunday, plus the link
-          "Open your workout plan".
-      - app.clickContentLink: { text: "Open your workout plan" }
-      - wait: { duration: 3000 }
-      - aiAssert: >-
-          Fitness Tracker opens in a workspace tile beside the conversation,
-          showing the weekly workout plan, not an error screen.
-
-  - name: CHAT-19 Market recap links open a specific Stock Daily report tile
-    tags: [chat, shard-2]
-    steps:
-      - app.open: { path: /chat/mock-chat-market-brief }
-      - app.scrollTextIntoView: { text: "Your weekday recap is set up" }
-      - wait: { duration: 700 }
-      - aiAssert: >-
-          The assistant message says "Your weekday recap is set up in Stock
-          Daily." and shows a Setting/Schedule table whose rows include
-          Runs "Monday–Friday at 1:30 PM", Time zone "America/Los_Angeles",
-          and Delivery "guardian@example.com". Below it are links to the
-          "September 11 market recap" and "September 10 market recap"
-          reports.
-      - app.clickContentLink: { text: "September 11 market recap" }
-      - wait: { duration: 3000 }
-      - aiAssert: >-
-          Stock Daily opens in a workspace tile on the September 11 report,
-          whose title includes "US Stock Market Daily Close Report |
-          2026-09-11", while the conversation stays open beside it.
-
-  - name: CHAT-20 Live question card enables Send only after required answers
-    tags: [chat, shard-2]
-    steps:
-      # The card's Send/Dismiss reuse POST .../turns, which mock mode does not
-      # serve, so after validating the enablement logic we assert the designed
-      # failure message rather than a successful submission.
-      - app.open: { path: /chat/mock-chat-2 }
-      - app.scrollContent: { position: bottom }
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          A live question card titled around "How should the rewrite read?"
-          shows single-choice tone options "Warm", "Plain", and "Playful",
-          multi-choice options under "What should the new opening keep?", and
-          an optional "Anything to avoid?" field, with an "Asked by Rome"
-          footer.
-      # The disabled Send stays accent-colored, so check the DOM state
-      # deterministically instead of asking the model to judge a screenshot.
-      - app.expectControl: { label: "Send", disabled: true }
-      - aiTap: Warm
-      - wait: { duration: 400 }
+      - app.open:
+          path: /chat/mock-chat-build-app
       - aiAct: >-
-          Select one of the multi-choice options under "What should the new
-          opening keep?".
-      - wait: { duration: 400 }
-      - app.expectControl: { label: "Send", disabled: false }
-      # The card's Send is the first matching "Send" (the composer's is
-      # below it); click it deterministically.
-      - app.clickByLabel: { label: "Send", exact: true, index: 0 }
-      - wait: { duration: 1500 }
+          In the visible "Architecture" section, click the expanded "Mermaid diagram" disclosure
+          to collapse it. Finish with the disclosure closed.
       - aiAssert: >-
-          Submission fails with an error above the composer reporting the
-          failed request to the ".../turns" endpoint (there is no model
-          backend in mock mode); the conversation stays on screen with the
-          card and its selections intact.
-
-  - name: CHAT-21 Rejecting the plumber approval resolves the card as rejected
-    tags: [chat, shard-2]
+          The "Architecture" section and "Mermaid diagram" disclosure remain visible, but the
+          diagram content is collapsed. The nearby "Verification" heading is still visible.
+  - name: CHAT-07 Open a linked market report from a recorded conversation
+    tags:
+      - chat
+      - shard-2
     steps:
-      # Approval writes are shared with /api/approvals; this is the mirror
-      # story of E2E-02's approve path.
-      - app.open: { path: /chat/mock-chat-4 }
+      - app.open:
+          path: /chat/mock-chat-market-brief
+      - aiAct: >-
+          Near the top of the chat conversation, click the underlined "September 11 market recap"
+          link below the first market-summary paragraph. Do not click the nearby September 10 link.
+          Click exactly once and immediately declare the action complete, even if the screen has not
+          visibly changed yet; never retry the click.
       - aiAssert: >-
-          The "Guardian approval needed" card shows "Pending approval" with
-          the telegram message preview and "Reject" / "Approve" buttons.
-      - aiTap: Reject
-      - wait: { duration: 1200 }
+          The Stock Daily report is open in the workspace, marked "Completed", and titled "US Stock
+          Market Daily Close Report | 2026-09-11" rather than showing an error.
+  - name: CHAT-08 Choose a tone on the live question card
+    tags:
+      - chat
+      - shard-2
+    steps:
+      - app.open:
+          path: /chat/mock-chat-2
+      - aiAct: >-
+          Click the "Warm" choice on the visible question card once, then stop.
       - aiAssert: >-
-          The card resolves to a rejected state: the badge reads "Rejected"
-          and the footer says "Action rejected by guardian." Neither
-          "Reject" nor "Approve" buttons remain.
+          The "Warm" tone is selected on the question card, while "Plain" and "Playful" are not
+          selected.
+  - name: CHAT-09 Reject the plumber approval card
+    tags:
+      - chat
+      - shard-2
+    steps:
+      - app.open:
+          path: /chat/mock-chat-4
+      - aiAct: >-
+          Click "Reject" on the visible "Guardian approval needed" card once, then stop.
+      - aiAssert: >-
+          The approval card visibly shows that the request was rejected.

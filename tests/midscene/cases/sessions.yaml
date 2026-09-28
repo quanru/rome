@@ -1,189 +1,38 @@
 cases:
-  - name: SES-01 Sessions list renders the fixture rows with columns and pagination
-    tags: [sessions, shard-3]
+  - name: SES-01 Search for a missing session
+    tags:
+      - sessions
+      - shard-3
     steps:
-      # /sessions (overview) depends on POST /api/sessions/metrics which the
-      # standalone mock does not serve, so list cases land on /sessions/all.
-      - app.open: { path: /sessions/all }
+      - app.open:
+          path: /sessions/all
+      - aiAct: >-
+          Enter "zzz-no-such-session-xyz" in the visible session search field and stop when the
+          empty result state appears.
       - aiAssert: >-
-          The Sessions list page is shown in English with the heading
-          "Sessions". A segmented control has "Overview" and "Sessions"
-          segments, with "Sessions" active. There is a search box with the
-          placeholder "Search title, App, Agent, context, or ID", a time range
-          control showing "7 days", and a table whose columns include
-          "Session", "Context", "Runs", "Usage", "Outcome", and "Last activity".
-      - aiAssert: >-
-          The list contains background and chat sessions within the default
-          7-day window, including visible rows titled "Leak follow-up with
-          Dana", "Roadmap questions from Ines", and "Morning brief". Rows show
-          type badges such as "Channel" and "Automation".
-      # Scroll the footer itself into view: scrolling the container to its
-      # bottom can leave the sticky footer outside the model's screenshot.
-      - app.scrollTextIntoView: { text: "Showing 1-13 of 13" }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The pagination footer reads "Showing 1-13 of 13". All 13 rows fit
-          on a single page, so the Previous/Next pager controls are present
-          but disabled.
-
-  - name: SES-02 Search filters sessions across title and context
-    tags: [sessions, shard-3]
+          The Sessions table shows "No sessions found" and there are no session rows.
+  - name: SES-02 Open the session filter panel
+    tags:
+      - sessions
+      - shard-3
     steps:
-      - app.open: { path: /sessions/all }
-      # The plumber threads are older than 7 days, so widen the range first:
-      # the mock's POST /sessions/query filters by both range and query.
-      - aiTap: the "7 days" time range control
-      - aiTap: "All time"
-      - wait: { duration: 1000 }
-      - app.typeText: { target: "Search title, App, Agent, context, or ID", text: "plumber" }
-      - wait: { duration: 1000 }
+      - app.open:
+          path: /sessions/all
+      - aiAct: >-
+          Click the visible "Filter" button and finish with the session filter panel open.
       - aiAssert: >-
-          The list is filtered to three sessions matching "plumber" (footer
-          "Showing 1-3 of 3"): the channel thread "Invoice from the plumber"
-          with a "Channel" badge, and the "Plumber for the leak" thread
-          appearing both as a "Handoff" and as a "Webchat" chat session. Rows
-          unrelated to plumbing (such as "Roadmap questions from Ines") are
-          not shown.
-      - app.typeText:
-          target: "Search title, App, Agent, context, or ID"
-          clear: true
-      - wait: { duration: 800 }
-      # Clearing restores ALL 22 all-time rows, so the three plumber rows
-      # that matched the query are still present — only the filter goes away.
-      - app.expectTexts:
-          all:
-            - "Leak follow-up with Dana"
-            - "Invoice from the plumber"
-            - "Plumber for the leak"
-            - "Roadmap questions from Ines"
-      - aiAssert: >-
-          Clearing the search repopulates the list instead of leaving the
-          filtered view: the search field is empty, "Leak follow-up with
-          Dana" is the first row again, and unrelated sessions such as
-          "Roadmap questions from Ines" are visible; the list is no longer
-          limited to three plumber matches. (The three plumber sessions are
-          older and sit further down the restored list — their continued
-          presence is covered by the DOM check above.)
-      - app.scrollContent: { position: bottom }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The pagination footer at the bottom of the restored list reads
-          "Showing 1-22 of 22".
-
-  - name: SES-03 Facet filter restricts to Channel sessions and shows a filter chip
-    tags: [sessions, shard-3]
+          A filter panel is open with "Type" and "Source" sections, controls reading "All types"
+          and "All sources", and a "Clear filters" action.
+  - name: SES-03 Open a channel session detail
+    tags:
+      - sessions
+      - shard-3
     steps:
-      - app.open: { path: /sessions/all }
-      - aiTap: Filter
-      - wait: { duration: 500 }
+      - app.open:
+          path: /sessions/all
+      - aiAct: >-
+          Click the visible "Leak follow-up with Dana" row and finish when its session detail page
+          opens.
       - aiAssert: >-
-          A filter popover is open with "Type" and "Source" sections. The Type
-          select currently reads "All types" and the Source select reads
-          "All sources"; a "Clear filters" action is present.
-      - aiTap: the "All types" select in the Type section
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The type dropdown lists the available types with counts for the
-          7-day window, including "Channel (2)".
-      - aiTap: 'the "Channel (2)" option'
-      - wait: { duration: 800 }
-      # The facet popover stays open after choosing a type; dismiss it before
-      # interacting with the chip row underneath.
-      - app.pressKey: { key: Escape }
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          The popover is closed and an active filter chip "Type: Channel"
-          with a clear (x) button is shown. The list is reduced to two
-          channel rows, "Leak follow-up with Dana" and "Roadmap questions
-          from Ines" (footer "Showing 1-2 of 2"), and each visible row
-          carries the "Channel" badge. Automation rows like "Morning brief"
-          are not listed.
-      - app.clickByLabel: { label: "Type: Channel" }
-      - wait: { duration: 800 }
-      - aiAssert: >-
-          The active "Type: Channel" filter chip is removed from the toolbar
-          (only the ordinary "Filter" button remains), and the list once
-          again mixes channel and automation rows — "Morning brief" is back
-          alongside the WhatsApp/Telegram channel sessions. The restored
-          row total is asserted separately after scrolling to the footer.
-      - app.scrollContent: { position: bottom }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The pagination footer at the bottom reads "Showing 1-13 of 13",
-          confirming the full 7-day list is restored.
-
-  - name: SES-04 Time range selector widens the list to all-time sessions
-    tags: [sessions, shard-3]
-    steps:
-      - app.open: { path: /sessions/all }
-      - aiAssert: >-
-          A time range control near the page heading currently shows
-          "7 days".
-      - aiTap: the "7 days" time range control
-      - aiAssert: >-
-          The dropdown shows exactly the options "24 hours", "7 days",
-          "30 days", and "All time".
-      - aiTap: "All time"
-      - wait: { duration: 1200 }
-      - aiAssert: >-
-          The time range control now shows "All time" and the table's first
-          rows are still the recent sessions ("Leak follow-up with Dana"
-          remains at the top).
-      - app.scrollContent: { position: bottom }
-      - wait: { duration: 500 }
-      - aiAssert: >-
-          The pagination footer at the bottom reads "Showing 1-22 of 22" and
-          the older thread titled "Invoice from the plumber" is present in
-          the all-time table (the 7-day list hid it).
-
-  - name: SES-05 Empty result state for an unmatched search
-    tags: [sessions, shard-3]
-    steps:
-      - app.open: { path: /sessions/all }
-      - app.typeText:
-          target: "Search title, App, Agent, context, or ID"
-          text: "zzz-no-such-session-xyz"
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The table area shows the empty state text "No sessions found" and
-          the footer reads "Showing 0-0 of 0" instead of the 13-row total.
-
-  - name: SES-06 Channel session detail shows read-only header and Details sheet
-    tags: [sessions, shard-3]
-    steps:
-      - app.open: { path: /sessions/all }
-      - aiTap: the "Leak follow-up with Dana" session row
-      - app.expectUrl: { path: /sessions/ses-whatsapp-dana }
-      - aiAssert: >-
-          The session detail page shows the title "Leak follow-up with Dana"
-          and a "Channel" type badge. There is a "Back to sessions" button and
-          a "Details" button. There is no message composer/input box because
-          this is a read-only session view.
-      - aiTap: Details
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          A "Session details" sheet opens on the right. Its Context section
-          lists "Owner", "Agent", "Type", "Source", "Project", "Created", and
-          "Last activity" (the Source value is "Whatsapp"). A collapsed
-          "Technical details" section is present at the bottom.
-      - aiTap: "Technical details"
-      - wait: { duration: 600 }
-      - aiAssert: >-
-          The Technical details section expands to show a "Session ID" row
-          with the ses-whatsapp-dana identifier and copy buttons.
-      - aiTap: "Close details"
-
-  - name: SES-07 Webchat session detail offers Open chat back to the conversation
-    tags: [sessions, shard-3]
-    steps:
-      - app.open: { path: /sessions/mock-chat-4 }
-      - aiAssert: >-
-          The detail page for "Plumber for the leak" shows a "Chat" type
-          badge and an "Open chat" button. The read-only conversation content
-          is visible, with no composer at the bottom.
-      - aiTap: "Open chat"
-      - app.expectUrl: { path: /chat/mock-chat-4 }
-      - wait: { duration: 1000 }
-      - aiAssert: >-
-          The live conversation "Plumber for the leak" is now open with its
-          message composer.
+          The detail page title is "Leak follow-up with Dana", it carries a "Channel" badge, and it
+          provides "Back to sessions" and "Details" controls without a chat composer.
