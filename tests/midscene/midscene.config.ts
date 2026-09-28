@@ -201,19 +201,27 @@ const appScrollTextIntoView = defineNode<typeof scrollTextInput, void, ProjectCo
   async execute({ context, input }) {
     const { page } = context;
     if (!page) throw new Error("No page is open; call app.open first");
-    // The chat's stick-to-bottom hook ignores programmatic scrolls and snaps
-    // back on every content resize (streamed blocks, mermaid). Only a trusted
-    // wheel gesture releases the pin, so emulate one over the transcript
-    // before positioning.
-    await page.mouse.move(700, 450);
-    await page.mouse.wheel(0, -4000);
-    await page.waitForTimeout(350);
     // getByText pierces open shadow roots, so this also positions content
     // inside recorded apps.
     const target = page.getByText(input.text, { exact: false }).last();
     await target.waitFor({ state: "visible", timeout: 30_000 });
-    await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
-    await page.waitForTimeout(500);
+    // useStickToBottom treats scrollIntoView as programmatic drift and snaps
+    // back. Wheel toward the target so the hook releases its bottom pin.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const deltaY = await target.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.top + rect.height / 2 - window.innerHeight / 2;
+      });
+      await page.mouse.move(700, 450);
+      await page.mouse.wheel(0, deltaY);
+      await page.waitForTimeout(500);
+      const remainsVisible = await target.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.top >= 0 && rect.bottom <= window.innerHeight;
+      });
+      if (remainsVisible) return;
+    }
+    throw new Error(`Scrolled text did not remain visible: ${input.text}`);
   },
 });
 
