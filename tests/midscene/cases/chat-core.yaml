@@ -28,8 +28,8 @@ cases:
       - aiAct: >-
           Trigger the mock app's expected failed-send state: find the field identified by "How can
           I help you today?", enter "Book a focus block tomorrow morning", then click the visible
-          control labelled "Send". The standalone mock intentionally returns a proxy error instead
-          of sending; reaching that visible error with the draft preserved completes this task
+          control labelled "Send". The standalone mock intentionally returns an explicit error
+          instead of sending; reaching that visible error with the draft preserved completes this task
           successfully. Enter the text directly into the large rounded composer at the bottom;
           keyboard focus has no visible indicator, so do not repeatedly tap it or wait for a visual
           focus change before entering the text.
@@ -41,7 +41,7 @@ cases:
             - /api/chat/sessions
       - aiAssert: >-
           The message is not sent: an error above the composer reports the failed request to
-          "/api/chat/sessions" (the standalone mock has no chat backend, so the dev proxy fails).
+          "/api/chat/sessions" (the standalone mock rejects session creation).
           The typed text remains in the composer and the URL stays on /chat (no new conversation is
           created).
       - aiAct: >-

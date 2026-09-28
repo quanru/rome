@@ -4,8 +4,8 @@ import { handlers } from "./handlers";
 
 // Register the interception worker before the app boots, so the AuthGate's
 // very first /api/health + /api/bootstrap probes are already answered by
-// fixtures. Unhandled requests fall through to the dev-server proxy (a real
-// backend, when one is running) untouched.
+// fixtures. The mock server has no backend proxy, and unmatched API routes
+// receive an explicit error from the final MSW handler.
 const worker = setupWorker(
   http.all("*", ({ request }) => {
     if (new URL(request.url).origin !== window.location.origin) return HttpResponse.error();

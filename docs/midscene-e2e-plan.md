@@ -110,9 +110,9 @@ implementation**; if the implementation changes, the cases must change with it.
    approving an approval, installing an app) land in MSW memory and **persist
    across client routes within the same BrowserContext**; a hard reload,
    closing the context, or opening a new one restores fixture defaults.
-3. **Unmatched requests bypass MSW**: touching an unmocked capability hits the
-   network and fails; cases must not depend on such capabilities (listed as
-   gaps in section 6).
+3. **Unmatched API requests fail locally**: the mock dev server has no backend
+   proxy, and MSW returns 503 for unmocked `/api` calls. Cases must not depend
+   on such capabilities (listed as gaps in section 6).
 4. **Synthetic fixture data only**: no real names, accounts, tokens or chat
    content may be introduced.
 5. **Waiting strategy**: `app.open` waits for the shell (`a[href="/chat"]` in

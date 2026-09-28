@@ -1253,4 +1253,16 @@ export const handlers = [
   // dir and the memory dir a person's dossier links into.
   ...projectFileHandlers,
   ...memoryFileHandlers,
+  http.post("/api/chat/sessions", () =>
+    HttpResponse.json(
+      { error: "/api/chat/sessions is unavailable in mock mode" },
+      { status: 503 },
+    ),
+  ),
+  http.all("/api/*", ({ request }) =>
+    HttpResponse.json(
+      { error: `Unmocked API request: ${request.method} ${new URL(request.url).pathname}` },
+      { status: 503 },
+    ),
+  ),
 ];

@@ -14,11 +14,9 @@ import baseConfig from "../rsbuild.config";
  * entry is src/main.tsx, so neither MSW nor any fixture is ever bundled into
  * the dashboard.
  *
- * The base config is reused wholesale — same shell template, same env
- * handling, same proxy. The proxy stays on purpose: MSW answers handled
- * routes before they hit the network, and unhandled ones pass through to a
- * real backend on INTERNAL_API_PORT when you have one running, which lets
- * mock mode also serve as a "override one endpoint" tool.
+ * The base config supplies the shell and build settings, but mock mode drops
+ * its backend proxy. No request from this standalone build may reach a local
+ * Rome backend, including requests the service worker does not handle.
  *
  * Run: `pnpm --filter rome-web dev:mock` (http://localhost:3200).
  */
@@ -62,6 +60,7 @@ export default defineConfig({
   server: {
     ...baseConfig.server,
     port: Number(process.env.MOCK_WEB_PORT ?? 3200),
+    proxy: {},
     // Serve the package's real public/ assets plus mockServiceWorker.js,
     // which only exists in mock mode.
     publicDir: [{ name: "public" }, { name: "mock/public" }],

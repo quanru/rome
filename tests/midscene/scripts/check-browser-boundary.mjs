@@ -28,6 +28,18 @@ try {
     // control of that document. Reload so this request tests the MSW path.
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    const mockedApi = await page.evaluate(async () => {
+      const session = await fetch("/api/chat/sessions", { method: "POST" });
+      const unhandled = await fetch("/api/not-mocked", { method: "POST" });
+      return {
+        session: { status: session.status, body: await session.json() },
+        unhandled: { status: unhandled.status, body: await unhandled.json() },
+      };
+    });
+    assert.equal(mockedApi.session.status, 503);
+    assert.match(mockedApi.session.body.error, /\/api\/chat\/sessions.*mock mode/);
+    assert.equal(mockedApi.unhandled.status, 503);
+    assert.match(mockedApi.unhandled.body.error, /POST \/api\/not-mocked/);
     await page.evaluate(async (url) => {
       try {
         await fetch(url, { mode: "no-cors" });
@@ -74,4 +86,4 @@ try {
   await new Promise((resolve) => external.close(resolve));
 }
 
-console.log("Browser boundary OK: MSW HTTP, browser HTTP, and WebSocket traffic was blocked.");
+console.log("Browser boundary OK: mock API, MSW HTTP, browser HTTP, and WebSocket traffic was blocked.");
