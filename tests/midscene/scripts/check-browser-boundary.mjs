@@ -30,14 +30,18 @@ try {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     const mockedApi = await page.evaluate(async () => {
       const session = await fetch("/api/chat/sessions", { method: "POST" });
+      const login = await fetch("/api/auth/login", { method: "POST" });
       const unhandled = await fetch("/api/not-mocked", { method: "POST" });
       return {
         session: { status: session.status, body: await session.json() },
+        login: { status: login.status, body: await login.json() },
         unhandled: { status: unhandled.status, body: await unhandled.json() },
       };
     });
     assert.equal(mockedApi.session.status, 503);
     assert.match(mockedApi.session.body.error, /\/api\/chat\/sessions.*mock mode/);
+    assert.equal(mockedApi.login.status, 401);
+    assert.equal(mockedApi.login.body.error, "Login failed");
     assert.equal(mockedApi.unhandled.status, 503);
     assert.match(mockedApi.unhandled.body.error, /POST \/api\/not-mocked/);
     await page.evaluate(async (url) => {
