@@ -24,7 +24,8 @@ Midscene agent calls the configured model endpoint.
     pins only Apps/Chat/Projects by default).
 - The MSW worker rejects external HTTP requests. A BrowserContext guard also
   blocks external HTTP and WebSocket traffic. Run `npm run check:browser-boundary`
-  while the mock server is running to check both paths.
+  while the mock server is running to check both paths. The mock dev server
+  disables the backend proxy, and unmatched `/api` requests return 503 locally.
 - Every case uses Midscene's `aiAct` for user interaction and `aiAssert` for
   visible outcomes. `app.open` provides the isolated starting route, and
   `wait` covers fixed mock settling time.

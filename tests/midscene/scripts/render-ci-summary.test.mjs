@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { buildSummary, renderMarkdown } from "./render-ci-summary.mjs";
+import { buildSummary, caseSetIssues, renderMarkdown } from "./render-ci-summary.mjs";
 
 const writeShard = async (root, shard, status, caseName, modelName) => {
   const project = `web-${shard}`;
@@ -251,4 +251,66 @@ test("celebrates a complete run and keeps passed cases in the appendix", () => {
   assert.match(markdown, /<details>\n<summary>Appendix: passed cases \(1\)<\/summary>/);
   assert.match(markdown, /<a href="[^"]+runner-step/);
   assert.doesNotMatch(markdown.slice(0, markdown.indexOf("<details>")), /AUTH-01/);
+});
+
+test("missing, unexpected, moved, and duplicate cases prevent a complete Summary", () => {
+  const projects = [
+    {
+      name: "web-shard-1",
+      status: "success",
+      cases: [
+        { name: "CHAT-01", status: "success" },
+        { name: "CHAT-01", status: "success" },
+        { name: "EXTRA-01", status: "success" },
+      ],
+    },
+    {
+      name: "web-shard-2",
+      status: "success",
+      cases: [{ name: "CHAT-03", status: "success" }],
+    },
+  ];
+  const issues = caseSetIssues(projects, {
+    "CHAT-01": "shard-1",
+    "CHAT-02": "shard-1",
+    "CHAT-03": "shard-1",
+  });
+  assert.deepEqual(issues, [
+    "Duplicate case: CHAT-01",
+    "Unexpected case: EXTRA-01 (shard-1)",
+    "Wrong shard: CHAT-03 (expected shard-1, found shard-2)",
+    "Missing case: CHAT-02 (shard-1)",
+  ]);
+  const markdown = renderMarkdown({
+    projects,
+    models: [],
+    pagesUrl: "https://example.test/reports/",
+    runUrl: "https://example.test/run",
+    caseInventoryIssues: issues,
+  });
+  assert.match(markdown, /Rome × Midscene · failure captured/);
+  assert.match(markdown, /Missing case: CHAT-02/);
+  assert.doesNotMatch(markdown, /All 4 cases passed/);
+});
+
+test("buildSummary checks the committed case manifest", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-manifest-"));
+  context.after(() =>
+    import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
+  );
+  await writeShard(root, "shard-1", "success", "CHAT-01", "deepseek-v3.2");
+  const manifest = path.join(root, "case-manifest.json");
+  await writeFile(manifest, JSON.stringify({ "CHAT-01": "shard-1", "CHAT-02": "shard-1" }));
+  const output = path.join(root, "summary.md");
+  const data = await buildSummary({
+    "reports-dir": root,
+    "expected-projects": "web-shard-1",
+    "case-manifest": manifest,
+    "run-url": "https://example.test/run",
+    "pages-url": "https://example.test/reports/",
+    "producer-result": "success",
+    output,
+  });
+  assert.deepEqual(data.caseInventoryIssues, ["Missing case: CHAT-02 (shard-1)"]);
+  assert.match(await readFile(output, "utf8"), /failure captured/);
 });

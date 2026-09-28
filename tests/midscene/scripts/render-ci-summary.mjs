@@ -307,6 +307,28 @@ const totalsFor = (projects) => {
   return { cases, passed, failed: cases.length - passed, total: cases.length };
 };
 
+export function caseSetIssues(projects, manifest) {
+  if (!manifest) return [];
+  const reported = new Map();
+  const issues = [];
+  for (const project of projects) {
+    for (const testCase of project.cases) {
+      const expectedShard = manifest[testCase.name];
+      const actualShard = project.name.replace(/^web-/, "");
+      if (!expectedShard) issues.push(`Unexpected case: ${testCase.name} (${actualShard})`);
+      else if (expectedShard !== actualShard) {
+        issues.push(`Wrong shard: ${testCase.name} (expected ${expectedShard}, found ${actualShard})`);
+      }
+      if (reported.has(testCase.name)) issues.push(`Duplicate case: ${testCase.name}`);
+      reported.set(testCase.name, true);
+    }
+  }
+  for (const name of Object.keys(manifest)) {
+    if (!reported.has(name)) issues.push(`Missing case: ${name} (${manifest[name]})`);
+  }
+  return issues;
+}
+
 const caseName = (pagesUrl, testCase) => {
   const name = markdownCell(testCase.name);
   return testCase.reportPath
@@ -325,7 +347,7 @@ const caseScreenshot = (pagesUrl, testCase) => {
 const caseRow = (pagesUrl, testCase, detail) =>
   `| ${markdownCell(testCase.project)} | ${caseName(pagesUrl, testCase)} | ${caseScreenshot(pagesUrl, testCase)} | ${markdownCell(detail)} | ${formatDuration(testCase.durationMs)} |`;
 
-export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success" }) {
+export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerResult = "success", caseInventoryIssues = [] }) {
   const totals = totalsFor(projects);
   const incompleteProjects = projects.filter((project) => project.status !== "success");
   const failures = totals.cases.filter((testCase) => testCase.status !== "success");
@@ -337,7 +359,7 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
     producerResult !== "success" &&
     failures.length === 0 &&
     infrastructureFailures.length === 0;
-  const needsAttention = failures.length + infrastructureFailures.length + Number(unreportedFailure);
+  const needsAttention = failures.length + infrastructureFailures.length + Number(unreportedFailure) + caseInventoryIssues.length;
   const complete =
     producerResult === "success" &&
     totals.total > 0 &&
@@ -357,6 +379,8 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
     sections.push(
       "### Needs attention",
       "",
+      ...caseInventoryIssues.map((issue) => `- ${markdownCell(issue)}`),
+      ...(caseInventoryIssues.length ? [""] : []),
       "| Shard | Case | Screenshot | Status / reason | Duration |",
       "|:--|:--|:--|:--|--:|",
       ...infrastructureFailures.map(
@@ -400,7 +424,7 @@ export function renderMarkdown({ projects, models, pagesUrl, runUrl, producerRes
   return sections.join("\n");
 }
 
-export function renderHtml({ projects, models, pagesUrl, runUrl }) {
+export function renderHtml({ projects, models, pagesUrl, runUrl, caseInventoryIssues = [] }) {
   const totals = totalsFor(projects);
   const rows = totals.cases
     .map((testCase) => {
@@ -428,7 +452,8 @@ export function renderHtml({ projects, models, pagesUrl, runUrl }) {
 <title>Rome × Midscene Summary</title>
 <style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:40px auto;padding:0 24px;color:#172033}h1{margin-bottom:4px}.meta{color:#596579}table{width:100%;border-collapse:collapse;margin:20px 0 32px}th,td{border:1px solid #d8dee9;padding:9px 12px;text-align:left;vertical-align:top}th{background:#f4f6f8}.status{width:30px;text-align:center}.preview{width:240px}.preview img{display:block;width:240px;height:150px;object-fit:cover;border-radius:6px}a{color:#0969da}code{background:#f4f6f8;padding:2px 5px;border-radius:4px}</style></head>
 <body><h1>Rome × Midscene Summary</h1>
-<p class="meta"><strong>${totals.passed}/${totals.total} cases passed</strong> · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
+<p class="meta"><strong>${caseInventoryIssues.length ? "Incomplete case inventory" : `${totals.passed}/${totals.total} cases passed`}</strong> · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
+${caseInventoryIssues.length ? `<h2>Case inventory issues</h2><ul>${caseInventoryIssues.map((issue) => `<li>${html(issue)}</li>`).join("")}</ul>` : ""}
 <h2>Shards</h2><table><thead><tr><th>Shard</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
 <h2>Cases</h2><p>Click a case name or screenshot to open its exact Midscene step.</p><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Node screenshot</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
 }
@@ -440,8 +465,12 @@ export async function buildSummary(options) {
     .map((value) => value.trim())
     .filter(Boolean);
   const data = await collectReportData(reportsDirectory, expectedProjects);
+  const manifest = options["case-manifest"]
+    ? JSON.parse(await readFile(path.resolve(options["case-manifest"]), "utf8"))
+    : null;
   const values = {
     ...data,
+    caseInventoryIssues: caseSetIssues(data.projects, manifest),
     pagesUrl: options["pages-url"],
     runUrl: options["run-url"],
     producerResult: options["producer-result"],

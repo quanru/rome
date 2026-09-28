@@ -917,9 +917,8 @@ const projectFileHandlers = fileBrowserHandlers({
  * The two remaining reads the Settings page makes. The page holds its
  * loading gate until `/api/tailscale/devices` settles, and the Connections tab
  * waits on the Composio status alongside `/api/connections`. Left unhandled
- * they fall through to the dev proxy, which only resolves quickly when a
- * refused connection is waiting on the other end — so the page renders on a
- * developer's machine and hangs where nothing is listening.
+ * the generic 503 fallback would hold those panels in an error state, so
+ * these fixtures keep the page usable without a backend.
  */
 const tailscale = { mode: "oauth" as const, configured: false, devices: [] };
 
@@ -1106,7 +1105,7 @@ export const handlers = [
     return HttpResponse.json(created);
   }),
   // The Memory page's folder panel leads with this read, so an unhandled
-  // status leaves the landing view spinning on the dev proxy. Unlinked, which
+  // status leaves the landing view without a usable fixture. Unlinked, which
   // is the state a fresh instance is in and the one that offers Connect.
   http.get("/api/sync/status", () => HttpResponse.json({ state: "unlinked" } satisfies SyncStatus)),
   http.get("/api/sync/sources", () => HttpResponse.json({ sources: syncSources })),
@@ -1176,8 +1175,8 @@ export const handlers = [
   http.get("/api/agents", () => HttpResponse.json({ agents: [{ name: "build" }] })),
   http.get("/api/connections", () => HttpResponse.json(connections)),
   // An authorized grant is what puts Disconnect on a card, so seeding the three
-  // above without this would leave every one of those buttons escaping to the
-  // dev proxy. Teardown is real here, the way the route runs it: the grant
+  // above without this would make every one of those buttons fail locally.
+  // Teardown is real here, the way the route runs it: the grant
   // relocks, its identity clears, and the row itself stays so the service is
   // still offered. Reconnecting needs a setup ceremony mock mode does not have
   // (see "What mock mode cannot do"), so a disconnect here is one-way until
