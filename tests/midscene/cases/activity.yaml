@@ -17,11 +17,10 @@ cases:
           exact: true
       - app.scrollTextIntoView:
           text: Webhook received for weather_forecast
-      - app.clickByLabel:
-          label: Payload
+      - aiAct: >-
+          On the visible "Webhook received for weather_forecast" activity item, click its
+          "Payload" disclosure once, then stop.
       - app.scrollTextIntoView:
           text: cabin
-      - app.expectTexts:
-          all:
-            - '"location"'
-            - '"cabin"'
+      - aiAssert: >-
+          The expanded webhook payload visibly contains the "location" field with value "cabin".
