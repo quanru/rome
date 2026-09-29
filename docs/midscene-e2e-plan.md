@@ -194,14 +194,14 @@ reasons behind them.
   the model endpoint is only stable over IPv4.
 Shard split:
 
-| Shard | Cases | Contents |
+| Shard | Cases | CI job topic |
 | --- | --- | --- |
-| shard-1 | 5 | Chat core journeys |
-| shard-2 | 8 | Apps, rich chat cards, and E2E-03 |
-| shard-3 | 7 | Sessions, routines, and E2E-01/02 |
-| shard-4 | 7 | Activity, people, files, and memory |
-| shard-5 | 6 | Settings, auth, and desktop shell cases |
-| shard-6 | 5 | Recorded apps, global search, and mobile navigation |
+| shard-1 | 5 | Chat interactions |
+| shard-2 | 8 | Apps and chat cards |
+| shard-3 | 7 | Routines and sessions |
+| shard-4 | 7 | Files, people and activity |
+| shard-5 | 6 | Account and settings |
+| shard-6 | 5 | Recorded apps and navigation |
 
 The PoC stories also carry their shard tags (E2E-01/02 → shard-3, E2E-03 →
 shard-2, AUTH-01 → shard-5).
