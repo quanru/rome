@@ -2,6 +2,22 @@
 
 How a [channel](../concepts/messaging.md#channels) is connected: the server-owned setup protocol every adapter goes through, and the rules that keep the connect flow generic across services.
 
+## Channel ports
+
+A channel is its name plus four ports: `send`, `inbound`, `accounts` and `messages` ([`Channel`](../../packages/core/src/channels/channel.ts)). A Connection is not a channel. A service's Talk may back a channel's `send` and `inbound`, and Rome's own synced tables may back its `accounts` and `messages`, but what backs a port is incidental to the channel ([decision record](../adrs/channels-and-connectors-are-one-connection.md#amendment-2026-09-28-a-channel-is-not-a-connection)).
+
+### Invariants
+
+- The name is the identity. Every stored row, link and message spells the channel by it.
+- Every port may be null, and callers read null as the answer. A present port is what the channel can do, not a promise that it is doing it now: a send nothing currently backs rejects, and an inbound subscription taken before anything backs it hears the first event once something does.
+- A channel's lifecycle is not part of the channel. Connecting, disconnecting and degradation belong to whatever backs a port.
+- Inbound runs the channel's admission before any subscriber hears an event. On a channel that pairs accounts ([Account pairing](#account-pairing)), pairing codes and messages from accounts the guardian has not approved never reach a subscriber. Any other channel delivers every sender, and the subscriber decides what a stranger gets. An admission that has not decided within fifteen seconds fails closed: that message is not delivered, and the conversation's next message is admitted in order.
+- Inbound delivers only what a subscriber may answer. Rome's own sends, the guardian's messages from another device, reactions, edits and frames with no text or attachments stay out of it. The complete record is `messages`.
+- The `send` port reaches one account directly through `direct`, where the channel offers it. While no Connection exists for the channel, that lookup rejects as a send does, which is how People tells an unconnected channel from one that cannot be written to. A Connection that exists but has no live Talk reads as a channel that cannot be written to, as it did before.
+- Inbound is live and at most once. Nothing is acknowledged or replayed, and a subscriber catches up by reading `messages`.
+- Every subscriber hears every event. A subscriber hears one conversation's events one at a time, in arrival order. Different conversations and different subscribers never wait on each other, so one slow or failing handler holds up only its own conversation for its own subscriber. A handler that never settles stops that conversation for that subscriber for good, so a subscriber settles every event it takes. A handler still running after ten minutes is logged, and so is a conversation with twenty events waiting. A conversation holds at most a hundred waiting events per subscriber. Past that, the oldest is dropped and logged. Events still waiting when a subscription ends are dropped, and a handler already running keeps running.
+- An inbound subscription outlives a reconnect of whatever backs it.
+
 ## Connection setup
 
 Every channel is connected through **one server-owned setup protocol** ([decision record](../adrs/server-owned-ceremonies-with-terminal-conferral.md)) — not a per-service connect flow. Per-service knowledge (which credentials a channel needs, how it probes them, what the guardian must do) lives in the integration descriptor the server drives. The client only pumps generic setup states and renders them.

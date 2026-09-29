@@ -255,13 +255,6 @@ async function main() {
   const wechatUserReader = config.wechatUserEnabled
     ? new WechatUserReader(new WechatUserRuntime())
     : undefined;
-  const channels = channelList({
-    db,
-    whatsAppAccounts,
-    linkedInAccounts,
-    ...(wechatUserReader ? { wechatUserReader } : {}),
-  });
-  const accountNames = createAccountNames({ channels, sentinelLogRepo });
   const approvalsRepo = new ApprovalsRepository(db, undefined, personMappingRepo);
   const settingsRepo = new SettingsRepository(db);
   const computerUse = new ComputerUseService(settingsRepo);
@@ -583,19 +576,6 @@ async function main() {
   const lifecycleDispatcher = createAgentLifecycleDispatcher({
     appRuntimeServices: lifecycleAppRuntimeServices,
   });
-  const unsubscribeAIToolTurnFinished = lifecycleDispatcher.onFinished((event) => {
-    // Provider failures update auth/quota state directly. Do not immediately
-    // replace that stronger runtime signal with a usage probe that may lag it.
-    if (event.status === "error") return;
-    const provider = event.output.accounting?.provider;
-    if (provider !== "openai" && provider !== "anthropic") return;
-    void aiToolState.refresh(provider).catch((err) => {
-      log.warn("AI tool state refresh after turn failed", {
-        provider,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-  });
   // Turn-middleware onion. Shares the same app-runtime services as the
   // lifecycle dispatcher (the `agentRunner` field is filled in below, before
   // any hook is loaded), so a scripted-conversation middleware can summon real
@@ -755,7 +735,9 @@ async function main() {
 
   const backendTurnRunner = createBackendTurnRunner({
     agentRunner,
-    talkRouter,
+    // `channels` is built once every descriptor is registered, further down;
+    // no backend turn runs before boot completes.
+    channel: (name) => channels.find((channel) => channel.name === name) ?? null,
     resolveWorkingDir: resolveContinuationWorkingDir,
     conversations: appRuntimeRepositories.conversations!,
   });
@@ -1042,6 +1024,16 @@ async function main() {
     // debugger in this container, needing no host execution.
     wechatUserEnabled: config.wechatUserEnabled,
   });
+  // Built after every descriptor is registered: each service with a Talk backs
+  // its channel's send and inbound ports.
+  const channels = channelList({
+    db,
+    whatsAppAccounts,
+    linkedInAccounts,
+    ...(wechatUserReader ? { wechatUserReader } : {}),
+    connections: { registry: connectionRegistry, router: talkRouter },
+  });
+  const accountNames = createAccountNames({ channels, sentinelLogRepo });
 
   let messageHook: ChannelMessageHook = createNoopChannelMessageHook();
   const channelMessageHookArtifact = appCatalog
@@ -1582,7 +1574,6 @@ async function main() {
     capabilityDiscovery.stop();
     shutdownLog.info("capability discovery stopped");
 
-    unsubscribeAIToolTurnFinished();
     unsubscribeCodexAccountChanged();
     codexAccountService.close();
     shutdownLog.info("Codex account service stopped");

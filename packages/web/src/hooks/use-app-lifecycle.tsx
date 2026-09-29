@@ -11,6 +11,7 @@ import type {
   InstalledAppCard,
   SpecSource,
 } from "@rome/api-types/apps";
+import { AccessEmailInput } from "@/components/access-email-input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -492,7 +493,21 @@ export function useAppLifecycle(
         emails,
       },
       {
-        onSuccess: () => setAccessTarget(null),
+        // A shared mode keeps the dialog open so its link can be copied right
+        // away; the target takes the saved mode, which enables copy.
+        onSuccess: (_result, { mode }) => {
+          if (mode === "private" || !app.fullHref || !shareableOrigin()) {
+            setAccessTarget(null);
+            return;
+          }
+          setAccessDialogError("");
+          setAccessTarget({
+            ...app,
+            accessMode: mode,
+            isPublic: mode === "public",
+            cloudAllowedEmails: emails,
+          });
+        },
         onError: (err) =>
           setAccessDialogError(
             err instanceof Error ? err.message : t("installed.errors.publicAccessFailed"),
@@ -530,14 +545,25 @@ export function useAppLifecycle(
   const shareOrigin = shareableOrigin();
   const accessShareUrl =
     accessTarget?.fullHref && shareOrigin ? `${shareOrigin}${accessTarget.fullHref}` : null;
-  // The link only opens once the picked mode is saved, and saving closes the
-  // dialog, so copy waits for a saved shared mode. The Clipboard API exists in
+  // The link only opens once the picked mode is saved, so copy waits for a
+  // saved shared mode. The Clipboard API exists in
   // secure contexts only; elsewhere the field, which selects on focus, is the
   // way to copy.
   const accessSavedMode: AppAccessMode | null = accessTarget
     ? (accessTarget.accessMode ?? (accessTarget.isPublic ? "public" : "private"))
     : null;
   const accessLinkUnsaved = accessModeDraft !== accessSavedMode;
+  // Nothing left to save: the dismiss button reads "Done" rather than "Cancel".
+  // Save stays enabled, since re-saving is how a guardian retries a save whose
+  // policy was stored but whose proxy reload failed.
+  const accessSavedEmails = accessTarget?.cloudAllowedEmails ?? [];
+  const accessDraftUnsaved =
+    accessLinkUnsaved ||
+    (accessModeDraft === "cloud-email" &&
+      (accessEmailInput.trim() !== "" ||
+        accessEmailsDraft.length !== accessSavedEmails.length ||
+        // The server stores the list as a sorted set, so order is no change.
+        accessEmailsDraft.some((email) => !accessSavedEmails.includes(email))));
   const canCopyAccessLink = typeof navigator !== "undefined" && Boolean(navigator.clipboard);
   const copyAccessShareUrl = () => {
     if (!accessShareUrl) return;
@@ -662,27 +688,21 @@ export function useAppLifecycle(
               </FieldLabel>
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <Input
+                  <AccessEmailInput
                     id="app-access-emails"
-                    size="md"
-                    icon={<Mail />}
-                    type="email"
                     value={accessEmailInput}
-                    onChange={(event) => {
-                      setAccessEmailInput(event.target.value);
+                    onChange={(value) => {
+                      setAccessEmailInput(value);
                       if (accessDialogError) setAccessDialogError("");
                     }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      commitAccessEmails(accessEmailInput);
+                    onCommit={(raw) => {
+                      commitAccessEmails(raw);
                     }}
                     onPaste={handleAccessEmailPaste}
+                    exclude={accessEmailsDraft}
                     disabled={accessSaving}
+                    invalid={Boolean(accessDialogError)}
                     placeholder={t("installed.accessDialog.emailPlaceholder")}
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-invalid={accessDialogError ? true : undefined}
                   />
                 </div>
                 <Button
@@ -779,7 +799,9 @@ export function useAppLifecycle(
             onClick={cancelAccessDialog}
             disabled={accessSaving}
           >
-            {t("installed.accessDialog.cancel")}
+            {accessDraftUnsaved
+              ? t("installed.accessDialog.cancel")
+              : t("installed.accessDialog.done")}
           </Button>
           <Button
             type="button"
