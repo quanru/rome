@@ -83,13 +83,14 @@ GitHub Actions (6 shards)
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
 
-The harness registers only the custom node used by committed cases. Each case
+The harness registers two custom nodes used by committed cases. Each case
 uses one `app.open`. Run `npm run nodes` in `tests/midscene` to generate a
 local reference for the full node list.
 
 | Node | Purpose |
 | --- | --- |
 | `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
+| `app.expectRenameConflict` | Check that FILE-03's rename request received HTTP 409 after `aiAct` submitted it |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 
@@ -176,13 +177,14 @@ reasons behind them.
 - **Sharding**: a 6-entry matrix selected by `MIDSCENE_INCLUDE_TAGS=shard-N`.
   Every case carries exactly one `shard-N` tag. `fail-fast: false`,
   `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
-- **Evidence**: runs in `quanru/rome` upload the `midscene_run/` and
-  `.midscene/` report artifacts. Each visual shard writes a Markdown job
+- **Evidence**: every model-backed run uploads the `midscene_run/` and
+  `.midscene/` shard artifacts, including failed runs. A repository with
+  `MIDSCENE_PUBLISH_REPO` set to its full name also writes a Markdown job
   Summary. The aggregation job puts abnormal cases first in the run Summary
   and passed cases in a collapsed appendix. Each case has a screenshot and
   exact report-step link when available. Midscene merges the native Test
-  reports across shards, and GitHub Pages publishes that report. Runs in
-  `rome-os/rome` execute the cases without these report jobs.
+  reports across shards, and GitHub Pages publishes that report when available.
+  An incomplete merge still publishes available shard reports.
 - **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
   --no-network-family-autoselection` works around runner-side IPv6 racing when
   the model endpoint is only stable over IPv4.
