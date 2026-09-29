@@ -61,8 +61,7 @@ const validateAiNativeCase = (testCase) => {
 
   const forbidden = nodes.filter(
     (node) =>
-      atomicAiNode.test(node) ||
-      (node.startsWith("app.") && !infrastructureNodes.has(node)),
+      atomicAiNode.test(node) || (node.startsWith("app.") && !infrastructureNodes.has(node)),
   );
   if (forbidden.length > 0) {
     problems.push(`use aiAct instead of ${[...new Set(forbidden)].join(", ")}`);
