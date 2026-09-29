@@ -78,21 +78,18 @@ GitHub Actions (6 shards)
   built-in entry is expanded and cross-page sidebar clicks are deterministic.
 - **AI-native interaction**: `aiAct` performs navigation, typing, scrolling,
   menu selection, and other user actions from a goal. `aiAssert` checks visible
-  outcomes. `app.open` handles isolated setup, and `app.expectUrl` checks the
-  address bar when required.
+  outcomes. `app.open` handles isolated setup.
 - **Env-driven selection**: `MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
 
-The harness registers only the custom nodes used by committed cases. Each case
-uses one `app.open` and may use `app.expectUrl` when the browser address is not
-visible to the model. Run `npm run nodes` in `tests/midscene` to generate a
+The harness registers only the custom node used by committed cases. Each case
+uses one `app.open`. Run `npm run nodes` in `tests/midscene` to generate a
 local reference for the full node list.
 
 | Node | Purpose |
 | --- | --- |
 | `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
-| `app.expectUrl` | URL substring / `re:` regex assertion |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 

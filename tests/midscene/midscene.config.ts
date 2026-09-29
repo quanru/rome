@@ -171,28 +171,6 @@ const appOpen = defineNode<typeof openInput, void, ProjectContext>({
   },
 });
 
-const expectUrlInput = z.strictObject({
-  // Substring matched against the full URL; prefix with "re:" for a regex.
-  path: z.string().min(1),
-});
-
-const appExpectUrl = defineNode<typeof expectUrlInput, void, ProjectContext>({
-  name: "app.expectUrl",
-  description: "Assert the current URL matches the given substring or re: regex.",
-  inputSchema: expectUrlInput,
-  async execute({ context, input }) {
-    const { page } = context;
-    if (!page) throw new Error("No page is open; call app.open first");
-    const current = page.url();
-    const matched = input.path.startsWith("re:")
-      ? new RegExp(input.path.slice(3)).test(current)
-      : current.includes(input.path);
-    if (!matched) {
-      throw new Error(`Expected URL to match "${input.path}" but got "${current}"`);
-    }
-  },
-});
-
 const tagList = (raw: string | undefined): string[] =>
   (raw ?? "")
     .split(",")
@@ -216,6 +194,5 @@ export default defineTestProject<ProjectContext>({
   nodes: [
     ...createMidsceneNodes<ProjectContext>({ agentClass: PlaywrightAgent, getAgent }),
     appOpen,
-    appExpectUrl,
   ],
 });
