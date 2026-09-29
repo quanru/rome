@@ -33,9 +33,8 @@ Midscene agent calls the configured model endpoint.
   goal. Related page states share a case only when they belong to that goal.
 - The collector checks every case name and shard against `case-manifest.json`
   and the documented catalog. Missing, renamed, or moved cases fail CI.
-- The package registers `app.open` for isolated setup and `app.expectUrl` for
-  address-bar checks that the visual model cannot see. Run `npm run nodes` to
-  generate a local node reference with their parameters.
+- The package registers `app.open` for isolated setup. Run `npm run nodes` to
+  generate a local node reference with its parameters.
 - All cases live in `cases/**/*.yaml`, organized by suite file, with tags for
   shard and topic.
 
@@ -132,9 +131,8 @@ HEADLESS=false npm test
    outcome and quote stable UI text that separates success from nearby states.
 4. Every case must contain at least one `aiAct` and one `aiAssert`. The
    collection check rejects atomic AI nodes such as `aiTap` and operational
-   `app.*` nodes. `app.expectUrl` is allowed because the model cannot see the
-   browser address bar. Keep user interaction and visible outcomes in `aiAct`
-   and `aiAssert`.
+   `app.*` nodes other than `app.open`. Keep user interaction and visible
+   outcomes in `aiAct` and `aiAssert`.
 5. Use `wait` only for mock state that settles asynchronously. Do not use fixed
    waits as a substitute for an observable completion condition.
 6. Keep a case focused on one user goal. Put multiple checkpoints in the same

@@ -12,8 +12,8 @@
 
 The suite contains 38 AI-native cases in 15 YAML files. Every case starts with
 `app.open`, uses `aiAct` for user interaction, and uses `aiAssert` for its
-visible outcome. `app.expectUrl` checks the address bar when needed because
-the visual model cannot see it.
+visible outcome. Navigation checks rely on visible page state, not the browser
+address bar.
 
 The secret-free collector checks each case name and shard against
 `tests/midscene/case-manifest.json` and this catalog. Deleting, renaming, or
