@@ -394,7 +394,8 @@ jobs:
         run: |
           node scripts/merge-native-reports.mjs \
             "$RUNNER_TEMP/midscene-report-shards" \
-            "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6"
+            "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6" \
+            "case-manifest.json"
           if [ -f "$RUNNER_TEMP/midscene-report-shards/native-report/index.html" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
@@ -490,6 +491,12 @@ jobs:
           path: ${{ runner.temp }}/midscene-report-shards/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Require complete native report
+        if: steps.native-report.outputs.available != 'true'
+        run: |
+          echo "The native Midscene Test report is incomplete; see the run Summary and shard artifacts." >&2
+          exit 1
 
       - name: Name GitHub Pages artifact
         if: steps.native-report.outputs.available == 'true'

@@ -157,10 +157,9 @@ test("builds one combined Markdown Summary for all shards", async (context) => {
   const appendix = markdown.indexOf("<details>");
   assert.ok(markdown.indexOf("CHAT-09 sends a message") < appendix);
   assert.ok(markdown.indexOf("AUTH-01 opens chat") > appendix);
-  assert.match(markdown.slice(0, appendix), /<img[^>]+screenshots\/screenshot-1\.jpeg/);
-  assert.match(markdown.slice(appendix), /<img[^>]+screenshots\/screenshot-1\.jpeg/);
-  assert.match(markdown, /#runner-step=step-1/);
-  assert.match(markdown, /screenshots\/screenshot-1\.jpeg/);
+  assert.doesNotMatch(markdown, /<img/);
+  assert.doesNotMatch(markdown, /#runner-step=step-1/);
+  assert.match(markdown, /Native Midscene Test report unavailable/);
 });
 
 test("escapes Markdown table content", () => {
@@ -169,6 +168,7 @@ test("escapes Markdown table content", () => {
       {
         name: "web|shard",
         status: "failed",
+        reportPath: "web-shard/report/index.html",
         durationMs: 1000,
         cases: [
           {
@@ -317,6 +317,24 @@ test("merges shard reports with the native Midscene Test reporter", async (conte
     await readFile(path.join(root, "summary.md"), "utf8"),
     /Open the Midscene Test report/,
   );
+});
+
+test("does not publish a partial native report", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-incomplete-"));
+  context.after(() =>
+    import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
+  );
+  await writeShard(root, "shard-1", "success", "CHAT-01", "deepseek-v3.2");
+  const expected = ["web-shard-1", "web-shard-2"];
+  assert.equal(await mergeNativeReports(root, expected), null);
+
+  await writeShard(root, "shard-2", "success", "CHAT-02", "deepseek-v3.2");
+  const manifest = path.join(root, "case-manifest.json");
+  await writeFile(manifest, JSON.stringify({ "CHAT-01": "shard-1", "CHAT-03": "shard-2" }));
+  assert.equal(await mergeNativeReports(root, expected, manifest), null);
+  await assert.rejects(readFile(path.join(root, "native-report", "index.html")), {
+    code: "ENOENT",
+  });
 });
 
 test("celebrates a complete run and keeps passed cases in the appendix", () => {

@@ -343,13 +343,15 @@ export function caseSetIssues(projects, manifest) {
   return issues;
 }
 
-const caseName = (pagesUrl, testCase) => {
+const caseName = (pagesUrl, testCase, reportAvailable) => {
   const name = markdownCell(testCase.name);
-  return testCase.reportPath ? `[${name}](${caseUrl(pagesUrl, testCase)})` : name;
+  return reportAvailable && testCase.reportPath
+    ? `[${name}](${caseUrl(pagesUrl, testCase)})`
+    : name;
 };
 
-const caseScreenshot = (pagesUrl, testCase) => {
-  if (!testCase.reportPath || !testCase.screenshotPath) return "—";
+const caseScreenshot = (pagesUrl, testCase, reportAvailable) => {
+  if (!reportAvailable || !testCase.reportPath || !testCase.screenshotPath) return "—";
   const target = html(caseUrl(pagesUrl, testCase));
   const image = html(reportUrl(pagesUrl, testCase.screenshotPath));
   const name = html(testCase.name)
@@ -358,8 +360,8 @@ const caseScreenshot = (pagesUrl, testCase) => {
   return `<a href="${target}"><img src="${image}" alt="${name}" width="160"></a>`;
 };
 
-const caseRow = (pagesUrl, testCase, detail) =>
-  `| ${markdownCell(testCase.project)} | ${caseName(pagesUrl, testCase)} | ${caseScreenshot(pagesUrl, testCase)} | ${markdownCell(detail)} | ${formatDuration(testCase.durationMs)} |`;
+const caseRow = (pagesUrl, testCase, detail, reportAvailable) =>
+  `| ${markdownCell(testCase.project)} | ${caseName(pagesUrl, testCase, reportAvailable)} | ${caseScreenshot(pagesUrl, testCase, reportAvailable)} | ${markdownCell(detail)} | ${formatDuration(testCase.durationMs)} |`;
 
 export function renderMarkdown({
   projects,
@@ -375,16 +377,25 @@ export function renderMarkdown({
   const failures = totals.cases.filter((testCase) => testCase.status !== "success");
   const passedCases = totals.cases.filter((testCase) => testCase.status === "success");
   const missingReports = missingNativeReports(projects);
+  const reportPath = publishedReportPath ?? (projects.length === 1 ? projects[0].reportPath : null);
+  const reportAvailable = Boolean(reportPath);
   const infrastructureFailures = incompleteProjects.filter(
     (project) => !failures.some((testCase) => testCase.project === project.name),
   );
   const unreportedFailure =
     producerResult !== "success" && failures.length === 0 && infrastructureFailures.length === 0;
+  const missingMergedReport =
+    projects.length > 1 &&
+    !reportAvailable &&
+    incompleteProjects.length === 0 &&
+    missingReports.length === 0 &&
+    caseInventoryIssues.length === 0;
   const needsAttention =
     failures.length +
     infrastructureFailures.length +
     missingReports.length +
     Number(unreportedFailure) +
+    Number(missingMergedReport) +
     caseInventoryIssues.length;
   const complete = producerResult === "success" && totals.total > 0 && needsAttention === 0;
   const sections = [
@@ -394,8 +405,8 @@ export function renderMarkdown({
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",
-    publishedReportPath
-      ? `**[Open the Midscene Test report](${reportUrl(pagesUrl, publishedReportPath)})** · [Download the artifact](${runUrl}#artifacts)`
+    reportAvailable
+      ? `**[Open the Midscene Test report](${reportUrl(pagesUrl, reportPath)})** · [Download the artifact](${runUrl}#artifacts)`
       : `[Download the artifact](${runUrl}#artifacts) · Native Midscene Test report unavailable`,
     "",
   ];
@@ -416,6 +427,11 @@ export function renderMarkdown({
         (project) =>
           `| ${markdownCell(project.name)} | — | — | ❌ Native report missing · [Workflow run](${runUrl}) | ${formatDuration(project.durationMs)} |`,
       ),
+      ...(missingMergedReport
+        ? [
+            `| Workflow | — | — | ❌ Native report merge unavailable · [Workflow run](${runUrl}) | — |`,
+          ]
+        : []),
       ...(unreportedFailure
         ? [
             `| Workflow | — | — | ❌ ${markdownCell(producerResult)} · [Workflow run](${runUrl}) | — |`,
@@ -430,6 +446,7 @@ export function renderMarkdown({
             pagesUrl,
             testCase,
             `${testCase.status === "not-run" ? "⏭️ Not run" : "❌ Failed"}: ${testCase.reason}`,
+            reportAvailable,
           ),
         ),
       "",
@@ -446,11 +463,13 @@ export function renderMarkdown({
     "",
     "| Shard | Case | Screenshot | Status | Duration |",
     "|:--|:--|:--|:--|--:|",
-    ...passedCases.map((testCase) => caseRow(pagesUrl, testCase, "✅ Passed")),
+    ...passedCases.map((testCase) => caseRow(pagesUrl, testCase, "✅ Passed", reportAvailable)),
     "",
     "</details>",
     "",
-    "Click a screenshot or case name to open its exact step in the native Midscene report.",
+    ...(reportAvailable
+      ? ["Click a screenshot or case name to open its exact step in the native Midscene report."]
+      : ["Download the artifact to inspect available native shard reports."]),
     "",
   );
   return sections.join("\n");
