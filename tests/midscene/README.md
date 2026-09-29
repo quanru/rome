@@ -111,12 +111,12 @@ HEADLESS=false npm test
   details)
 - Both are covered by `.gitignore`.
 - Runs in `quanru/rome` upload each shard and a combined
-  `midscene-e2e-report` artifact. Its `index.html` contains the overall Summary,
-  model names, shard counts, case results, durations, screenshots, and links to
-  exact steps in the native Midscene reports. The fork publishes the HTML
-  through GitHub Pages so links and images work from the Actions run Summary.
-  The Actions Summary shows failed, not-run, and incomplete-shard results first;
-  passed cases and their screenshots appear in a collapsed appendix.
+  `midscene-e2e-report` artifact. Each visual shard writes its own Markdown job
+  Summary. The run Summary shows failed, not-run, and incomplete-shard results
+  first; passed cases and their screenshots appear in a collapsed appendix.
+  Midscene merges the six native Test reports into one report that lists every
+  case. The fork publishes that report through GitHub Pages, so report links
+  and images work from the Actions Summary.
 - Runs in `rome-os/rome` execute the cases without uploading reports or
   publishing a Summary or GitHub Pages site.
 - Pull requests run secret-free harness and mock-browser boundary jobs. The

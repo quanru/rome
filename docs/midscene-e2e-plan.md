@@ -184,10 +184,11 @@ reasons behind them.
   Every case carries exactly one `shard-N` tag. `fail-fast: false`,
   `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
 - **Evidence**: runs in `quanru/rome` upload the `midscene_run/` and
-  `.midscene/` report artifacts. The aggregation job puts abnormal cases first
-  in the Actions Summary and passed cases in a collapsed appendix. Each case
-  has a screenshot and exact report-step link when available. It also publishes
-  the combined HTML and native reports through GitHub Pages. Runs in
+  `.midscene/` report artifacts. Each visual shard writes a Markdown job
+  Summary. The aggregation job puts abnormal cases first in the run Summary
+  and passed cases in a collapsed appendix. Each case has a screenshot and
+  exact report-step link when available. Midscene merges the native Test
+  reports across shards, and GitHub Pages publishes that report. Runs in
   `rome-os/rome` execute the cases without these report jobs.
 - **Network stability**: `NODE_OPTIONS=--dns-result-order=ipv4first
   --no-network-family-autoselection` works around runner-side IPv6 racing when

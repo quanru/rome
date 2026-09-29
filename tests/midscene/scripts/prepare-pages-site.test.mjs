@@ -33,7 +33,9 @@ test("keeps historical root links and publishes recent runs at stable paths", as
     "affected",
   );
   await writeFile(path.join(legacy, "index.html"), "affected summary");
-  await writeFile(path.join(reports, "index.html"), "new summary");
+  await mkdir(path.join(reports, "native-report", "screenshots"), { recursive: true });
+  await writeFile(path.join(reports, "native-report", "index.html"), "native report");
+  await writeFile(path.join(reports, "native-report", "screenshots", "new.jpeg"), "new");
   await mkdir(path.join(previous, "runs", "100"), { recursive: true });
   await writeFile(path.join(previous, "runs", "100", "index.html"), "older run");
 
@@ -70,7 +72,8 @@ test("keeps historical root links and publishes recent runs at stable paths", as
     ),
     "affected",
   );
-  assert.equal(await readFile(path.join(site, "runs/101/index.html"), "utf8"), "new summary");
+  assert.equal(await readFile(path.join(site, "runs/101/index.html"), "utf8"), "native report");
+  assert.equal(await readFile(path.join(site, "runs/101/screenshots/new.jpeg"), "utf8"), "new");
 
   const next = path.join(root, "next");
   await preparePagesSite({ site: next, reports, runId: "102", previous: site });
@@ -110,7 +113,8 @@ test("rejects conflicting historical screenshot IDs", async (context) => {
     "second",
   );
   await mkdir(reports);
-  await writeFile(path.join(reports, "index.html"), "summary");
+  await mkdir(path.join(reports, "native-report"));
+  await writeFile(path.join(reports, "native-report", "index.html"), "native report");
   await assert.rejects(
     preparePagesSite({ site: path.join(root, "site"), reports, runId: "101", previous, legacy }),
     /Conflicting report asset/,
@@ -125,7 +129,8 @@ test("prunes older run directories before exceeding the Pages budget", async (co
   await mkdir(path.join(previous, "runs", "100"), { recursive: true });
   await writeFile(path.join(previous, "runs", "100", "report.bin"), Buffer.alloc(12_000));
   await shard(reports, "new");
-  await writeFile(path.join(reports, "index.html"), "summary");
+  await mkdir(path.join(reports, "native-report"));
+  await writeFile(path.join(reports, "native-report", "index.html"), "native report");
   await writeFile(
     path.join(reports, "midscene-shard-1/midscene_run/report/new/report.bin"),
     Buffer.alloc(12_000),

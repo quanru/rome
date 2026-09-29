@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { access, mkdir, readFile, readdir, writeFile, appendFile } from "node:fs/promises";
+import { access, readFile, readdir, appendFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -368,6 +368,7 @@ export function renderMarkdown({
   runUrl,
   producerResult = "success",
   caseInventoryIssues = [],
+  publishedReportPath,
 }) {
   const totals = totalsFor(projects);
   const incompleteProjects = projects.filter((project) => project.status !== "success");
@@ -393,7 +394,9 @@ export function renderMarkdown({
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",
-    `**[Open the published HTML report](${reportUrl(pagesUrl, "index.html")})** · [Download the artifact](${runUrl}#artifacts)`,
+    publishedReportPath
+      ? `**[Open the Midscene Test report](${reportUrl(pagesUrl, publishedReportPath)})** · [Download the artifact](${runUrl}#artifacts)`
+      : `[Download the artifact](${runUrl}#artifacts) · Native Midscene Test report unavailable`,
     "",
   ];
 
@@ -453,59 +456,6 @@ export function renderMarkdown({
   return sections.join("\n");
 }
 
-export function renderHtml({
-  projects,
-  models,
-  pagesUrl,
-  runUrl,
-  producerResult = "success",
-  caseInventoryIssues = [],
-}) {
-  const totals = totalsFor(projects);
-  const missingReports = missingNativeReports(projects);
-  const complete =
-    producerResult === "success" &&
-    totals.total > 0 &&
-    totals.failed === 0 &&
-    projects.every((project) => project.status === "success") &&
-    missingReports.length === 0 &&
-    caseInventoryIssues.length === 0;
-  const rows = totals.cases
-    .map((testCase) => {
-      const caseName = testCase.reportPath
-        ? `<a href="${html(caseUrl(pagesUrl, testCase))}">${html(testCase.name)}</a>`
-        : html(testCase.name);
-      const screenshot = testCase.screenshotPath
-        ? `<a href="${html(caseUrl(pagesUrl, testCase))}"><img src="${html(reportUrl(pagesUrl, testCase.screenshotPath))}" alt="${html(testCase.name)} screenshot" loading="lazy"></a>`
-        : "Not available";
-      return `<tr><td class="status">${testCase.status === "success" ? "✅" : "❌"}</td><td>${caseName}</td><td>${html(testCase.project)}</td><td>${html(formatDuration(testCase.durationMs))}</td><td class="preview">${screenshot}</td><td>${html(testCase.reason)}</td></tr>`;
-    })
-    .join("\n");
-  const shardRows = projects
-    .map((project) => {
-      const passed = project.cases.filter((testCase) => testCase.status === "success").length;
-      const failed = project.cases.length - passed;
-      const name = project.reportPath
-        ? `<a href="${html(reportUrl(pagesUrl, project.reportPath))}">${html(project.name)}</a>`
-        : html(project.name);
-      const status = missingReports.includes(project)
-        ? `${project.status} · native report missing`
-        : project.status;
-      return `<tr><td>${name}</td><td>${html(status)}</td><td>${passed}</td><td>${failed}</td><td>${html(formatDuration(project.durationMs))}</td></tr>`;
-    })
-    .join("\n");
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Rome × Midscene Summary</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:40px auto;padding:0 24px;color:#172033}h1{margin-bottom:4px}.meta{color:#596579}table{width:100%;border-collapse:collapse;margin:20px 0 32px}th,td{border:1px solid #d8dee9;padding:9px 12px;text-align:left;vertical-align:top}th{background:#f4f6f8}.status{width:30px;text-align:center}.preview{width:240px}.preview img{display:block;width:240px;height:150px;object-fit:cover;border-radius:6px}a{color:#0969da}code{background:#f4f6f8;padding:2px 5px;border-radius:4px}</style></head>
-<body><h1>Rome × Midscene Summary</h1>
-<p class="meta"><strong>${complete ? "Run passed" : "Run incomplete or failed"} · ${totals.passed}/${totals.total} cases passed</strong> · Workflow result: ${html(producerResult)} · Models: ${html(models.join(", ") || "not recorded")} · <a href="${html(runUrl)}">Actions run</a></p>
-${caseInventoryIssues.length ? `<h2>Case inventory issues</h2><ul>${caseInventoryIssues.map((issue) => `<li>${html(issue)}</li>`).join("")}</ul>` : ""}
-${missingReports.length ? `<h2>Report issues</h2><ul>${missingReports.map((project) => `<li>${html(project.name)}: native report missing</li>`).join("")}</ul>` : ""}
-<h2>Shards</h2><table><thead><tr><th>Shard</th><th>Status</th><th>Passed</th><th>Failed</th><th>Duration</th></tr></thead><tbody>${shardRows}</tbody></table>
-<h2>Cases</h2><p>Click a case name or screenshot to open its exact Midscene step.</p><table><thead><tr><th></th><th>Case</th><th>Shard</th><th>Duration</th><th>Node screenshot</th><th>Failure</th></tr></thead><tbody>${rows}</tbody></table></body></html>\n`;
-}
-
 export async function buildSummary(options) {
   const reportsDirectory = path.resolve(options["reports-dir"]);
   const expectedProjects = (options["expected-projects"] ?? "")
@@ -522,13 +472,14 @@ export async function buildSummary(options) {
     pagesUrl: options["pages-url"],
     runUrl: options["run-url"],
     producerResult: options["producer-result"],
+    publishedReportPath: await access(
+      path.join(reportsDirectory, "native-report", "index.html"),
+    ).then(
+      () => "index.html",
+      () => (data.projects.length === 1 ? data.projects[0].reportPath : null),
+    ),
   };
   if (options.output) await appendFile(options.output, `${renderMarkdown(values)}\n`);
-  if (options["html-output"]) {
-    const output = path.resolve(options["html-output"]);
-    await mkdir(path.dirname(output), { recursive: true });
-    await writeFile(output, renderHtml(values));
-  }
   return values;
 }
 

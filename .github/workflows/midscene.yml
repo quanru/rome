@@ -1,4 +1,4 @@
-name: Midscene E2E
+name: E2E Testing by Midscene
 
 # Visual E2E against the strict MSW mock build (pnpm --filter rome-web dev:mock:e2e,
 # port 3200). Every case uses only synthetic in-repo fixtures; no real backend
@@ -268,6 +268,7 @@ jobs:
         run: npm run check:browser-boundary
 
       - name: Run Midscene shard
+        id: run-shard
         working-directory: tests/midscene
         env:
           MIDSCENE_MODEL_API_KEY: ${{ secrets.MIDSCENE_MODEL_API_KEY }}
@@ -300,6 +301,7 @@ jobs:
           NODE
 
       - name: Upload Midscene shard report
+        id: upload-shard
         if: always() && github.repository == 'quanru/rome'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -311,6 +313,21 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Add shard results to the job Summary
+        if: always() && github.repository == 'quanru/rome'
+        working-directory: tests/midscene
+        env:
+          SHARD: ${{ matrix.shard }}
+          PRODUCER_RESULT: ${{ steps.run-shard.outcome == 'success' && steps.upload-shard.outcome == 'success' && 'success' || 'failure' }}
+        run: |
+          node scripts/render-ci-summary.mjs \
+            --reports-dir . \
+            --expected-projects "web-$SHARD" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --pages-url "https://quanru.github.io/rome/runs/$GITHUB_RUN_ID/midscene-$SHARD/" \
+            --producer-result "$PRODUCER_RESULT" \
+            --output "$GITHUB_STEP_SUMMARY"
+
       - name: Upload mock server log on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -321,7 +338,7 @@ jobs:
           retention-days: 14
 
   report-summary:
-    name: Assemble Midscene report and Summary
+    name: Merge Midscene reports and assemble Summary
     needs: midscene
     if: >-
       always() && !cancelled() &&
@@ -340,6 +357,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Activate Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tests/midscene/package-lock.json
+
+      - name: Install Midscene report merger
+        working-directory: tests/midscene
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --strict-allow-scripts
+
       - name: Validate report source run
         if: inputs.report_source_run_id != ''
         env:
@@ -357,6 +387,17 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/midscene-report-shards
           merge-multiple: false
+
+      - name: Merge native Midscene Test reports
+        id: native-report
+        working-directory: tests/midscene
+        run: |
+          node scripts/merge-native-reports.mjs \
+            "$RUNNER_TEMP/midscene-report-shards" \
+            "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6"
+          if [ -f "$RUNNER_TEMP/midscene-report-shards/native-report/index.html" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Configure GitHub Pages
         id: pages
@@ -417,10 +458,10 @@ jobs:
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --pages-url "${{ steps.pages.outputs.base_url }}/runs/$GITHUB_RUN_ID/" \
             --producer-result "$PRODUCER_RESULT" \
-            --output "$RUNNER_TEMP/midscene-summary.md" \
-            --html-output "$RUNNER_TEMP/midscene-report-shards/index.html"
+            --output "$RUNNER_TEMP/midscene-summary.md"
 
       - name: Prepare published report
+        if: steps.native-report.outputs.available == 'true'
         run: |
           node tests/midscene/scripts/prepare-pages-site.mjs \
             --site "$RUNNER_TEMP/midscene-pages" \
@@ -451,10 +492,12 @@ jobs:
           retention-days: 14
 
       - name: Name GitHub Pages artifact
+        if: steps.native-report.outputs.available == 'true'
         id: pages-artifact
         run: echo "name=midscene-e2e-report-pages-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload GitHub Pages report
+        if: steps.native-report.outputs.available == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           name: ${{ steps.pages-artifact.outputs.name }}
@@ -464,7 +507,10 @@ jobs:
   deploy-report:
     name: Publish Midscene HTML report
     needs: report-summary
-    if: always() && github.repository == 'quanru/rome' && needs.report-summary.result == 'success'
+    if: >-
+      always() && github.repository == 'quanru/rome' &&
+      needs.report-summary.result == 'success' &&
+      needs.report-summary.outputs.pages-artifact-name != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:

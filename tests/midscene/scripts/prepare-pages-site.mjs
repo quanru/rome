@@ -107,7 +107,13 @@ export async function preparePagesSite({
 
   const current = path.join(site, "runs", runId);
   await mkdir(current, { recursive: true });
-  await cp(path.join(reports, "index.html"), path.join(current, "index.html"));
+  const nativeReport = path.join(reports, "native-report");
+  await cp(path.join(nativeReport, "index.html"), path.join(current, "index.html"));
+  if (await exists(path.join(nativeReport, "screenshots"))) {
+    await cp(path.join(nativeReport, "screenshots"), path.join(current, "screenshots"), {
+      recursive: true,
+    });
+  }
   await copyShardReports(reports, current);
 
   const runsDirectory = path.join(site, "runs");
