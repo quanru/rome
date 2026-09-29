@@ -28,13 +28,6 @@ let caseCount = 0;
 const failures = [];
 const atomicAiNode = /^ai(?:Tap|Scroll|Input|Hover|Keyboard)/;
 const infrastructureNodes = new Set(["app.open", "app.expectUrl"]);
-const deterministicAssistNodes = new Set([
-  "app.clickByLabel",
-  "app.expectResponse",
-  "app.expectTexts",
-  "app.pressKey",
-  "app.scrollTextIntoView",
-]);
 const expectedCasesByShard = new Map(
   [1, 2, 3, 4, 5, 6].map((number) => {
     const shard = `shard-${number}`;
@@ -46,7 +39,6 @@ const collectedCasesByShard = new Map([...expectedCasesByShard.keys()].map((shar
 const validateAiNativeCase = (testCase) => {
   const nodes = testCase.definition.steps.map((step) => step.node);
   const tags = new Set(testCase.definition.tags);
-  const allowsDeterministicAssist = tags.has("deterministic-assist");
   const problems = [];
   const shardTags = [...tags].filter((tag) => expectedCasesByShard.has(tag));
 
@@ -70,16 +62,12 @@ const validateAiNativeCase = (testCase) => {
   const forbidden = nodes.filter(
     (node) =>
       atomicAiNode.test(node) ||
-      (node.startsWith("app.") &&
-        !infrastructureNodes.has(node) &&
-        !(allowsDeterministicAssist && deterministicAssistNodes.has(node))),
+      (node.startsWith("app.") && !infrastructureNodes.has(node)),
   );
   if (forbidden.length > 0) {
     problems.push(`use aiAct instead of ${[...new Set(forbidden)].join(", ")}`);
   }
-  if (allowsDeterministicAssist && !nodes.some((node) => deterministicAssistNodes.has(node))) {
-    problems.push("remove the unused deterministic-assist tag");
-  }
+  if (tags.has("deterministic-assist")) problems.push("remove the deterministic-assist tag");
 
   if (problems.length > 0) {
     throw new Error(`${testCase.definition.name}: ${problems.join("; ")}`);

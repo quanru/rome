@@ -40,17 +40,13 @@ cases:
     tags:
       - settings
       - shard-5
-      - deterministic-assist
     steps:
       - app.open:
           path: /settings/advanced
-      - app.scrollTextIntoView:
-          text: Developer Settings
       - aiAct: >-
-          Click the now-centered "Developer Settings" disclosure exactly once, then immediately
-          declare the action complete without inspecting the result or retrying.
-      - app.scrollTextIntoView:
-          text: Show Claude and ChatGPT usage
+          Scroll through Advanced settings until the "Developer Settings" disclosure is visible.
+          Open it once, then scroll farther down within the expanded section until the "Show Claude
+          and ChatGPT usage" switch is visible. Leave the section expanded.
       - aiAssert: >-
           The Developer Settings section is expanded and shows the "Show Claude and ChatGPT usage"
           switch.

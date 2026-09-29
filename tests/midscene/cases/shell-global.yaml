@@ -3,12 +3,12 @@ cases:
     tags:
       - shell
       - shard-6
-      - deterministic-assist
     steps:
       - app.open:
           path: /chat
-      - app.pressKey:
-          key: mod+k
+      - aiAct: >-
+          Press the global search keyboard shortcut (Command+K on macOS or Control+K elsewhere)
+          to open "Search chats and messages". Do not type a query yet.
       - aiAct: >-
           Type "market recap" into the open "Search chats and messages" field, then stop as soon as
           the query is visible in the field.

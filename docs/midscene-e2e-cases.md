@@ -3,17 +3,17 @@
 > Evaluation target: [Rome](https://github.com/rome-os/rome)
 >
 > Cases live in `tests/midscene/cases/` and run against the local MSW mock
-> build with synthetic fixtures. The 38-case suite passed locally without case
-> retries and passed in the fork's six remote shards:
-> [Actions run 35816486576](https://github.com/quanru/rome/actions/runs/35816486576).
+> build with synthetic fixtures. The 38-case suite passes locally with the
+> Seed model and no case retries. The linked
+> [Actions run 35816486576](https://github.com/quanru/rome/actions/runs/35816486576)
+> covers a separate remote revision, not this local change.
 
 ## Suite shape
 
 The suite contains 38 AI-native cases in 15 YAML files. Every case starts with
 `app.open`, uses `aiAct` for user interaction, and uses `aiAssert` for its
-visible outcome. A small number of cases tagged `deterministic-assist` also use
-targeted `app.*` nodes for state that cannot be read reliably from one
-screenshot.
+visible outcome. `app.expectUrl` checks the address bar when needed because
+the visual model cannot see it.
 
 The secret-free collector checks each case name and shard against
 `tests/midscene/case-manifest.json` and this catalog. Deleting, renaming, or

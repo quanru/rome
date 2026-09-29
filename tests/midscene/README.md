@@ -33,10 +33,9 @@ Midscene agent calls the configured model endpoint.
   goal. Related page states share a case only when they belong to that goal.
 - The collector checks every case name and shard against `case-manifest.json`
   and the documented catalog. Missing, renamed, or moved cases fail CI.
-- The package also registers focused deterministic nodes:
-  `app.open`, `app.expectUrl`, `app.expectResponse`, `app.clickByLabel`, `app.expectTexts`,
-  `app.scrollTextIntoView`, and `app.pressKey`. Run `npm run nodes` to generate
-  a local node reference with their parameters.
+- The package registers `app.open` for isolated setup and `app.expectUrl` for
+  address-bar checks that the visual model cannot see. Run `npm run nodes` to
+  generate a local node reference with their parameters.
 - All cases live in `cases/**/*.yaml`, organized by suite file, with tags for
   shard and topic.
 
@@ -101,7 +100,6 @@ HEADLESS=false npm test
 | `shard-N` | CI shard ownership (N=1…6), see the planning doc |
 | `zh` | Chinese-UI (i18n) cases |
 | `mobile` | Narrow-viewport cases |
-| `deterministic-assist` | AI-native journey with a narrowly scoped deterministic helper for a documented visual-model limitation |
 
 ## Reports and Artifacts
 
@@ -135,15 +133,13 @@ HEADLESS=false npm test
 4. Every case must contain at least one `aiAct` and one `aiAssert`. The
    collection check rejects atomic AI nodes such as `aiTap` and operational
    `app.*` nodes. `app.expectUrl` is allowed because the model cannot see the
-   browser address bar. A case tagged `deterministic-assist` may use only the
-   allowlisted helpers for a confirmed visual-model limitation; keep the user
-   interaction and visible outcome covered by `aiAct` and `aiAssert`.
+   browser address bar. Keep user interaction and visible outcomes in `aiAct`
+   and `aiAssert`.
 5. Use `wait` only for mock state that settles asynchronously. Do not use fixed
    waits as a substitute for an observable completion condition.
 6. Keep a case focused on one user goal. Put multiple checkpoints in the same
    case only when they prove one stateful flow.
 7. Use synthetic fixture data only. Never add real people, accounts, tokens, or
    chat content.
-8. Keep deterministic nodes as local debugging tools. A committed exception
-   must use the `deterministic-assist` tag and explain the visual limitation in
-   the case or pull request.
+8. The collector rejects other `app.*` nodes and the `deterministic-assist`
+   tag. If a visual step fails, adjust the goal and visible checkpoint.

@@ -5,16 +5,16 @@ cases:
       - story
       - apps
       - shard-2
-      - deterministic-assist
     steps:
       - app.open:
           path: /chat/mock-chat-build-app
-      - app.scrollTextIntoView:
-          text: Done. The Issue Triage app is built, installed, and verified
-      - app.clickByLabel:
-          label: Issue Triage
-          exact: true
-          index: 1
+      - aiAct: >-
+          Scroll upward within the final assistant reply until its first sentence, "Done. The Issue
+          Triage app is built, installed, and verified", is visible. Stop with the inline "Issue
+          Triage" link in that sentence on screen.
+      - aiAct: >-
+          Click the inline "Issue Triage" link in the assistant's final reply, not the recent-app
+          item in the sidebar. Stop when its workspace tile opens beside the conversation.
       - aiAct: >-
           In the Issue Triage workspace tile beside the conversation, click Refresh once and wait
           for the dashboard totals and repository list to load again.

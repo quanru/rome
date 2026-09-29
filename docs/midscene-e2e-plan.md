@@ -78,7 +78,8 @@ GitHub Actions (6 shards)
   built-in entry is expanded and cross-page sidebar clicks are deterministic.
 - **AI-native interaction**: `aiAct` performs navigation, typing, scrolling,
   menu selection, and other user actions from a goal. `aiAssert` checks visible
-  outcomes. Deterministic nodes handle setup and local debugging only.
+  outcomes. `app.open` handles isolated setup, and `app.expectUrl` checks the
+  address bar when required.
 - **Env-driven selection**: `MIDSCENE_INCLUDE_TAGS` / `MIDSCENE_EXCLUDE_TAGS`
   (comma-separated, OR semantics), `MIDSCENE_RETRY`, `HEADLESS` — the same
   entry point serves local single-case iteration and CI sharding.
@@ -92,11 +93,6 @@ local reference for the full node list.
 | --- | --- |
 | `app.open` | Open a route in a fresh context, seed language/pins, wait for the sidebar or login page |
 | `app.expectUrl` | URL substring / `re:` regex assertion |
-| `app.expectResponse` | Check an API response for a transient outcome that a later screenshot cannot capture |
-| `app.clickByLabel` | Deterministically click repeated icon buttons by accessible name (tile kebab, chip clear), piercing open shadow DOM |
-| `app.pressKey` | Deterministic keyboard shortcuts (`mod` → ⌘ on macOS, Ctrl elsewhere). Works locally and on Linux CI. |
-| `app.scrollTextIntoView` | Send a trusted wheel gesture to release chat stick-to-bottom, then center the element containing the given text in the viewport. Pierces shadow DOM. |
-| `app.expectTexts` | Check long-page or toast text that cannot fit in one screenshot |
 
 ## 3. Mock-Mode Contract (for Case Authors)
 
@@ -121,8 +117,8 @@ implementation**. If the implementation changes, the cases must change with it.
    `wait` steps.
 6. **Chat stick-to-bottom**: the transcript snaps to the latest message and
    programmatic scrolling is pushed back by `useStickToBottom`. Only a scroll
-   within 300 ms of a trusted gesture (wheel/touch/keyboard) releases it. This
-   is encapsulated in `app.scrollTextIntoView`.
+   within 300 ms of a trusted gesture (wheel/touch/keyboard) releases it.
+   Describe the target message and the scrolling goal in `aiAct`.
 7. **In-chat app links**: `/apps/<id>` links in markdown are intercepted by
    `ChatLink` and open in a workspace tile beside the chat while the URL stays
    at `/chat/...`. This is real product behavior. Assert on the tile, not on a

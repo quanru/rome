@@ -26,7 +26,6 @@ cases:
     tags:
       - chat
       - shard-1
-      - deterministic-assist
     steps:
       - app.open:
           path: /chat
@@ -40,10 +39,6 @@ cases:
           focus change before entering the text.
       - app.expectUrl:
           path: /chat
-      - app.expectTexts:
-          scope: body
-          all:
-            - /api/chat/sessions
       - aiAssert: >-
           The message is not sent: an error above the composer reports the failed request to
           "/api/chat/sessions" (the standalone mock rejects session creation).
@@ -56,10 +51,6 @@ cases:
           indicator, so do not repeatedly tap or wait for a visual focus change.
       - app.expectUrl:
           path: /chat
-      - app.expectTexts:
-          scope: body
-          all:
-            - Failed to load skills.
       - aiAssert: >-
           The composer contains "/" and a visible error notice directly above it reads "Failed to
           load skills.".
@@ -80,16 +71,13 @@ cases:
     tags:
       - chat
       - shard-1
-      - deterministic-assist
     steps:
       - app.open:
           path: /chat/mock-chat-1
-      - app.scrollTextIntoView:
-          text: 1 app · 1 step · 8.4s
       - aiAct: >-
-          Click near the upper-middle of the now-centered collapsed trace summary reading "1 app ·
-          1 step · 8.4s" beneath the first assistant response. Avoid the lower edge, click exactly
-          once, and immediately declare the action complete without retrying.
+          Scroll through the conversation to the collapsed trace summary reading "1 app · 1 step ·
+          8.4s" beneath the first assistant response. Click near the upper-middle of that summary
+          once to open the Trace drawer. Do not click other messages.
       - aiAssert: >-
           The "Trace" drawer is open and shows a successful "settings_get" step for the "briefer"
           app, including "keys: [2]" and a duration. The header reads "Used 1 app · 1 step · 8.4s".
