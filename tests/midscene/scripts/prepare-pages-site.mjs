@@ -81,6 +81,7 @@ export async function preparePagesSite({
     await cp(path.join(previous, "runs"), path.join(site, "runs"), { recursive: true });
   }
   const current = path.join(site, "runs", runId);
+  await rm(current, { recursive: true, force: true });
   await mkdir(current, { recursive: true });
   const nativeReport = path.join(reports, "native-report");
   if (await exists(path.join(nativeReport, "index.html"))) {

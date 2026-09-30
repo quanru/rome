@@ -390,6 +390,7 @@ jobs:
 
       - name: Merge native Midscene Test reports
         id: native-report
+        continue-on-error: true
         working-directory: tests/midscene
         run: |
           node scripts/merge-native-reports.mjs \
@@ -399,6 +400,18 @@ jobs:
           if [ -f "$RUNNER_TEMP/midscene-report-shards/native-report/index.html" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Discard output from a failed native merge
+        if: steps.native-report.outcome == 'failure'
+        run: |
+          node --input-type=module <<'NODE'
+          import { rm } from 'node:fs/promises';
+          import path from 'node:path';
+          await rm(path.join(process.env.RUNNER_TEMP, 'midscene-report-shards', 'native-report'), {
+            recursive: true,
+            force: true,
+          });
+          NODE
 
       - name: Configure GitHub Pages
         id: pages
@@ -434,6 +447,8 @@ jobs:
           tar -xf "$RUNNER_TEMP/previous-pages-artifact/artifact.tar" -C "$RUNNER_TEMP/previous-pages"
 
       - name: Render case table
+        id: case-table
+        continue-on-error: true
         env:
           PRODUCER_RESULT: ${{ inputs.report_source_run_id != '' && 'success' || needs.midscene.result }}
         run: |
@@ -457,12 +472,17 @@ jobs:
       - name: Add case table to the run Summary
         env:
           REPORT_SOURCE_RUN_ID: ${{ inputs.report_source_run_id }}
+          CASE_TABLE_RESULT: ${{ steps.case-table.outcome }}
         run: |
           if [ -n "$REPORT_SOURCE_RUN_ID" ]; then
             echo "Report rebuilt from [run $REPORT_SOURCE_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$REPORT_SOURCE_RUN_ID) without new model calls." >> "$GITHUB_STEP_SUMMARY"
             echo >> "$GITHUB_STEP_SUMMARY"
           fi
-          cat "$RUNNER_TEMP/midscene-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$CASE_TABLE_RESULT" = "success" ]; then
+            cat "$RUNNER_TEMP/midscene-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Case table generation failed. [Download available shard reports]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID#artifacts)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload combined Midscene report
         if: always()
@@ -486,7 +506,10 @@ jobs:
           retention-days: 90
 
       - name: Require complete native report
-        if: steps.native-report.outputs.available != 'true'
+        if: >-
+          steps.native-report.outcome != 'success' ||
+          steps.native-report.outputs.available != 'true' ||
+          steps.case-table.outcome != 'success'
         run: |
           echo "The native Midscene Test report is incomplete; see the run Summary and shard artifacts." >&2
           exit 1
