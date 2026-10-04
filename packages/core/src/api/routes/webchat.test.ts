@@ -443,7 +443,7 @@ describe("Webchat API", () => {
           accounting: {
             provider: "test",
             model: "child-model",
-            usage: { inputTokens: 3, outputTokens: 4 },
+            usage: { inputTokens: 3, outputTokens: 4, reasoningTokens: 2 },
             costUsd: 0.03,
           },
         },
@@ -568,6 +568,15 @@ describe("Webchat API", () => {
         },
       ],
     });
+    // Only the grandchild reported reasoning: the rollup sums what was
+    // reported, and a turn whose runs reported none stays without the field.
+    expect(
+      (await readAccounting("/chat/messages/parent-usage-trace/content"))?.usage.reasoningTokens,
+    ).toBe(2);
+    expect(
+      (await readAccounting("/chat/messages/parent-usage-trace/content?includeSubagentUsage=false"))
+        ?.usage,
+    ).not.toHaveProperty("reasoningTokens");
     expect(await deps.webchatRepo.getMessageContent("parent-usage-trace")).not.toContain(
       "includedSubagentCount",
     );
@@ -1874,12 +1883,16 @@ describe("Webchat API", () => {
       const { events, sendMessageRun, sessionId } = await runScriptedStream(
         () =>
           (async function* () {
+            yield { type: "thinking_delta", blockId: "b0", content: "Planning" };
             yield { type: "text_delta", content: "Hel" };
             yield { type: "text_delta", content: "lo" };
             // The complete block closes the preview and advances blockIx.
             yield { type: "text", content: "Hello" };
             await tailGate;
+            // Tool previews have no webchat consumer yet: they change nothing.
+            yield { type: "tool_input_delta", toolUseId: "tu-1", tool: "some_tool", content: "{" };
             yield { type: "tool_use", id: "tu-1", tool: "some_tool", input: {} };
+            yield { type: "tool_output_delta", toolUseId: "tu-1", content: "partial output" };
             yield { type: "tool_result", toolUseId: "tu-1", tool: "some_tool", output: {} };
             yield { type: "text_delta", content: "Final " };
             yield { type: "text_delta", content: "answer" };
@@ -1920,6 +1933,10 @@ describe("Webchat API", () => {
       const trace = messages.find((m) => m.role === "trace");
       expect(trace).toBeTruthy();
       expect(trace!.content).not.toContain("text_delta");
+      for (const type of ["thinking_delta", "tool_input_delta", "tool_output_delta"]) {
+        expect(trace!.content).not.toContain(type);
+        expect(events.some((e) => e.data.includes(type))).toBe(false);
+      }
     });
 
     it("persists each commentary block as its own live message; send_message carries only the final", async () => {

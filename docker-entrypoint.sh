@@ -110,9 +110,7 @@ done
 # /home/user/* mount aliases such as /home/user/mount at runtime.
 chmod 2775 /home/user
 
-# Ensure Rome home contents survive named-volume reuse with the right owner.
-mkdir -p /home/rome/.rome
-safe_chown -R rome:rome /home/rome
+run_as_rome mkdir -p /home/rome/.rome
 chmod 750 /home/rome /home/rome/.rome
 
 # WeChat writes only into the runtime user's home and private session directory.
@@ -457,64 +455,6 @@ else
 fi
 wait_for_tcp_port "$NOVNC_PORT" "noVNC" "$NOVNC_PID" /tmp/novnc.log
 
-# WeChat's own display, shown at /desktop/wechat. Only with WECHAT_USER_DISPLAY:
-# unset, the client stays on the shared desktop above. The display is fixed at
-# 1280x800, the largest size the client's main window accepts.
-WECHAT_TIGERVNC_PID=""
-WECHAT_OPENBOX_PID=""
-WECHAT_NOVNC_PID=""
-if [ "${WECHAT_USER_ENABLED:-false}" = "true" ] && [ -n "${WECHAT_USER_DISPLAY:-}" ]; then
-  if ! [[ "$WECHAT_USER_DISPLAY" =~ ^:[0-9]+$ ]] || [ "$WECHAT_USER_DISPLAY" = "$DISPLAY" ]; then
-    echo "Error: WECHAT_USER_DISPLAY must be a display like :100, other than ${DISPLAY}."
-    exit 1
-  fi
-  WECHAT_DISPLAY_NUM="${WECHAT_USER_DISPLAY#:}"
-  WECHAT_VNC_PORT="${ROME_WECHAT_VNC_PORT:-5901}"
-  WECHAT_NOVNC_PORT="${ROME_WECHAT_NOVNC_PORT:-6081}"
-  if process_cmdline_contains_all Xtigervnc "$WECHAT_USER_DISPLAY" -rfbport "$WECHAT_VNC_PORT"; then
-    echo "Reusing TigerVNC on ${WECHAT_USER_DISPLAY}."
-  else
-    # The shared block's guards: a live X server on this display that is not ours,
-    # or a port another process holds, would put something else behind
-    # /desktop/wechat. The shared block's own REUSED_X_SERVER result is kept.
-    SHARED_REUSED_X_SERVER="$REUSED_X_SERVER"
-    REUSED_X_SERVER="0"
-    cleanup_stale_x11_state "$WECHAT_DISPLAY_NUM"
-    WECHAT_REUSED_X_SERVER="$REUSED_X_SERVER"
-    REUSED_X_SERVER="$SHARED_REUSED_X_SERVER"
-    if [ "$WECHAT_REUSED_X_SERVER" = "1" ]; then
-      echo "Error: the existing X server on ${WECHAT_USER_DISPLAY} is not Rome's TigerVNC process."
-      exit 1
-    fi
-    if tcp_port_listening "$WECHAT_VNC_PORT"; then
-      echo "Error: TCP port ${WECHAT_VNC_PORT} is already in use by another process."
-      exit 1
-    fi
-    echo "Starting TigerVNC for WeChat on ${WECHAT_USER_DISPLAY}, RFB :${WECHAT_VNC_PORT} ..."
-    run_as_rome Xtigervnc "$WECHAT_USER_DISPLAY" -geometry 1280x800 -depth 24 \
-      -SecurityTypes None -localhost yes -rfbport "$WECHAT_VNC_PORT" \
-      -AlwaysShared -AcceptCutText -SendCutText -ac >/tmp/xtigervnc-wechat.log 2>&1 &
-    WECHAT_TIGERVNC_PID=$!
-  fi
-  wait_for_tcp_port "$WECHAT_VNC_PORT" "WeChat's TigerVNC" "$WECHAT_TIGERVNC_PID" /tmp/xtigervnc-wechat.log
-  if ! process_env_contains openbox "DISPLAY=${WECHAT_USER_DISPLAY}"; then
-    run_as_rome env DISPLAY="$WECHAT_USER_DISPLAY" openbox \
-      --config-file /opt/rome/scripts/docker/wechat-openbox-rc.xml >/tmp/openbox-wechat.log 2>&1 &
-    WECHAT_OPENBOX_PID=$!
-    wait_for_background_process "$WECHAT_OPENBOX_PID" "WeChat's Openbox" /tmp/openbox-wechat.log
-  fi
-  # Loopback only: the authenticated /desktop-proxy mount is its one client.
-  if ! process_cmdline_contains_all websockify "127.0.0.1:${WECHAT_NOVNC_PORT}" "localhost:${WECHAT_VNC_PORT}"; then
-    if tcp_port_listening "$WECHAT_NOVNC_PORT"; then
-      echo "Error: TCP port ${WECHAT_NOVNC_PORT} is already in use by another process."
-      exit 1
-    fi
-    run_as_rome websockify "127.0.0.1:${WECHAT_NOVNC_PORT}" "localhost:${WECHAT_VNC_PORT}" >/tmp/novnc-wechat.log 2>&1 &
-    WECHAT_NOVNC_PID=$!
-  fi
-  wait_for_tcp_port "$WECHAT_NOVNC_PORT" "WeChat's noVNC" "$WECHAT_NOVNC_PID" /tmp/novnc-wechat.log
-fi
-
 CHROME_WRAPPER_PID=""
 if ! run_as_rome bash /opt/rome/scripts/docker/rome-start-opencli.sh; then
   echo "Warning: OpenCLI could not start. Browser connections are unavailable."
@@ -589,43 +529,49 @@ tailscaled \
   --tun=userspace-networking &
 TAILSCALED_PID=$!
 
-echo "Waiting for tailscaled ..."
-RETRIES=0
-while [ ! -S /var/run/tailscale/tailscaled.sock ] && [ "$RETRIES" -lt 30 ]; do
-  RETRIES=$((RETRIES + 1))
-  sleep 1
-done
-if [ -S /var/run/tailscale/tailscaled.sock ]; then
-  if retry_command 30 1 "tailscaled CLI readiness" tailscale_status_ready; then
-    echo "tailscaled is ready."
-    # Allow the rome user to run tailscale commands without sudo once the daemon responds.
-    if retry_command 10 2 "tailscale operator setup" tailscale set --operator=rome; then
-      echo "tailscale operator set to rome."
-    fi
-  else
+# Tailscale is best-effort: the /api/tailnet endpoint retries HTTPS serve when
+# the user reaches the Security step. Its waits run in the background so a slow
+# or broken tailscaled never delays the daemon and the dashboard.
+configure_tailscale() {
+  local retries=0
+  local backend_state=""
+
+  echo "Waiting for tailscaled ..."
+  while [ ! -S /var/run/tailscale/tailscaled.sock ] && [ "$retries" -lt 30 ]; do
+    retries=$((retries + 1))
+    sleep 1
+  done
+  if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
+    echo "Warning: tailscaled did not start within 30 seconds."
+    return 0
+  fi
+  if ! retry_command 30 1 "tailscaled CLI readiness" tailscale_status_ready; then
     echo "Warning: tailscaled socket exists, but the CLI never became ready."
+    return 0
   fi
-else
-  echo "Warning: tailscaled did not start within 30 seconds."
-fi
-
-# ─── Try enabling HTTPS serve (best-effort, bounded retries) ─────────────
-# If Tailscale is already authenticated, enable HTTPS serve now.
-# For first-time onboarding, the /api/tailnet endpoint handles retries
-# when the user reaches the Security step.
-TAILSCALE_BACKEND_STATE="$(tailscale_backend_state 2>/dev/null || true)"
-if [ "$TAILSCALE_BACKEND_STATE" = "Starting" ]; then
-  retry_command 10 2 "tailscale backend reaching Running state" tailscale_backend_running || true
-  TAILSCALE_BACKEND_STATE="$(tailscale_backend_state 2>/dev/null || true)"
-fi
-
-if [ "$TAILSCALE_BACKEND_STATE" = "Running" ]; then
-  if retry_command 10 3 "tailscale HTTPS serve setup" enable_tailscale_https_serve; then
-    echo "tailscale HTTPS serve enabled."
-  else
-    echo "Warning: tailscale serve failed (will be retried via /api/tailnet)"
+  echo "tailscaled is ready."
+  # Allow the rome user to run tailscale commands without sudo once the daemon responds.
+  if retry_command 10 2 "tailscale operator setup" tailscale set --operator=rome; then
+    echo "tailscale operator set to rome."
   fi
-fi
+
+  # If Tailscale is already authenticated, enable HTTPS serve now.
+  backend_state="$(tailscale_backend_state 2>/dev/null || true)"
+  if [ "$backend_state" = "Starting" ]; then
+    retry_command 10 2 "tailscale backend reaching Running state" tailscale_backend_running || true
+    backend_state="$(tailscale_backend_state 2>/dev/null || true)"
+  fi
+
+  if [ "$backend_state" = "Running" ]; then
+    if retry_command 10 3 "tailscale HTTPS serve setup" enable_tailscale_https_serve; then
+      echo "tailscale HTTPS serve enabled."
+    else
+      echo "Warning: tailscale serve failed (will be retried via /api/tailnet)"
+    fi
+  fi
+}
+configure_tailscale &
+TAILSCALE_SETUP_PID=$!
 
 # Clean up legacy app layout from older images before rsync tries to delete it.
 # Previous versions stored the web app at /app/web; current images use /app/packages/web.
@@ -796,12 +742,14 @@ if [ "$NEEDS_SYNC" = "true" ]; then
     safe_chown -R rome:rome /app/memory
   fi
 
+  safe_chown -R rome:rome /app
+  chmod 750 /app
+
+  # The fingerprint marks the sync complete, so it lands only after the chown.
+  # A boot interrupted before this point syncs and chowns again on the next one.
   if [ -f "$IMAGE_SYNC_ID_FILE" ]; then
     cp "$IMAGE_SYNC_ID_FILE" "$APP_SYNC_ID_FILE"
   fi
-
-  safe_chown -R rome:rome /app
-  chmod 750 /app
   echo "Sync complete."
 else
   echo "Application already synced for this image; skipping rsync."
@@ -892,20 +840,23 @@ DAEMON_PID=$!
 
 # ─── Signal handling ──────────────────────────────────────────────────────
 cleanup() {
+  local exit_code="${1:-0}"
   echo "Shutting down ..."
   caddy stop 2>/dev/null || true
   if [ -n "${CHROME_WRAPPER_PID:-}" ]; then
     kill "$CHROME_WRAPPER_PID" 2>/dev/null || true
     wait "$CHROME_WRAPPER_PID" 2>/dev/null || true
   fi
-  kill "$NOVNC_PID" "$OPENBOX_PID" "$TIGERVNC_PID" "$DAEMON_PID" "$SSHD_PID" "$TAILSCALED_PID" 2>/dev/null || true
-  kill "$WECHAT_NOVNC_PID" "$WECHAT_OPENBOX_PID" "$WECHAT_TIGERVNC_PID" 2>/dev/null || true
-  wait "$NOVNC_PID" "$OPENBOX_PID" "$TIGERVNC_PID" "$DAEMON_PID" "$SSHD_PID" "$TAILSCALED_PID" 2>/dev/null || true
-  exit 0
+  kill "$NOVNC_PID" "$OPENBOX_PID" "$TIGERVNC_PID" "$DAEMON_PID" "$SSHD_PID" "$TAILSCALED_PID" "$TAILSCALE_SETUP_PID" 2>/dev/null || true
+  wait "$NOVNC_PID" "$OPENBOX_PID" "$TIGERVNC_PID" "$DAEMON_PID" "$SSHD_PID" "$TAILSCALED_PID" "$TAILSCALE_SETUP_PID" 2>/dev/null || true
+  exit "$exit_code"
 }
 trap cleanup SIGTERM SIGINT
 
 # ─── Wait for the daemon to exit ──────────────────────────────────────────
-wait "$DAEMON_PID" 2>/dev/null || true
-echo "Health-check daemon exited, shutting down ..."
-cleanup
+# The container exits with the daemon's status, so a crash reads as a failure
+# to the restart policy and to whoever inspects the stopped container.
+DAEMON_STATUS=0
+wait "$DAEMON_PID" 2>/dev/null || DAEMON_STATUS=$?
+echo "Health-check daemon exited with status ${DAEMON_STATUS}, shutting down ..."
+cleanup "$DAEMON_STATUS"

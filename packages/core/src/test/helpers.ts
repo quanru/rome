@@ -42,13 +42,8 @@ import { RelayDrainer } from "../relay/drainer.js";
 import { SystemUpgradeService } from "../system-upgrade/service.js";
 import { createOgImageStore } from "../apps/og/store.js";
 import type { ProviderAdapter } from "../channels/adapter.js";
-import type {
-  ConversationId,
-  TalkFeatureMap,
-  ConversationSettingsControl,
-  InboundMessage,
-  TalkRouter,
-} from "@rome-os/app-runtime";
+import type { ConversationId, ConversationSettingsControl } from "@rome-os/app-runtime";
+import type { InboundMessage, TalkFeatureMap, TalkRouter } from "../connections/types.js";
 import { SessionsRepository } from "../db/repositories/sessions.js";
 import { PersonMappingRepository } from "../db/repositories/person-mapping.js";
 import { LinkedInStoreRepository } from "../db/repositories/linkedin-store.js";
@@ -61,6 +56,7 @@ import type { Channel, Channels } from "../channels/channel.js";
 import type { ConnectionPortsDeps } from "../channels/connection-ports.js";
 import type { Connection, ConnectionDescriptor } from "../connections/types.js";
 import { channelList } from "../channels/channel-list.js";
+import { createChannelsService } from "../channels/channels-service.js";
 import { SentinelLogRepository } from "../db/repositories/sentinel-log.js";
 import { ApprovalsRepository } from "../db/repositories/approvals.js";
 import { SettingsRepository } from "../db/repositories/settings.js";
@@ -639,6 +635,7 @@ export async function buildTestDeps(
 
   return {
     talkRouter,
+    channelsService: createChannelsService({ channels: () => channels, router: talkRouter }),
     conversationSettings: emptyConversationSettings,
     actionEngine,
     actionLoader,
@@ -704,6 +701,7 @@ export async function buildTestDeps(
         devices: [],
       }),
     },
+    wechatApp: null,
     computerUse: {
       getStatus: async () => ({
         daemon: { status: "unavailable", version: null },

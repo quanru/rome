@@ -24,14 +24,14 @@ import { trace, type Attributes, type Context, type Span } from "@opentelemetry/
 import type { AgentMessage } from "../types.js";
 import { getTracer } from "../telemetry.js";
 
-export interface CapturedBlock {
+export interface CapturedEvent {
   block: AgentMessage;
   /** Wall-clock ms when AgentSession yielded this block from modelSession.events. */
   tsMs: number;
 }
 
 export interface TranslateTurnSpansArgs {
-  blocks: CapturedBlock[];
+  blocks: CapturedEvent[];
   /** The active `model.turn` span — tool spans + events parent under this. */
   modelSpan: Span;
   /** OTel context carrying the turn's agent span; used to scope child spans. */
@@ -93,10 +93,10 @@ export function translateTurnSpans(args: TranslateTurnSpansArgs): void {
       }
       case "tool_result": {
         const endedAtMs = parseIsoMs(block.endedAt) ?? tsMs;
+        // The adapter's flag decides. Claude's `{ content, isError }` output
+        // wrapper is the fallback for a producer that sets no flag.
         const isError =
-          typeof (block.output as { isError?: unknown })?.isError === "boolean"
-            ? Boolean((block.output as { isError?: unknown }).isError)
-            : false;
+          block.isError ?? (block.output as { isError?: unknown } | null)?.isError === true;
         toolResultsByUseId.set(block.toolUseId, { endedAtMs, isError });
         break;
       }

@@ -1,5 +1,5 @@
 import type {
-  ErrorBlock as TraceErrorBlock,
+  TraceErrorEvent,
   RomeSessionRefDto,
   TraceAccounting,
   TraceSummary,
@@ -10,9 +10,9 @@ import type {
   RomeSessionsPageResult,
 } from "@rome/api-types/sessions";
 
-export type ChatErrorCode = NonNullable<TraceErrorBlock["code"]>;
-export type ChatErrorProvider = NonNullable<TraceErrorBlock["provider"]>;
-export type ChatErrorReason = NonNullable<TraceErrorBlock["reason"]>;
+export type ChatErrorCode = NonNullable<TraceErrorEvent["code"]>;
+export type ChatErrorProvider = NonNullable<TraceErrorEvent["provider"]>;
+export type ChatErrorReason = NonNullable<TraceErrorEvent["reason"]>;
 
 export interface ChatErrorNotice {
   message: string;
@@ -119,7 +119,7 @@ export type ApprovalPreviewPayload =
       fields?: { label: string; value: string }[];
     };
 
-export interface StreamBlock {
+export interface ChatEntry {
   type: string;
   content?: string;
   /** On `text` parts/blocks: role of this text within its agent turn.
@@ -137,6 +137,9 @@ export interface StreamBlock {
   toolUseId?: string;
   input?: unknown;
   output?: unknown;
+  /** On `tool_result` blocks: whether the call failed. Absent on older results
+   *  and from producers that cannot tell. */
+  isError?: boolean;
   turnId?: string;
   audioUrl?: string;
   audioMimeType?: string;
