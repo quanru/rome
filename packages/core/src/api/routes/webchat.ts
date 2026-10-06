@@ -48,9 +48,9 @@ import {
 } from "@rome/api-types/trace-segments";
 import type { TurnFeedback } from "@rome/api-types/trace-segments";
 import type { StoredTurnFeedback } from "../../db/repositories/webchat.js";
-import type { AgentMessage, MessagePart } from "../../types.js";
+import type { AgentEvent, MessagePart } from "../../types.js";
 import type { AgentTurnHandle } from "../../core/agent-session.js";
-import type { RomeSessionType, StreamAgentMessage } from "@rome-os/app-runtime";
+import type { RomeSessionType, StreamAgentEvent } from "@rome-os/app-runtime";
 import type { ApiDeps } from "../deps.js";
 import {
   ENABLE_MODEL_SELECTOR_SETTING_KEY,
@@ -373,7 +373,7 @@ const BUILTIN_CARDS: ReadonlyArray<{ componentId: string; emittedBy: (tool: stri
  * turns and system-initiated backend continuations so a deferred turn cannot
  * claim the card was shown while leaving it only in the trace. */
 function buildBuiltinCard(
-  msg: Extract<AgentMessage, { type: "tool_result" }>,
+  msg: Extract<AgentEvent, { type: "tool_result" }>,
   suspension: Extract<Suspension, { kind: "inline" }>,
   sessionId: string,
 ): PendingInteractionPart | null {
@@ -657,7 +657,7 @@ export interface WebchatRuntime {
    */
   enqueueSessionTask(
     sessionId: string,
-    task: (helpers: { emit: (msg: AgentMessage & { agent?: string }) => void }) => Promise<void>,
+    task: (helpers: { emit: (msg: AgentEvent & { agent?: string }) => void }) => Promise<void>,
   ): Promise<void>;
 }
 
@@ -683,6 +683,23 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
    * URL routes `/turns/:turnId/...` resolve via this map.
    */
   const streamsByTurnId = new Map<string, ActiveWebchatStream>();
+
+  /** Listeners told when a session starts or stops running a turn. */
+  const runningListeners = new Set<(event: { sessionId: string; running: boolean }) => void>();
+  // Same definition as `GET /chat/sessions/:id/turns`: chat streams here plus
+  // turns in the shared registry, such as a side chat's first answer.
+  const isSessionRunning = (sessionId: string): boolean =>
+    (activeStreams.get(sessionId)?.some((stream) => !stream.finished) ?? false) ||
+    deps.agentTurnStreamRegistry.listBySession(sessionId).length > 0;
+  // Sessions running right now, so a status stream can open with a snapshot.
+  const runningSessions = new Set<string>();
+  const notifyRunning = (sessionId: string): void => {
+    const event = { sessionId, running: isSessionRunning(sessionId) };
+    if (event.running) runningSessions.add(sessionId);
+    else runningSessions.delete(sessionId);
+    for (const listener of runningListeners) listener(event);
+  };
+  deps.agentTurnStreamRegistry.onSessionChange(notifyRunning);
 
   const getStoredWebchatSession = async (
     c: Context,
@@ -751,6 +768,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
       activeStreams.set(sessionId, [stream]);
     }
     streamsByTurnId.set(stream.turnId, stream);
+    notifyRunning(sessionId);
   };
 
   /**
@@ -1329,7 +1347,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
       })
       [Symbol.asyncIterator]();
 
-    let first: IteratorResult<AgentMessage>;
+    let first: IteratorResult<AgentEvent>;
     try {
       first = await iterator.next();
     } catch (err) {
@@ -1661,7 +1679,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
     }
   };
 
-  // Push an AgentMessage through the segment builder and emit segment_upsert
+  // Push an AgentEvent through the segment builder and emit segment_upsert
   // events for any segments whose payload changed, plus a refreshed summary.
   const emitTraceEvent = (
     stream: ActiveWebchatStream,
@@ -1707,6 +1725,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
     // already attached received it live; this only affects future replays.
     stream.events.delete("assistant_text");
     stream.resolveFinish();
+    notifyRunning(stream.sessionId);
     if (stream.cleanupTimer) clearTimeout(stream.cleanupTimer);
     stream.cleanupTimer = setTimeout(() => {
       removeStream(stream);
@@ -1906,9 +1925,52 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
       rawStatus === "archived" || rawStatus === "all" ? rawStatus : ("active" as const);
     const sessions = await deps.webchatRepo.listSessions(status);
     return c.json(
-      sessions.map((session) => toWebchatSessionResponse(session, session.messageCount)),
+      sessions.map((session) => {
+        const running = isSessionRunning(session.id);
+        return {
+          ...toWebchatSessionResponse(session, session.messageCount),
+          running,
+          // A new turn's trace is written a moment after it starts, so until
+          // then the newest trace is the previous turn's. Running wins.
+          lastTurnFailed: session.lastTurnFailed && !running,
+        };
+      }),
     );
   });
+
+  // One stream for the whole sidebar: a `session_running` event for each chat
+  // running when it opens, then one whenever a chat starts or stops running a
+  // turn. Clients refetch the list on a stop to pick up unread and
+  // lastTurnFailed. Outside `/chat/sessions/` so no `:id` route can claim the
+  // path.
+  app.get("/chat/status/events", (c) =>
+    streamSSE(c, async (sse) => {
+      let close!: () => void;
+      let finished = false;
+      const closed = new Promise<void>((resolve) => {
+        close = resolve;
+      });
+      const listener = (event: { sessionId: string; running: boolean }) => {
+        // Fire-and-forget so a stalled client can't hold up the stream that
+        // is starting or finishing.
+        sse.writeSSE({ event: "session_running", data: JSON.stringify(event) }).catch(finish);
+      };
+      const heartbeat = setInterval(() => {
+        sse.writeSSE({ event: "keepalive", data: "" }).catch(finish);
+      }, 20_000);
+      function finish() {
+        if (finished) return;
+        finished = true;
+        clearInterval(heartbeat);
+        runningListeners.delete(listener);
+        close();
+      }
+      runningListeners.add(listener);
+      for (const sessionId of runningSessions) listener({ sessionId, running: true });
+      sse.onAbort(finish);
+      await closed;
+    }),
+  );
 
   // Register before `/chat/sessions/:id` so "search" is not captured as an ID.
   app.get("/chat/sessions/search", async (c) => {
@@ -2728,12 +2790,12 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
         let queue = Promise.resolve();
         let assistantText = "";
         let assistantBlockIx = 0;
-        let terminalError: Extract<StreamAgentMessage, { type: "error" }> | undefined;
+        let terminalError: Extract<StreamAgentEvent, { type: "error" }> | undefined;
         let interrupted = false;
         const write = (event: WebchatEventName, data: unknown) => {
           queue = queue.then(() => sse.writeSSE({ event, data: JSON.stringify(data) }));
         };
-        const project = (message: StreamAgentMessage) => {
+        const project = (message: StreamAgentEvent) => {
           if (message.type === "input_status") {
             write("input_status", message);
             return;
@@ -3272,15 +3334,19 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
             let lastCompletedText:
               | {
                   blockIx: number;
+                  blockId?: string;
                   content: string;
                   turnPhase?: "commentary" | "final";
                 }
               | undefined;
             let finalTextBlockIx: number | undefined;
-            let resultError: Extract<AgentMessage, { type: "error" }> | undefined;
+            let finalTextBlockId: string | undefined;
+            // Block id of the in-flight text block, from its deltas.
+            let inFlightTextBlockId: string | undefined;
+            let resultError: Extract<AgentEvent, { type: "error" }> | undefined;
             for await (const msg of handle.events) {
               if (msg.type === "input_status") continue;
-              // Previews other than text have no webchat consumer yet.
+              // Deltas other than text have no webchat consumer yet.
               if (isTransientDelta(msg) && msg.type !== "text_delta") continue;
               // Accumulated deltas of the in-flight text block. Transient — never a
               // trace block, never persisted. The replay key is fixed so a
@@ -3288,6 +3354,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
               // accumulated text.
               if (msg.type === "text_delta") {
                 stream.assistantText += msg.content;
+                if (msg.blockId) inFlightTextBlockId = msg.blockId;
                 emitToStream(
                   stream,
                   "assistant_text",
@@ -3296,8 +3363,8 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
                 );
                 continue;
               }
-              // Block boundary: a complete `text` block closes the in-flight
-              // preview. If the deltas didn't cover the block (non-streaming
+              // Block boundary: a complete `text` block ends its in-flight
+              // deltas. If the deltas didn't cover the block (non-streaming
               // provider, or a dropped frame), emit a corrective event with the
               // full text — this is what gives block-level previews on
               // providers that never stream deltas. The next text block gets a
@@ -3329,6 +3396,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
                         type: "text",
                         content: msg.content,
                         turnPhase: "commentary",
+                        ...(msg.blockId ? { blockId: msg.blockId } : {}),
                         blockIx,
                       },
                     ]);
@@ -3342,22 +3410,36 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
                 }
                 lastCompletedText = {
                   blockIx,
+                  ...(msg.blockId ? { blockId: msg.blockId } : {}),
                   content: msg.content,
                   turnPhase: msg.turnPhase,
                 };
-                if (msg.turnPhase === "final") finalTextBlockIx = blockIx;
+                if (msg.turnPhase === "final") {
+                  finalTextBlockIx = blockIx;
+                  finalTextBlockId = msg.blockId;
+                }
                 stream.assistantBlockIx += 1;
                 stream.assistantText = "";
+                inFlightTextBlockId = undefined;
               }
               if (msg.type === "turn_end" && stream.assistantText) {
                 const blockIx = stream.assistantBlockIx;
+                const blockId = inFlightTextBlockId;
                 const partial = {
                   type: "text" as const,
                   content: stream.assistantText,
                   turnPhase: "final" as const,
+                  ...(blockId ? { blockId } : {}),
                 };
-                lastCompletedText = { blockIx, content: partial.content, turnPhase: "final" };
+                lastCompletedText = {
+                  blockIx,
+                  ...(blockId ? { blockId } : {}),
+                  content: partial.content,
+                  turnPhase: "final",
+                };
+                inFlightTextBlockId = undefined;
                 finalTextBlockIx = blockIx;
+                finalTextBlockId = blockId;
                 stream.traceEvents.push(partial);
                 emitTraceEvent(stream, partial);
                 stream.assistantBlockIx += 1;
@@ -3584,6 +3666,13 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
                   : undefined;
               const resultBlockIx =
                 finalTextBlockIx ?? reusableResultBlockIx ?? stream.assistantBlockIx;
+              // The id of the block whose index the answer takes, when it has one.
+              const resultBlockId =
+                finalTextBlockIx !== undefined
+                  ? finalTextBlockId
+                  : reusableResultBlockIx !== undefined
+                    ? lastCompletedText?.blockId
+                    : undefined;
               await deps.actionEngine.run(
                 "send_message",
                 {
@@ -3595,6 +3684,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
                       type: "text" as const,
                       content: resultContent,
                       turnPhase: "final" as const,
+                      ...(resultBlockId ? { blockId: resultBlockId } : {}),
                       blockIx: resultBlockIx,
                     },
                   ],
@@ -3668,7 +3758,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
           }),
         );
       },
-      onInputStatus: async (status: import("@rome-os/app-runtime").InputStatusMessage) => {
+      onInputStatus: async (status: import("@rome-os/app-runtime").InputStatusEvent) => {
         await deps.webchatRepo.updateUserInput(sessionId, status);
         const stream = status.turnId ? streamsByTurnId.get(status.turnId) : undefined;
         if (stream) emitToStream(stream, "input_status", status, `input:${status.inputId}`);
@@ -3705,7 +3795,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
 
   const runEnqueuedTask = async (
     sessionId: string,
-    task: (helpers: { emit: (msg: AgentMessage & { agent?: string }) => void }) => Promise<void>,
+    task: (helpers: { emit: (msg: AgentEvent & { agent?: string }) => void }) => Promise<void>,
   ): Promise<void> => {
     // Wait behind any in-flight user turn before opening our own stream.
     const predecessor = getLastStream(sessionId);
@@ -3764,7 +3854,7 @@ export function createWebchatRuntime(deps: ApiDeps): { routes: Hono; runtime: We
     // needs to become a first-class transcript card; otherwise it exists only
     // in the trace and the model falsely believes the form was shown.
     const builtinQuestionCards: PendingInteractionPart[] = [];
-    const emit = (msg: AgentMessage & { agent?: string }) => {
+    const emit = (msg: AgentEvent & { agent?: string }) => {
       if (msg.type === "turn_start" && stream.channelThreadKey) {
         const owner = deps.agentSessionManager.peek({
           agentName: msg.agent ?? stream.agentName,

@@ -13,7 +13,7 @@ import type {
   SDKUserMessage,
   SDKUserMessageReplay,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentContextUsage, AgentMessage, AgentPlan } from "../types.js";
+import type { AgentContextUsage, AgentEvent, AgentPlan } from "../types.js";
 import type {
   ModelSessionFork,
   ModelProvider,
@@ -79,8 +79,11 @@ const GUARDIAN_TIMEZONE_SETTING_KEY = "guardianTimezone";
 // auto-injection from Rome's `model.turn`), which clutters the trace store
 // without adding signal. The per-round / per-tool detail is reconstructed
 // by `turn-span-translator.ts` from the message stream instead.
-const CLAUDE_AGENT_SDK_ENV = {
+// CLAUDE_CODE_ENABLE_TASKS=false keeps TodoWrite, which Rome turns into plan
+// updates. Since Claude Code 2.1.251 the default swaps it for TaskCreate.
+export const CLAUDE_AGENT_SDK_ENV = {
   IS_SANDBOX: "1",
+  CLAUDE_CODE_ENABLE_TASKS: "false",
 } as const;
 
 function toAnthropicEffort(effort: ModelReasoningEffort | undefined): EffortLevel {
@@ -335,10 +338,10 @@ function normalizeTodoWritePlan(input: unknown): AgentPlan | null {
 function extractToolResultMessages(
   message: SDKUserMessage | SDKUserMessageReplay,
   toolUseNames: Map<string, string>,
-): AgentMessage[] {
+): AgentEvent[] {
   const payload = message.message;
   const content = Array.isArray(payload?.content) ? payload.content : [];
-  const contentResults = content.filter(isToolResultParam).map((block): AgentMessage => {
+  const contentResults = content.filter(isToolResultParam).map((block): AgentEvent => {
     const output =
       typeof block.is_error === "boolean"
         ? { content: block.content, isError: block.is_error }
@@ -642,7 +645,7 @@ export class AnthropicProvider implements ModelProvider {
 
     // Translate the SDK's lifetime stream into AgentMessages. Runs once for
     // the whole session; turn boundaries live one layer up (AgentSession §6).
-    const events: AsyncIterable<AgentMessage> = (async function* () {
+    const events: AsyncIterable<AgentEvent> = (async function* () {
       // In-turn narration vs. closing answer. The agent SDK never sets
       // `stop_reason` on its streamed assistant messages (always null) and splits
       // a single API message into one `assistant` message per content block, so
@@ -672,7 +675,7 @@ export class AnthropicProvider implements ModelProvider {
         content: string,
         turnPhase: "commentary" | "final",
         blockId: string | undefined,
-      ): AgentMessage =>
+      ): AgentEvent =>
         blockId
           ? { type: "text", content, turnPhase, blockId }
           : { type: "text", content, turnPhase };
@@ -896,7 +899,7 @@ export class AnthropicProvider implements ModelProvider {
               ...(sdkOwned ? { sdkInitiated: true } : {}),
             };
 
-            let terminal: AgentMessage;
+            let terminal: AgentEvent;
             if (isResultSuccess(message)) {
               log.info("agent SDK result", resultData);
               recordModelCallMetrics(effectiveModel, accounting, message, {

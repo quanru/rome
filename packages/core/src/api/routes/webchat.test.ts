@@ -1977,6 +1977,108 @@ describe("Webchat API", () => {
       ]);
     });
 
+    it("persists each text block's block id beside its block index", async () => {
+      const { sendMessageRun, sessionId } = await runScriptedStream(
+        () =>
+          (async function* () {
+            yield { type: "text_delta", content: "Let me ", blockId: "b-0" };
+            yield {
+              type: "text",
+              content: "Let me check the weather.",
+              turnPhase: "commentary",
+              blockId: "b-0",
+            };
+            yield { type: "tool_use", id: "tu-1", tool: "some_tool", input: {} };
+            yield { type: "tool_result", toolUseId: "tu-1", tool: "some_tool", output: {} };
+            yield { type: "text", content: "It's sunny.", turnPhase: "final", blockId: "b-1" };
+            yield { type: "result", content: "It's sunny." };
+          })() as AsyncGenerator<never>,
+      );
+
+      expect(sendMessageRun).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          parts: [
+            {
+              type: "text",
+              content: "It's sunny.",
+              turnPhase: "final",
+              blockId: "b-1",
+              blockIx: 1,
+            },
+          ],
+        }),
+        expect.anything(),
+      );
+      const messages = await deps.webchatRepo.getMessages(sessionId);
+      const commentary = messages.filter(
+        (m) => m.role === "assistant" && m.content.includes('"commentary"'),
+      );
+      expect(JSON.parse(commentary[0].content)).toEqual([
+        {
+          type: "text",
+          content: "Let me check the weather.",
+          turnPhase: "commentary",
+          blockId: "b-0",
+          blockIx: 0,
+        },
+      ]);
+    });
+
+    it("gives the answer the final block's id when a text block completes after it", async () => {
+      const { sendMessageRun } = await runScriptedStream(
+        () =>
+          (async function* () {
+            yield { type: "text", content: "It's sunny.", turnPhase: "final", blockId: "b-0" };
+            yield { type: "text", content: "(Source: forecast.)", blockId: "b-1" };
+            yield { type: "result", content: "It's sunny." };
+          })() as AsyncGenerator<never>,
+      );
+
+      expect(sendMessageRun).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          parts: [
+            {
+              type: "text",
+              content: "It's sunny.",
+              turnPhase: "final",
+              blockId: "b-0",
+              blockIx: 0,
+            },
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("keeps the block id of a text block cut off by the end of its turn", async () => {
+      const { sendMessageRun } = await runScriptedStream(
+        () =>
+          (async function* () {
+            yield { type: "text_delta", content: "Partial ", blockId: "b-0" };
+            yield { type: "text_delta", content: "answer", blockId: "b-0" };
+            yield { type: "turn_end", turnId: "turn-1", status: "interrupted", durationMs: 1 };
+          })() as AsyncGenerator<never>,
+      );
+
+      expect(sendMessageRun).toHaveBeenCalledWith(
+        "send_message",
+        expect.objectContaining({
+          parts: [
+            {
+              type: "text",
+              content: "Partial answer",
+              turnPhase: "final",
+              blockId: "b-0",
+              blockIx: 0,
+            },
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
     it("emits a corrective block event for providers that never stream deltas", async () => {
       // Codex-shaped turn: whole text blocks only. Each block must still
       // produce an assistant_text event so the live bubble works at block
@@ -4059,6 +4161,100 @@ describe("Webchat API", () => {
       const assistantReplies = messages.filter((m) => m.role === "assistant");
       expect(assistantReplies).toHaveLength(1);
       expect(assistantReplies[0]!.content).toContain("Done — I sent the message.");
+    });
+
+    it("reports a running chat in the list and on the status stream", async () => {
+      const sessionId = "sess-status";
+      await deps.webchatRepo.createSession(sessionId, "Status");
+      const { routes: app, runtime } = createWebchatRuntime(deps);
+      const statusRes = await app.request("/chat/status/events");
+      expect(statusRes.status).toBe(200);
+      const reader = statusRes.body!.getReader();
+      let streamed = "";
+      const readUntil = async (needle: string) => {
+        while (!streamed.includes(needle)) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          streamed += new TextDecoder().decode(chunk.value);
+        }
+        expect(streamed).toContain(needle);
+      };
+      const listed = async () => {
+        const rows = (await (await app.request("/chat/sessions")).json()) as Array<{
+          id: string;
+          running: boolean;
+          lastTurnFailed: boolean;
+        }>;
+        return rows.find((row) => row.id === sessionId);
+      };
+
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const task = runtime.enqueueSessionTask(sessionId, async ({ emit }) => {
+        await gate;
+        emit({ type: "error", error: "boom" });
+        emit({ type: "turn_end", turnId: "status-turn", status: "error", durationMs: 1 });
+      });
+
+      await readUntil(`{"sessionId":"${sessionId}","running":true}`);
+      expect(await listed()).toMatchObject({ running: true, lastTurnFailed: false });
+
+      release();
+      await task;
+      await readUntil(`{"sessionId":"${sessionId}","running":false}`);
+      expect(await listed()).toMatchObject({ running: false, lastTurnFailed: true });
+      await reader.cancel();
+
+      // A retry hides the old failure while it runs, and a stream opened
+      // mid-turn starts with a snapshot of it.
+      let releaseRetry!: () => void;
+      const retryGate = new Promise<void>((resolve) => {
+        releaseRetry = resolve;
+      });
+      const retry = runtime.enqueueSessionTask(sessionId, () => retryGate);
+      await rs.waitFor(async () => expect((await listed())?.running).toBe(true));
+      expect(await listed()).toMatchObject({ lastTurnFailed: false });
+      const lateReader = (await app.request("/chat/status/events")).body!.getReader();
+      const first = new TextDecoder().decode((await lateReader.read()).value);
+      expect(first).toContain(`{"sessionId":"${sessionId}","running":true}`);
+      await lateReader.cancel();
+      releaseRetry();
+      await retry;
+    });
+
+    it("counts a turn in the shared turn registry as running", async () => {
+      const sessionId = "sess-branch";
+      await deps.webchatRepo.createSession(sessionId, "Branch");
+      const { routes: app } = createWebchatRuntime(deps);
+      const reader = (await app.request("/chat/status/events")).body!.getReader();
+      const running = async () => {
+        const rows = (await (await app.request("/chat/sessions")).json()) as Array<{
+          id: string;
+          running: boolean;
+        }>;
+        return rows.find((row) => row.id === sessionId)?.running;
+      };
+
+      const turn = deps.agentTurnStreamRegistry.register({
+        sessionId,
+        turnId: "branch-turn",
+        agentName: "main",
+      });
+      expect(await running()).toBe(true);
+      turn.finish();
+      expect(await running()).toBe(false);
+
+      let streamed = "";
+      while (!streamed.includes(`"running":false`)) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        streamed += new TextDecoder().decode(chunk.value);
+      }
+      expect(streamed).toContain(`{"sessionId":"${sessionId}","running":true}`);
+      expect(streamed).toContain(`{"sessionId":"${sessionId}","running":false}`);
+      await reader.cancel();
     });
 
     it("refuses a backend continuation on a side chat", async () => {
