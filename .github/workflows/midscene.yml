@@ -359,8 +359,8 @@ jobs:
         if: inputs.report_source_run_id != ''
         env:
           REPORT_SOURCE_RUN_ID: ${{ inputs.report_source_run_id }}
-        run: |
-          [[ "$REPORT_SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          GH_TOKEN: ${{ github.token }}
+        run: node tests/midscene/scripts/trusted-report-runs.mjs validate-source
 
       # Separate directories preserve reports whose generated filenames match
       # across serial shards.
@@ -500,13 +500,7 @@ jobs:
         if: steps.pages.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          artifact=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-            --jq '[.artifacts[] | select(.name | startswith("midscene-e2e-report-pages-")) | select(.expired == false)][0]')
-          if [ "$artifact" != "null" ]; then
-            echo "name=$(jq -r .name <<< "$artifact")" >> "$GITHUB_OUTPUT"
-            echo "run_id=$(jq -r .workflow_run.id <<< "$artifact")" >> "$GITHUB_OUTPUT"
-          fi
+        run: node tests/midscene/scripts/trusted-report-runs.mjs find-previous
 
       - name: Download the latest published report
         if: steps.pages.outcome == 'success' && steps.previous-report.outputs.run_id != ''
@@ -548,7 +542,7 @@ jobs:
 
   deploy-report:
     name: Publish Midscene HTML report
-    needs: [prepare-pages, report-summary, midscene]
+    needs: prepare-pages
     if: >-
       always() && !cancelled() &&
       needs.prepare-pages.outputs.pages-artifact-name != ''
@@ -558,10 +552,10 @@ jobs:
       group: midscene-pages-report
       cancel-in-progress: false
     permissions:
-      actions: read
-      contents: read
       pages: write
       id-token: write
+    outputs:
+      page-url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -572,11 +566,18 @@ jobs:
         with:
           artifact_name: ${{ needs.prepare-pages.outputs.pages-artifact-name }}
 
-      - name: Link published report
-        env:
-          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
-        run: echo "[Open the Midscene report](${PAGE_URL%/}/)" >> "$GITHUB_STEP_SUMMARY"
-
+  published-summary:
+    name: Link published Midscene reports and screenshots
+    needs: [deploy-report, report-summary, midscene]
+    if: >-
+      always() && !cancelled() && needs.deploy-report.result == 'success' &&
+      needs.deploy-report.outputs.page-url != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
@@ -592,11 +593,13 @@ jobs:
           name: ${{ needs.report-summary.outputs.report-artifact-name }}
           path: ${{ runner.temp }}/midscene-report-shards
 
-      - name: Add published case table to the run Summary
+      - name: Add published report links to the run Summary
         env:
-          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          PAGE_URL: ${{ needs.deploy-report.outputs.page-url }}
           PRODUCER_RESULT: ${{ inputs.report_source_run_id != '' && 'success' || needs.midscene.result }}
         run: |
+          echo "<details><summary>Published report links and screenshots</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
           node tests/midscene/scripts/render-ci-summary.mjs \
             --reports-dir "$RUNNER_TEMP/midscene-report-shards" \
             --expected-projects "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6" \
@@ -605,3 +608,4 @@ jobs:
             --pages-url "${PAGE_URL%/}/runs/$GITHUB_RUN_ID/" \
             --producer-result "$PRODUCER_RESULT" \
             --output "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"

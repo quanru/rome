@@ -113,7 +113,8 @@ HEADLESS=false npm test
 - Every model-backed run uploads each shard report and a combined
   `midscene-e2e-report` artifact, including failed runs. Each shard writes its
   own Markdown job Summary. Aggregation and Summary rendering work without Pages.
-  The run Summary shows failed, not-run, and incomplete-shard results first.
+  The report job Summary shows total, passed, failed, and not-run case counts.
+  It shows failed, not-run, and incomplete-shard results first.
   Passed cases appear in a collapsed appendix.
 - Midscene merges the six native Test reports into one report that lists every
   case. The combined artifact includes that report, available shard reports,
@@ -132,8 +133,11 @@ HEADLESS=false npm test
   downloadable artifact instead. Partial reports publish available shard
   reports without a broken combined-report link.
 - To rebuild a report without new model calls, manually dispatch the workflow
-  with `report_source_run_id` set to a run in the same repository whose shard
-  artifacts have not expired. On upstream, dispatch `main` to also publish.
+  with `report_source_run_id` set to a completed Midscene run whose shard
+  artifacts have not expired. Sources and retained Pages history must come
+  from the same repository: upstream `main` pushes or manual dispatches,
+  or a fork's manual dispatches. Pull-request artifacts are rejected.
+  On upstream, dispatch `main` to also publish.
 - Pull requests run secret-free harness and mock-browser boundary jobs. The
   model-backed shard matrix runs on the upstream `main` branch or by manual
   dispatch in a fork using that fork's model secrets.

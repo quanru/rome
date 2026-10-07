@@ -486,3 +486,36 @@ test("a complete report without Pages links only to its artifact", () => {
   assert.match(markdown, /Native Midscene Test report included/);
   assert.doesNotMatch(markdown, /Open the Midscene|unavailable|<img|runner-step|undefined/);
 });
+
+test("writes the six-shard Actions Summary without Pages, including every case outcome", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-no-pages-"));
+  context.after(() =>
+    import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
+  );
+  const statuses = ["success", "failed", "not-run", "success", "success", "success"];
+  for (const [index, status] of statuses.entries()) {
+    await writeShard(root, `shard-${index + 1}`, status, `CASE-0${index + 1}`, "visual-model");
+  }
+  const summaryFile = path.join(root, "GITHUB_STEP_SUMMARY");
+  await buildSummary({
+    "reports-dir": root,
+    "expected-projects": "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6",
+    "run-url": "https://example.test/actions/runs/1",
+    "producer-result": "failure",
+    output: summaryFile,
+  });
+  const markdown = await readFile(summaryFile, "utf8");
+  assert.match(markdown, /\*\*Cases:\*\* 6 total · 4 passed · 1 failed · 1 not run/);
+  assert.match(markdown, /2 need attention · 4 passed/);
+  assert.match(markdown, /web-shard-2 \| CASE-02 \| — \| ❌ Failed:/);
+  assert.match(markdown, /web-shard-3 \| CASE-03 \| — \| ⏭️ Not run:/);
+  assert.match(markdown, /Appendix: passed cases \(4\)/);
+  for (const shard of [1, 4, 5, 6]) {
+    assert.match(markdown, new RegExp(`web-shard-${shard} \\| CASE-0${shard} \\| — \\| ✅ Passed`));
+  }
+  assert.match(
+    markdown,
+    /\[Download the artifact\]\(https:\/\/example.test\/actions\/runs\/1#artifacts\)/,
+  );
+  assert.doesNotMatch(markdown, /<img|runner-step|Open the Midscene|undefined/);
+});

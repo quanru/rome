@@ -313,7 +313,8 @@ const totalsFor = (projects) => {
     project.cases.map((testCase) => ({ ...testCase, project: project.name })),
   );
   const passed = cases.filter((testCase) => testCase.status === "success").length;
-  return { cases, passed, failed: cases.length - passed, total: cases.length };
+  const notRun = cases.filter((testCase) => testCase.status === "not-run").length;
+  return { cases, passed, notRun, failed: cases.length - passed - notRun, total: cases.length };
 };
 
 const missingNativeReports = (projects) =>
@@ -403,6 +404,8 @@ export function renderMarkdown({
     `## Rome × Midscene · ${complete ? "passed" : "failure captured"}`,
     "",
     `**${complete ? "✅ " : ""}${needsAttention} need attention · ${passedCases.length} passed**`,
+    "",
+    `**Cases:** ${totals.total} total · ${totals.passed} passed · ${totals.failed} failed · ${totals.notRun} not run`,
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",

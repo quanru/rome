@@ -73,6 +73,10 @@ test("report aggregation does not depend on the publisher repository", () => {
   );
   assert.match(job("report-summary"), /include-hidden-files: true/);
   assert.match(
+    job("report-summary"),
+    /cat "\$RUNNER_TEMP\/midscene-summary.md" >> "\$GITHUB_STEP_SUMMARY"/,
+  );
+  assert.match(
     job("midscene"),
     /name: Add shard results to the job Summary\n        if: always\(\)/,
   );
@@ -117,4 +121,12 @@ test("missing Pages configuration cannot block aggregation or trigger deployment
     }),
     false,
   );
+});
+
+test("publication validates artifact sources and isolates the deployment token", () => {
+  assert.match(job("report-summary"), /trusted-report-runs.mjs validate-source/);
+  assert.match(job("prepare-pages"), /trusted-report-runs.mjs find-previous/);
+  assert.doesNotMatch(job("deploy-report"), /checkout|render-ci-summary|run:/);
+  assert.doesNotMatch(job("published-summary"), /pages: write|id-token: write/);
+  assert.match(job("published-summary"), /needs.deploy-report.result == 'success'/);
 });
