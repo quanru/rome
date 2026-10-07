@@ -129,8 +129,10 @@ HEADLESS=false npm test
   unavailable, publication is skipped with a warning and reports remain
   available through Actions.
 - After a successful Pages deployment, the publication job adds a Summary with
-  report links and screenshots. Without a deployment, Summaries link to the
-  downloadable artifact instead. Partial reports publish available shard
+  a visible Markdown link to the combined native Midscene Test report.
+  Case links and screenshot thumbnails sit in a collapsed section and open
+  their exact steps in the native shard reports. Without a deployment,
+  Summaries link to the downloadable artifact instead. Partial reports publish available shard
   reports without a broken combined-report link.
 - To rebuild a report without new model calls, manually dispatch the workflow
   with `report_source_run_id` set to a completed Midscene run whose shard

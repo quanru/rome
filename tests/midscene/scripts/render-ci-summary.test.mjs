@@ -5,7 +5,12 @@ import path from "node:path";
 import test from "node:test";
 
 import { mergeNativeReports } from "./merge-native-reports.mjs";
-import { buildSummary, caseSetIssues, renderMarkdown } from "./render-ci-summary.mjs";
+import {
+  buildSummary,
+  caseSetIssues,
+  renderMarkdown,
+  renderPublishedMarkdown,
+} from "./render-ci-summary.mjs";
 
 const writeShard = async (root, shard, status, caseName, modelName) => {
   const project = `web-${shard}`;
@@ -518,4 +523,65 @@ test("writes the six-shard Actions Summary without Pages, including every case o
     /\[Download the artifact\]\(https:\/\/example.test\/actions\/runs\/1#artifacts\)/,
   );
   assert.doesNotMatch(markdown, /<img|runner-step|Open the Midscene|undefined/);
+});
+
+test("published Summary exposes the combined native report before collapsed case deep links", () => {
+  const markdown = renderPublishedMarkdown({
+    projects: [
+      {
+        name: "web-shard-1",
+        status: "success",
+        reportPath: "shard/report/index.html",
+        cases: [
+          {
+            name: "CHAT-01",
+            status: "success",
+            reportPath: "shard/report/index.html",
+            screenshotPath: "shard/report/screenshots/one.jpeg",
+            stepId: "case-1:steps:4",
+          },
+        ],
+      },
+    ],
+    pagesUrl: "https://example.test/rome/runs/123/",
+    runUrl: "https://example.test/run",
+    publishedReportPath: "index.html",
+  });
+  assert.match(
+    markdown,
+    /\[Open the Midscene Test report\]\(https:\/\/example.test\/rome\/runs\/123\/index.html\)/,
+  );
+  assert.ok(markdown.indexOf("Open the Midscene Test report") < markdown.indexOf("<details>"));
+  assert.match(markdown, /index.html#runner-step=case-1%3Asteps%3A4/);
+  assert.match(
+    markdown,
+    /<img src="https:\/\/example.test\/rome\/runs\/123\/shard\/report\/screenshots\/one.jpeg"/,
+  );
+  assert.doesNotMatch(markdown, /need attention|Cases:|Appendix: passed/);
+});
+
+test("incomplete publication keeps shard links without claiming a combined native report", () => {
+  const markdown = renderPublishedMarkdown({
+    projects: [
+      {
+        name: "web-shard-1",
+        status: "failed",
+        reportPath: "shard/report/index.html",
+        cases: [
+          {
+            name: "CHAT-01",
+            status: "failed",
+            reportPath: "shard/report/index.html",
+            stepId: "step-1",
+          },
+        ],
+      },
+      { name: "web-shard-2", status: "missing", cases: [] },
+    ],
+    pagesUrl: "https://example.test/rome/runs/123/",
+    runUrl: "https://example.test/run",
+  });
+  assert.match(markdown, /combined report is incomplete/);
+  assert.match(markdown, /shard\/report\/index.html#runner-step=step-1/);
+  assert.doesNotMatch(markdown, /Open the Midscene Test report/);
 });

@@ -129,6 +129,8 @@ test("publication validates artifact sources and isolates the deployment token",
   assert.doesNotMatch(job("deploy-report"), /checkout|render-ci-summary|run:/);
   assert.doesNotMatch(job("published-summary"), /pages: write|id-token: write/);
   assert.match(job("published-summary"), /needs.deploy-report.result == 'success'/);
+  assert.match(job("published-summary"), /--published-links-only true/);
+  assert.doesNotMatch(job("published-summary"), /echo "<details>/);
 });
 
 test("report-only dispatch can generate the Summary without models or Pages", () => {

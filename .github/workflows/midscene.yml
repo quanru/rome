@@ -604,14 +604,12 @@ jobs:
           PAGE_URL: ${{ needs.deploy-report.outputs.page-url }}
           PRODUCER_RESULT: ${{ inputs.report_source_run_id != '' && 'success' || needs.midscene.result }}
         run: |
-          echo "<details><summary>Published report links and screenshots</summary>" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
           node tests/midscene/scripts/render-ci-summary.mjs \
             --reports-dir "$RUNNER_TEMP/midscene-report-shards" \
             --expected-projects "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6" \
             --case-manifest "tests/midscene/case-manifest.json" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --pages-url "${PAGE_URL%/}/runs/$GITHUB_RUN_ID/" \
+            --published-links-only true \
             --producer-result "$PRODUCER_RESULT" \
             --output "$GITHUB_STEP_SUMMARY"
-          echo "</details>" >> "$GITHUB_STEP_SUMMARY"

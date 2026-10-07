@@ -481,6 +481,42 @@ export function renderMarkdown({
   return sections.join("\n");
 }
 
+export function renderPublishedMarkdown({ projects, pagesUrl, runUrl, publishedReportPath }) {
+  if (!pagesUrl) throw new Error("Published report links require the deployed Pages URL");
+  const reportPath = publishedReportPath ?? (projects.length === 1 ? projects[0].reportPath : null);
+  const cases = totalsFor(projects).cases;
+  return [
+    "## Published Midscene reports",
+    "",
+    ...(reportPath
+      ? [`**[Open the Midscene Test report](${reportUrl(pagesUrl, reportPath)})**`]
+      : ["The combined report is incomplete. Open an available case report below."]),
+    "",
+    `[Download the artifact](${runUrl}#artifacts)`,
+    "",
+    "<details>",
+    "<summary>Case report links and screenshots</summary>",
+    "",
+    "| Shard | Case | Screenshot | Status | Duration |",
+    "|:--|:--|:--|:--|--:|",
+    ...cases.map((testCase) =>
+      caseRow(
+        pagesUrl,
+        testCase,
+        testCase.status === "success"
+          ? "✅ Passed"
+          : testCase.status === "not-run"
+            ? "⏭️ Not run"
+            : "❌ Failed",
+        Boolean(testCase.reportPath),
+      ),
+    ),
+    "",
+    "</details>",
+    "",
+  ].join("\n");
+}
+
 export async function buildSummary(options) {
   const reportsDirectory = path.resolve(options["reports-dir"]);
   const expectedProjects = (options["expected-projects"] ?? "")
@@ -504,7 +540,9 @@ export async function buildSummary(options) {
       () => (data.projects.length === 1 ? data.projects[0].reportPath : null),
     ),
   };
-  if (options.output) await appendFile(options.output, `${renderMarkdown(values)}\n`);
+  const render =
+    options["published-links-only"] === "true" ? renderPublishedMarkdown : renderMarkdown;
+  if (options.output) await appendFile(options.output, `${render(values)}\n`);
   return values;
 }
 
