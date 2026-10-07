@@ -21,6 +21,7 @@ const trusted = (run, repository) => isTrustedReportRun(run, repository, compare
 
 test("report sources reject PR artifacts, other workflows, and untrusted refs", async () => {
   assert.equal(await trusted(upstream, "rome-os/rome"), true);
+  assert.equal(await trusted({ ...upstream, event: "schedule" }, "rome-os/rome"), true);
   assert.equal(await trusted({ ...upstream, event: "workflow_dispatch" }, "rome-os/rome"), true);
   for (const change of [
     { event: "pull_request" },
@@ -116,5 +117,36 @@ test("history searches beyond the first page of unrelated repository artifacts",
       compareToMain,
     ),
     null,
+  );
+});
+
+
+test("history rejects unavailable candidates without losing later trusted history", async () => {
+  const artifacts = [1, 2, 3].map((id) => ({
+    name: `midscene-e2e-report-pages-${id}`,
+    workflow_run: { id },
+  }));
+  const selected = await findPreviousReport(
+    artifacts,
+    "rome-os/rome",
+    async (id) => {
+      if (id === 1) throw new Error("HTTP 500");
+      return { ...upstream, head_sha: String(id).repeat(40) };
+    },
+    "4",
+    async (sha) => {
+      if (sha === "2".repeat(40)) throw new Error("HTTP 404");
+      return { status: "ahead" };
+    },
+  );
+  assert.equal(selected, artifacts[2]);
+});
+
+test("explicit source validation propagates a failed trust lookup", async () => {
+  await assert.rejects(
+    isTrustedReportRun(upstream, "rome-os/rome", async () => {
+      throw new Error("HTTP 404");
+    }),
+    /HTTP 404/,
   );
 });

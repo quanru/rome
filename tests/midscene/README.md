@@ -137,11 +137,11 @@ HEADLESS=false npm test
 - To rebuild a report without new model calls, manually dispatch the workflow
   with `report_source_run_id` set to a completed Midscene run whose shard
   artifacts have not expired. Sources and retained Pages history must come
-  from the same repository: upstream `main` pushes or manual dispatches,
+  from the same repository: upstream `main` scheduled runs, pushes, or manual dispatches,
   or a fork's manual dispatches. Pull-request artifacts are rejected.
   On upstream, dispatch `main` to also publish. Set the dispatch input
   `publish_pages` to `false` to verify the report job and its Actions Summary
-  without a Pages deployment. This does not affect automatic upstream pushes.
+  without a Pages deployment. Scheduled upstream runs also publish when Pages is available.
 - Pull requests run secret-free harness and mock-browser boundary jobs. The
   model-backed shard matrix runs on the upstream `main` branch or by manual
   dispatch in a fork using that fork's model secrets.
@@ -163,9 +163,8 @@ Manual `workflow_dispatch` runs the full suite on upstream `main`.
 A fork owner may manually dispatch a fork branch using that fork's model
 secrets. Set the optional `report_source_run_id` input to an existing run ID
 to rebuild its reports from shard artifacts without new model calls.
-Report publishing still requires the repository to match
-`MIDSCENE_PUBLISH_REPO`.
-
+Pages publication is enabled upstream. Fork publication requires an exact
+`MIDSCENE_PUBLISH_REPO` match.
 
 ## Authoring Conventions
 

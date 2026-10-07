@@ -11,7 +11,7 @@ export async function isTrustedReportRun(run, repository, compareToMain) {
   if (repository !== "rome-os/rome") return run.event === "workflow_dispatch";
   if (
     run.head_branch !== "main" ||
-    !["push", "workflow_dispatch"].includes(run.event) ||
+    !["schedule", "push", "workflow_dispatch"].includes(run.event) ||
     !/^[a-f0-9]{40}$/.test(run.head_sha ?? "")
   )
     return false;
@@ -31,7 +31,11 @@ export async function findPreviousReport(
     if (artifact.expired || !/^midscene-e2e-report-pages-\d+$/.test(artifact.name)) continue;
     const runId = artifact.workflow_run?.id;
     if (!runId || String(runId) === String(currentRunId)) continue;
-    if (await isTrustedReportRun(await getRun(runId), repository, compareToMain)) return artifact;
+    try {
+      if (await isTrustedReportRun(await getRun(runId), repository, compareToMain)) return artifact;
+    } catch (error) {
+      process.stderr.write(`Skipping report history run ${runId}: ${error.message}\n`);
+    }
   }
   return null;
 }

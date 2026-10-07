@@ -574,7 +574,7 @@ jobs:
 
   published-summary:
     name: Link published Midscene reports and screenshots
-    needs: [deploy-report, report-summary, midscene]
+    needs: [deploy-report, report-summary]
     if: >-
       always() && !cancelled() && needs.deploy-report.result == 'success' &&
       needs.deploy-report.outputs.page-url != ''
@@ -602,14 +602,11 @@ jobs:
       - name: Add published report links to the run Summary
         env:
           PAGE_URL: ${{ needs.deploy-report.outputs.page-url }}
-          PRODUCER_RESULT: ${{ inputs.report_source_run_id != '' && 'success' || needs.midscene.result }}
         run: |
           node tests/midscene/scripts/render-ci-summary.mjs \
             --reports-dir "$RUNNER_TEMP/midscene-report-shards" \
             --expected-projects "web-shard-1,web-shard-2,web-shard-3,web-shard-4,web-shard-5,web-shard-6" \
-            --case-manifest "tests/midscene/case-manifest.json" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --pages-url "${PAGE_URL%/}/runs/$GITHUB_RUN_ID/" \
             --published-links-only true \
-            --producer-result "$PRODUCER_RESULT" \
             --output "$GITHUB_STEP_SUMMARY"
