@@ -110,16 +110,33 @@ HEADLESS=false npm test
   `.midscene/test-results/<runId>/summary.json` (includes collection-error
   details)
 - Both are covered by `.gitignore`.
-- Every model-backed run uploads each shard report, including failed runs.
-  Repositories with `MIDSCENE_PUBLISH_REPO` set to their full name also upload a
-  combined `midscene-e2e-report` artifact. Each visual shard writes its own Markdown job
-  Summary. The run Summary shows failed, not-run, and incomplete-shard results
-  first; passed cases and their screenshots appear in a collapsed appendix.
-  Midscene merges the six native Test reports into one report that lists every
-  case. The configured repository publishes that report through GitHub Pages,
-  so report links and images work from the Actions Summary. If the merge is
-  incomplete, it still publishes the available shard reports without a broken
-  combined-report link.
+- Every model-backed run uploads each shard report and a combined
+  `midscene-e2e-report` artifact, including failed runs. Each shard writes its
+  own Markdown job Summary. Aggregation and Summary rendering work without Pages.
+  The run Summary shows failed, not-run, and incomplete-shard results first.
+  Passed cases appear in a collapsed appendix.
+- Midscene merges the six native Test reports into one report that lists every
+  case. The combined artifact includes that report, available shard reports,
+  screenshots, and machine-readable results. An incomplete merge still saves
+  available diagnostics and fails the aggregation job.
+- Pages publication is enabled for `rome-os/rome` on `main`. A fork can opt in
+  by setting the Actions variable `MIDSCENE_PUBLISH_REPO` to its exact full
+  repository name, then using manual dispatch. Pull requests never publish.
+  A maintainer must select **Settings → Pages → Build and deployment → Source →
+  GitHub Actions** in the publishing repository. The workflow does not enable
+  or change the repository's Pages settings. If Pages configuration is
+  unavailable, publication is skipped with a warning and reports remain
+  available through Actions.
+- After a successful Pages deployment, the publication job adds a Summary with
+  report links and screenshots. Without a deployment, Summaries link to the
+  downloadable artifact instead. Partial reports publish available shard
+  reports without a broken combined-report link.
+- To rebuild a report without new model calls, manually dispatch the workflow
+  with `report_source_run_id` set to a run in the same repository whose shard
+  artifacts have not expired. On upstream, dispatch `main` to also publish.
+- Pull requests run secret-free harness and mock-browser boundary jobs. The
+  model-backed shard matrix runs on the upstream `main` branch or by manual
+  dispatch in a fork using that fork's model secrets.
 
 ## GitHub Actions
 
@@ -140,6 +157,7 @@ secrets. Set the optional `report_source_run_id` input to an existing run ID
 to rebuild its reports from shard artifacts without new model calls.
 Report publishing still requires the repository to match
 `MIDSCENE_PUBLISH_REPO`.
+
 
 ## Authoring Conventions
 

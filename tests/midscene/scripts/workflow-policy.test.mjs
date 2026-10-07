@@ -1,0 +1,120 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const workflow = await readFile(
+  new URL("../../../.github/workflows/midscene.yml", import.meta.url),
+  "utf8",
+);
+const job = (name) => {
+  const start = workflow.indexOf(`\n  ${name}:\n`);
+  assert.notEqual(start, -1);
+  const end = workflow.slice(start + 1).search(/\n  [\w-]+:\n/);
+  return workflow.slice(start, end < 0 ? undefined : start + 1 + end);
+};
+const runs = (name, overrides = {}) => {
+  const condition = job(name).match(/^    if: >-\n((?:      .+\n)+)/m)?.[1];
+  assert.ok(condition, `${name} must have an explicit job gate`);
+  const context = {
+    github: { repository: "rome-os/rome", ref: "refs/heads/main", event_name: "push" },
+    inputs: { report_source_run_id: "" },
+    vars: { MIDSCENE_PUBLISH_REPO: "" },
+    needs: {
+      midscene: { result: "success" },
+      "report-summary": { outputs: { "report-artifact-name": "midscene-e2e-report" } },
+    },
+    ...overrides,
+  };
+  // Evaluate the workflow's actual gate so a policy edit changes these cases.
+  const expression = condition
+    .replace(/needs\.([\w-]+)\./g, 'needs["$1"].')
+    .replace(/outputs\.([\w-]+)/g, 'outputs["$1"]');
+  return Function(
+    "github",
+    "inputs",
+    "vars",
+    "needs",
+    "always",
+    "cancelled",
+    `return (${expression});`,
+  )(
+    context.github,
+    context.inputs,
+    context.vars,
+    context.needs,
+    () => true,
+    () => false,
+  );
+};
+
+test("report aggregation does not depend on the publisher repository", () => {
+  for (const repository of ["rome-os/rome", "example/rome"]) {
+    for (const result of ["success", "failure"]) {
+      assert.equal(
+        runs("report-summary", {
+          github: { repository, ref: "refs/heads/main", event_name: "workflow_dispatch" },
+          needs: { midscene: { result } },
+        }),
+        true,
+      );
+    }
+  }
+  assert.equal(runs("report-summary", { needs: { midscene: { result: "skipped" } } }), false);
+  assert.equal(
+    runs("report-summary", {
+      needs: { midscene: { result: "skipped" } },
+      inputs: { report_source_run_id: "123" },
+    }),
+    true,
+  );
+  assert.doesNotMatch(
+    job("report-summary"),
+    /configure-pages|pages: write|--pages-url|MIDSCENE_PUBLISH_REPO/,
+  );
+  assert.match(job("report-summary"), /include-hidden-files: true/);
+  assert.match(
+    job("midscene"),
+    /name: Add shard results to the job Summary\n        if: always\(\)/,
+  );
+});
+
+test("Pages defaults to upstream main and requires explicit fork opt-in", () => {
+  assert.equal(runs("prepare-pages"), true);
+  assert.equal(runs("prepare-pages", { vars: { MIDSCENE_PUBLISH_REPO: "other/rome" } }), true);
+  for (const event_name of ["push", "workflow_dispatch", "pull_request"]) {
+    for (const repository of ["rome-os/rome", "example/rome"]) {
+      for (const ref of ["refs/heads/main", "refs/heads/feature", "refs/pull/1/merge"]) {
+        for (const publisher of ["", repository, "other/rome"]) {
+          const expected =
+            event_name !== "pull_request" &&
+            (repository === "rome-os/rome"
+              ? ref === "refs/heads/main"
+              : publisher === repository && event_name === "workflow_dispatch");
+          assert.equal(
+            runs("prepare-pages", {
+              github: { repository, ref, event_name },
+              vars: { MIDSCENE_PUBLISH_REPO: publisher },
+            }),
+            expected,
+            `${repository} ${event_name} ${ref} ${publisher}`,
+          );
+        }
+      }
+    }
+  }
+});
+
+test("missing Pages configuration cannot block aggregation or trigger deployment", () => {
+  const publication = job("prepare-pages");
+  assert.match(publication, /id: pages\n        continue-on-error: true/);
+  assert.match(publication, /enablement: false/);
+  assert.match(publication, /id: upload-pages\n        if: steps.pages.outcome == 'success'/);
+  assert.match(publication, /steps.upload-pages.outcome == 'success'/);
+  assert.match(job("deploy-report"), /needs.prepare-pages.outputs.pages-artifact-name != ''/);
+  assert.equal(
+    runs("prepare-pages", {
+      needs: { "report-summary": { outputs: { "report-artifact-name": "" } } },
+    }),
+    false,
+  );
+});

@@ -458,3 +458,31 @@ test("buildSummary checks the committed case manifest", async (context) => {
   assert.deepEqual(data.caseInventoryIssues, ["Missing case: CHAT-02 (shard-1)"]);
   assert.match(await readFile(output, "utf8"), /failure captured/);
 });
+
+test("a complete report without Pages links only to its artifact", () => {
+  const markdown = renderMarkdown({
+    projects: [
+      {
+        name: "web-shard-1",
+        status: "success",
+        reportPath: "midscene-shard-1/report/index.html",
+        cases: [
+          {
+            name: "CHAT-01",
+            status: "success",
+            reportPath: "report/index.html",
+            screenshotPath: "screenshots/one.jpeg",
+            stepId: "step-1",
+          },
+        ],
+      },
+    ],
+    models: [],
+    runUrl: "https://example.test/run",
+    publishedReportPath: "index.html",
+  });
+  assert.match(markdown, /Rome × Midscene · passed/);
+  assert.match(markdown, /Download the artifact.*https:\/\/example.test\/run#artifacts/);
+  assert.match(markdown, /Native Midscene Test report included/);
+  assert.doesNotMatch(markdown, /Open the Midscene|unavailable|<img|runner-step|undefined/);
+});

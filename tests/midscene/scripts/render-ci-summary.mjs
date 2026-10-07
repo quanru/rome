@@ -406,9 +406,9 @@ export function renderMarkdown({
     "",
     `**Models:** ${models.length ? models.map(markdownCell).join(", ") : "not recorded"}`,
     "",
-    reportAvailable
+    reportAvailable && pagesUrl
       ? `**[Open the Midscene Test report](${reportUrl(pagesUrl, reportPath)})** · [Download the artifact](${runUrl}#artifacts)`
-      : `[Download the artifact](${runUrl}#artifacts) · Native Midscene Test report unavailable`,
+      : `[Download the artifact](${runUrl}#artifacts) · ${reportAvailable ? "Native Midscene Test report included" : "Native Midscene Test report unavailable"}`,
     "",
   ];
 
