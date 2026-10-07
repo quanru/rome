@@ -120,7 +120,6 @@ test("history searches beyond the first page of unrelated repository artifacts",
   );
 });
 
-
 test("history rejects unavailable candidates without losing later trusted history", async () => {
   const artifacts = [1, 2, 3].map((id) => ({
     name: `midscene-e2e-report-pages-${id}`,
