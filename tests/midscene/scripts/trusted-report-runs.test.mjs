@@ -9,14 +9,15 @@ const upstream = {
   status: "completed",
   head_branch: "main",
   event: "push",
+  head_sha: "a".repeat(40),
 };
 
-test("report sources reject PR artifacts, other workflows, and untrusted refs", () => {
-  assert.equal(isTrustedReportRun(upstream, "rome-os/rome"), true);
-  assert.equal(
-    isTrustedReportRun({ ...upstream, event: "workflow_dispatch" }, "rome-os/rome"),
-    true,
-  );
+const compareToMain = async () => ({ status: "ahead" });
+const trusted = (run, repository) => isTrustedReportRun(run, repository, compareToMain);
+
+test("report sources reject PR artifacts, other workflows, and untrusted refs", async () => {
+  assert.equal(await trusted(upstream, "rome-os/rome"), true);
+  assert.equal(await trusted({ ...upstream, event: "workflow_dispatch" }, "rome-os/rome"), true);
   for (const change of [
     { event: "pull_request" },
     { event: "pull_request_target" },
@@ -27,10 +28,10 @@ test("report sources reject PR artifacts, other workflows, and untrusted refs", 
     { path: ".github/workflows/other.yml" },
     { status: "in_progress" },
   ])
-    assert.equal(isTrustedReportRun({ ...upstream, ...change }, "rome-os/rome"), false);
+    assert.equal(await trusted({ ...upstream, ...change }, "rome-os/rome"), false);
 });
 
-test("fork reports require a same-repository manual dispatch", () => {
+test("fork reports require a same-repository manual dispatch", async () => {
   const fork = {
     ...upstream,
     repository: { full_name: "example/rome" },
@@ -38,9 +39,9 @@ test("fork reports require a same-repository manual dispatch", () => {
     event: "workflow_dispatch",
     head_branch: "feature",
   };
-  assert.equal(isTrustedReportRun(fork, "example/rome"), true);
-  assert.equal(isTrustedReportRun({ ...fork, event: "pull_request" }, "example/rome"), false);
-  assert.equal(isTrustedReportRun({ ...fork, event: "push" }, "example/rome"), false);
+  assert.equal(await trusted(fork, "example/rome"), true);
+  assert.equal(await trusted({ ...fork, event: "pull_request" }, "example/rome"), false);
+  assert.equal(await trusted({ ...fork, event: "push" }, "example/rome"), false);
 });
 
 test("history skips attacker-named artifacts and uses the latest trusted run", async () => {
@@ -53,6 +54,7 @@ test("history skips attacker-named artifacts and uses the latest trusted run", a
     "rome-os/rome",
     async (id) => (id === 1 ? { ...upstream, event: "pull_request" } : upstream),
     "3",
+    compareToMain,
   );
   assert.equal(selected, artifacts[1]);
   assert.equal(
@@ -61,7 +63,25 @@ test("history skips attacker-named artifacts and uses the latest trusted run", a
       "rome-os/rome",
       async () => ({ ...upstream, event: "pull_request" }),
       "3",
+      compareToMain,
     ),
     null,
+  );
+});
+
+test("an upstream tag named main must still point to a protected-main commit", async () => {
+  for (const status of ["behind", "diverged"]) {
+    assert.equal(
+      await isTrustedReportRun(
+        { ...upstream, event: "workflow_dispatch" },
+        "rome-os/rome",
+        async () => ({ status }),
+      ),
+      false,
+    );
+  }
+  assert.equal(
+    await isTrustedReportRun(upstream, "rome-os/rome", async () => ({ status: "identical" })),
+    true,
   );
 });

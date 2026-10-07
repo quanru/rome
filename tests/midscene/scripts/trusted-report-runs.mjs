@@ -1,6 +1,6 @@
 import { appendFile } from "node:fs/promises";
 
-export function isTrustedReportRun(run, repository) {
+export async function isTrustedReportRun(run, repository, compareToMain) {
   if (
     run.repository?.full_name !== repository ||
     run.head_repository?.full_name !== repository ||
@@ -8,17 +8,30 @@ export function isTrustedReportRun(run, repository) {
     run.status !== "completed"
   )
     return false;
-  return repository === "rome-os/rome"
-    ? run.head_branch === "main" && ["push", "workflow_dispatch"].includes(run.event)
-    : run.event === "workflow_dispatch";
+  if (repository !== "rome-os/rome") return run.event === "workflow_dispatch";
+  if (
+    run.head_branch !== "main" ||
+    !["push", "workflow_dispatch"].includes(run.event) ||
+    !/^[a-f0-9]{40}$/.test(run.head_sha ?? "")
+  )
+    return false;
+  // Dispatch metadata can also name a tag "main". Require commit ancestry.
+  const comparison = await compareToMain(run.head_sha);
+  return ["ahead", "identical"].includes(comparison.status);
 }
 
-export async function findPreviousReport(artifacts, repository, getRun, currentRunId) {
+export async function findPreviousReport(
+  artifacts,
+  repository,
+  getRun,
+  currentRunId,
+  compareToMain,
+) {
   for (const artifact of artifacts) {
     if (artifact.expired || !/^midscene-e2e-report-pages-\d+$/.test(artifact.name)) continue;
     const runId = artifact.workflow_run?.id;
     if (!runId || String(runId) === String(currentRunId)) continue;
-    if (isTrustedReportRun(await getRun(runId), repository)) return artifact;
+    if (await isTrustedReportRun(await getRun(runId), repository, compareToMain)) return artifact;
   }
   return null;
 }
@@ -36,10 +49,15 @@ async function main(mode) {
     return response.json();
   };
   const getRun = (id) => get(`actions/runs/${id}`);
+  let mainSha;
+  const compareToMain = async (sha) => {
+    mainSha ??= (await get("branches/main")).commit.sha;
+    return get(`compare/${sha}...${mainSha}`);
+  };
   if (mode === "validate-source") {
     const runId = process.env.REPORT_SOURCE_RUN_ID;
     if (!/^\d+$/.test(runId ?? "")) throw new Error("Report source run ID must be numeric");
-    if (!isTrustedReportRun(await getRun(runId), repository)) {
+    if (!(await isTrustedReportRun(await getRun(runId), repository, compareToMain))) {
       throw new Error(
         "Report source must be a completed, same-repository Midscene run from a trusted event/ref",
       );
@@ -51,6 +69,7 @@ async function main(mode) {
       repository,
       getRun,
       process.env.GITHUB_RUN_ID,
+      compareToMain,
     );
     if (artifact) {
       await appendFile(
