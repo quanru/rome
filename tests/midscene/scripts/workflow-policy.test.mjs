@@ -17,7 +17,7 @@ const runs = (name, overrides = {}) => {
   assert.ok(condition, `${name} must have an explicit job gate`);
   const context = {
     github: { repository: "rome-os/rome", ref: "refs/heads/main", event_name: "push" },
-    inputs: { report_source_run_id: "" },
+    inputs: { report_source_run_id: "", publish_pages: true },
     vars: { MIDSCENE_PUBLISH_REPO: "" },
     needs: {
       midscene: { result: "success" },
@@ -129,4 +129,19 @@ test("publication validates artifact sources and isolates the deployment token",
   assert.doesNotMatch(job("deploy-report"), /checkout|render-ci-summary|run:/);
   assert.doesNotMatch(job("published-summary"), /pages: write|id-token: write/);
   assert.match(job("published-summary"), /needs.deploy-report.result == 'success'/);
+});
+
+test("report-only dispatch can generate the Summary without models or Pages", () => {
+  const context = {
+    github: {
+      repository: "example/rome",
+      ref: "refs/heads/feature",
+      event_name: "workflow_dispatch",
+    },
+    inputs: { report_source_run_id: "123", publish_pages: false },
+    vars: { MIDSCENE_PUBLISH_REPO: "example/rome" },
+  };
+  assert.equal(runs("midscene", context), false);
+  assert.equal(runs("report-summary", context), true);
+  assert.equal(runs("prepare-pages", context), false);
 });

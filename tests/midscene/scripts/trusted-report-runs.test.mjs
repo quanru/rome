@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findPreviousReport, isTrustedReportRun } from "./trusted-report-runs.mjs";
+import {
+  findPreviousReport,
+  findReportHistory,
+  isTrustedReportRun,
+} from "./trusted-report-runs.mjs";
 
 const upstream = {
   repository: { full_name: "rome-os/rome" },
@@ -83,5 +87,34 @@ test("an upstream tag named main must still point to a protected-main commit", a
   assert.equal(
     await isTrustedReportRun(upstream, "rome-os/rome", async () => ({ status: "identical" })),
     true,
+  );
+});
+
+test("history searches beyond the first page of unrelated repository artifacts", async () => {
+  const pages = [];
+  const trustedArtifact = { name: "midscene-e2e-report-pages-1", workflow_run: { id: 1 } };
+  const selected = await findReportHistory(
+    async (page) => {
+      pages.push(page);
+      return page === 1
+        ? Array.from({ length: 100 }, () => ({ name: "unrelated" }))
+        : [trustedArtifact];
+    },
+    "rome-os/rome",
+    async () => upstream,
+    "3",
+    compareToMain,
+  );
+  assert.equal(selected, trustedArtifact);
+  assert.deepEqual(pages, [1, 2]);
+  assert.equal(
+    await findReportHistory(
+      async () => [],
+      "rome-os/rome",
+      async () => upstream,
+      "3",
+      compareToMain,
+    ),
+    null,
   );
 });

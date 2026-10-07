@@ -137,7 +137,9 @@ HEADLESS=false npm test
   artifacts have not expired. Sources and retained Pages history must come
   from the same repository: upstream `main` pushes or manual dispatches,
   or a fork's manual dispatches. Pull-request artifacts are rejected.
-  On upstream, dispatch `main` to also publish.
+  On upstream, dispatch `main` to also publish. Set the dispatch input
+  `publish_pages` to `false` to verify the report job and its Actions Summary
+  without a Pages deployment. This does not affect automatic upstream pushes.
 - Pull requests run secret-free harness and mock-browser boundary jobs. The
   model-backed shard matrix runs on the upstream `main` branch or by manual
   dispatch in a fork using that fork's model secrets.

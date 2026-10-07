@@ -36,6 +36,26 @@ export async function findPreviousReport(
   return null;
 }
 
+export async function findReportHistory(
+  getArtifacts,
+  repository,
+  getRun,
+  currentRunId,
+  compareToMain,
+) {
+  for (let page = 1; ; page += 1) {
+    const artifacts = await getArtifacts(page);
+    const artifact = await findPreviousReport(
+      artifacts,
+      repository,
+      getRun,
+      currentRunId,
+      compareToMain,
+    );
+    if (artifact || artifacts.length < 100) return artifact;
+  }
+}
+
 async function main(mode) {
   const repository = process.env.GITHUB_REPOSITORY;
   const get = async (resource) => {
@@ -63,9 +83,8 @@ async function main(mode) {
       );
     }
   } else if (mode === "find-previous") {
-    const { artifacts } = await get("actions/artifacts?per_page=100");
-    const artifact = await findPreviousReport(
-      artifacts,
+    const artifact = await findReportHistory(
+      async (page) => (await get(`actions/artifacts?per_page=100&page=${page}`)).artifacts,
       repository,
       getRun,
       process.env.GITHUB_RUN_ID,

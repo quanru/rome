@@ -24,6 +24,11 @@ on:
         description: Rebuild the Summary from an existing run's shard artifacts without model calls
         required: false
         type: string
+      publish_pages:
+        description: Publish reports to Pages when this repository is enabled
+        required: false
+        type: boolean
+        default: true
 
 # Credential trust model:
 # The four MIDSCENE_MODEL_* secrets are billable, and a pull_request job runs
@@ -454,6 +459,7 @@ jobs:
     # Upstream is enabled in code; each fork must opt in by its exact full name.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || inputs.publish_pages) &&
       (github.repository == 'rome-os/rome' && github.ref == 'refs/heads/main' ||
       github.repository != 'rome-os/rome' && github.repository == vars.MIDSCENE_PUBLISH_REPO && github.event_name == 'workflow_dispatch') &&
       needs.report-summary.outputs.report-artifact-name != ''
