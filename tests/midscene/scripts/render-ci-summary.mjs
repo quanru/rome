@@ -437,6 +437,19 @@ export function renderMarkdown({
       "",
     );
   }
+  if (!pagesUrl) {
+    sections.push(
+      complete
+        ? `🎉 All ${passedCases.length} cases passed.`
+        : needsAttention
+          ? "⚠️ Tests or report generation need attention. See the job logs and artifacts for details."
+          : "No cases were reported.",
+      "",
+      "The published Summary shows case tables with clickable screenshots after Pages deployment succeeds. If publication is skipped or fails, use the artifact downloads above.",
+      "",
+    );
+    return sections.join("\n");
+  }
   sections.push(
     "### Shard results",
     "",

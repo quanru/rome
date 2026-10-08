@@ -487,10 +487,13 @@ test("a complete report without Pages links only to its artifact", () => {
   assert.match(markdown, /Rome × Midscene · passed/);
   assert.match(markdown, /Download the artifact.*https:\/\/example.test\/run#artifacts/);
   assert.match(markdown, /Native Midscene Test report included/);
-  assert.doesNotMatch(markdown, /Open the Midscene|unavailable|<img|runner-step|undefined/);
+  assert.doesNotMatch(
+    markdown,
+    /Open the Midscene|unavailable|<img|runner-step|undefined|\| Shard \||<details>|Appendix:/,
+  );
 });
 
-test("writes the six-shard Actions Summary without Pages, including every case outcome", async (context) => {
+test("writes counts and downloads without duplicate case tables before publication", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "rome-midscene-no-pages-"));
   context.after(() =>
     import("node:fs/promises").then(({ rm }) => rm(root, { recursive: true, force: true })),
@@ -510,12 +513,7 @@ test("writes the six-shard Actions Summary without Pages, including every case o
   const markdown = await readFile(summaryFile, "utf8");
   assert.match(markdown, /\*\*Cases:\*\* 6 total · 4 passed · 1 failed · 1 not run/);
   assert.match(markdown, /2 need attention · 4 passed/);
-  assert.match(markdown, /web-shard-2 \| CASE-02 \| — \| ❌ Failed:/);
-  assert.match(markdown, /web-shard-3 \| CASE-03 \| — \| ⏭️ Not run:/);
-  assert.match(markdown, /Appendix: passed cases \(4\)/);
-  for (const shard of [1, 4, 5, 6]) {
-    assert.match(markdown, new RegExp(`web-shard-${shard} \\| CASE-0${shard} \\| — \\| ✅ Passed`));
-  }
+  assert.doesNotMatch(markdown, /\| Shard \||<details>|Appendix:|CASE-0/);
   assert.match(
     markdown,
     /\[Download the artifact\]\(https:\/\/example.test\/actions\/runs\/1#artifacts\)/,
@@ -650,18 +648,18 @@ for (const scenario of [
     const markdown = await readFile(path.join(root, "visible-summary.md"), "utf8");
     assert.equal(markdown.match(/^## /gm).length, 1);
     assert.match(markdown, /Cases:\*\* 6 total · 4 passed · 1 failed · 1 not run/);
-    assert.match(markdown, /### Shard results/);
-    assert.match(markdown, /web-shard-2 \| failed \| 1 \| 0 \| 1 \| 0/);
-    assert.match(markdown, /web-shard-3 \| not-run \| 1 \| 0 \| 0 \| 1/);
     assert.match(
       markdown,
       /Report source: \[run 123\]\(https:\/\/github.com\/example\/rome\/actions\/runs\/123\). This run makes no new model calls/,
     );
     assert.match(markdown, /Source-run artifacts.*runs\/123#artifacts/);
     assert.match(markdown, /Download the artifact.*runs\/456#artifacts/);
-    for (let index = 1; index <= 6; index += 1)
-      assert.match(markdown, new RegExp(`CASE-0${index}`));
     if (scenario.pagesUrl) {
+      assert.match(markdown, /### Shard results/);
+      assert.match(markdown, /web-shard-2 \| failed \| 1 \| 0 \| 1 \| 0/);
+      assert.match(markdown, /web-shard-3 \| not-run \| 1 \| 0 \| 0 \| 1/);
+      for (let index = 1; index <= 6; index += 1)
+        assert.match(markdown, new RegExp(`CASE-0${index}`));
       assert.match(
         markdown,
         /Open the Midscene Test report.*https:\/\/example.test\/rome\/runs\/456\/index.html/,
@@ -670,7 +668,10 @@ for (const scenario of [
       assert.match(markdown, /<img src="https:\/\/example.test\/rome\/runs\/456\//);
     } else {
       assert.ok(markdown.includes(`Pages publication: **${scenario.publication}**`));
-      assert.doesNotMatch(markdown, /Open the Midscene Test report|<img|runner-step|undefined/);
+      assert.doesNotMatch(
+        markdown,
+        /Open the Midscene Test report|<img|runner-step|undefined|\| Shard \||<details>|Appendix:|CASE-0/,
+      );
     }
     if (scenario.report) assert.match(markdown, /Report aggregation: \*\*failure\*\*/);
   });

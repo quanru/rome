@@ -113,11 +113,12 @@ HEADLESS=false npm test
 - Every model-backed run uploads each shard report and a combined
   `midscene-e2e-report` artifact, including failed runs. A read-only job writes
   results immediately after aggregation, without waiting for Pages approval or deployment.
-  The Summary shows total, passed, failed, and not-run counts, a shard results
-  table, and every case. Failed, not-run, and incomplete-shard results appear
-  first. Passed cases appear in a collapsed appendix. Shards and publication
-  jobs do not write separate Summaries. A second read-only job adds publication
-  status and verified report links after Pages finishes. The first Summary remains
+  This Summary shows total, passed, failed, and not-run counts with artifact
+  downloads, without case tables or empty screenshot columns. A second read-only
+  job adds publication status after Pages finishes. Only a successful deployment
+  adds the complete case tables with verified report links and screenshots.
+  Failed, not-run, and incomplete-shard results appear first. Passed cases appear
+  in a collapsed appendix. The first Summary remains
   available if publication waits for approval or the run is cancelled during that wait.
 - Midscene merges the six native Test reports into one report that lists every
   case. The combined artifact includes that report, available shard reports,
@@ -134,7 +135,7 @@ HEADLESS=false npm test
 - After a successful Pages deployment, the same Summary includes a visible
   Markdown link to the combined native Midscene Test report. Case names and
   screenshot thumbnails open their exact steps in the native shard reports.
-  If Pages fails or is skipped, the Summary still shows results and artifact
+  If Pages fails or is skipped, the Summary shows result counts and artifact
   links. If aggregation fails, the final job recovers available shard data and
   reports missing results. Report-only recovery validates the source run before
   downloading its artifacts. Partial reports keep available shard links without
