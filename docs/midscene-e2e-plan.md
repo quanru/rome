@@ -185,11 +185,11 @@ reasons behind them.
   Every case carries exactly one `shard-N` tag. `fail-fast: false`,
   `max-parallel: 1`, a 45-minute per-job timeout, and 2 case-level retries.
 - **Evidence**: every model-backed run uploads the `midscene_run/` and
-  `.midscene/` shard artifacts, including failed runs. One final read-only job
-  writes the run Summary after aggregation and optional Pages publication.
+  `.midscene/` shard artifacts, including failed runs. A read-only job writes
+  results after aggregation without waiting for Pages approval or deployment.
   It shows total and per-shard counts, abnormal cases first, and passed cases
-  in a collapsed appendix. A successful Pages deployment adds the native report
-  link and each case's screenshot and exact report-step link to that Summary.
+  in a collapsed appendix. After Pages completes, a second Summary adds publication
+  status and the native report, screenshot, and exact report-step links when available.
   If Pages fails or is skipped, results and artifact links remain available.
   If aggregation fails, the final job recovers available trusted shard data.
   Shard and publication jobs do not write separate Summaries.

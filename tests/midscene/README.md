@@ -111,12 +111,14 @@ HEADLESS=false npm test
   details)
 - Both are covered by `.gitignore`.
 - Every model-backed run uploads each shard report and a combined
-  `midscene-e2e-report` artifact, including failed runs. One final read-only job
-  writes the run Summary after aggregation and optional Pages publication finish.
+  `midscene-e2e-report` artifact, including failed runs. A read-only job writes
+  results immediately after aggregation, without waiting for Pages approval or deployment.
   The Summary shows total, passed, failed, and not-run counts, a shard results
   table, and every case. Failed, not-run, and incomplete-shard results appear
   first. Passed cases appear in a collapsed appendix. Shards and publication
-  jobs do not write separate Summaries.
+  jobs do not write separate Summaries. A second read-only job adds publication
+  status and verified report links after Pages finishes. The first Summary remains
+  available if publication waits for approval or the run is cancelled during that wait.
 - Midscene merges the six native Test reports into one report that lists every
   case. The combined artifact includes that report, available shard reports,
   screenshots, and machine-readable results. An incomplete merge still saves

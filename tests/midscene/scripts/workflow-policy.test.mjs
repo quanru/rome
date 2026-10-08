@@ -147,11 +147,26 @@ test("report-only dispatch can generate the Summary without models or Pages", ()
   assert.equal(runs("report-results", context), true);
 });
 
-test("only the final read-only job writes a visible run Summary", () => {
+test("results are visible before optional deployment and survive its cancellation", () => {
   const writers = [...workflow.matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:|$(?![\s\S]))/gm)]
     .filter((match) => match[2].includes("GITHUB_STEP_SUMMARY"))
     .map((match) => match[1]);
-  assert.deepEqual(writers, ["report-results"]);
+  assert.deepEqual(writers, ["available-results", "report-results"]);
+  assert.match(job("available-results"), /needs: \[midscene, report-summary\]/);
+  assert.doesNotMatch(job("available-results"), /needs:.*(?:prepare-pages|deploy-report)/);
+  for (const result of ["waiting", "cancelled", "failure", "skipped"]) {
+    assert.equal(
+      runs("available-results", {
+        needs: {
+          midscene: { result: "success" },
+          "report-summary": { result: "success" },
+          "deploy-report": { result },
+        },
+      }),
+      true,
+    );
+  }
+  assert.equal(runs("available-results", { github: { event_name: "pull_request" } }), false);
   assert.match(
     job("report-results"),
     /needs: \[midscene, report-summary, prepare-pages, deploy-report\]/,
