@@ -30,6 +30,10 @@ const runs = (name, overrides = {}) => {
     },
     ...overrides,
   };
+  context.needs = {
+    "harness-validation": { outputs: { "upstream-repository": "rome-os/rome" } },
+    ...context.needs,
+  };
   // Evaluate the workflow's actual gate so a policy edit changes these cases.
   const expression = condition
     .replace(/needs\.([\w-]+)\./g, 'needs["$1"].')
@@ -51,6 +55,18 @@ const runs = (name, overrides = {}) => {
     () => context.cancelled ?? false,
   );
 };
+
+test("trust gates share one upstream definition and fail closed without it", () => {
+  assert.equal((workflow.match(/rome-os\/rome/g) ?? []).length, 1);
+  for (const name of ["midscene", "prepare-pages"]) {
+    assert.equal(
+      runs(name, {
+        needs: { "harness-validation": { outputs: { "upstream-repository": "" } } },
+      }),
+      false,
+    );
+  }
+});
 
 test("report aggregation does not depend on the publisher repository", () => {
   for (const repository of ["rome-os/rome", "example/rome"]) {

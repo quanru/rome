@@ -49,9 +49,14 @@ concurrency:
   group: midscene-e2e-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  MIDSCENE_UPSTREAM_REPOSITORY: rome-os/rome
+
 jobs:
   harness-validation:
     name: Midscene harness validation (no secrets)
+    outputs:
+      upstream-repository: ${{ env.MIDSCENE_UPSTREAM_REPOSITORY }}
     # Runs on path-filtered PRs, nightly, and manual dispatch: validates the package
     # without model secrets, a browser download, the Rome workspace install,
     # or the mock server. Loading the config and collecting YAML cases never
@@ -149,6 +154,7 @@ jobs:
           if-no-files-found: ignore
 
   midscene:
+    needs: harness-validation
     name: "Midscene visual: ${{ matrix.label }} (${{ matrix.shard }})"
     # Fail-closed trust gate: contributor-controlled pull request code never
     # runs automatically with billable model credentials. Upstream runs only
@@ -156,8 +162,9 @@ jobs:
     # own secrets.
     if: >-
       inputs.report_source_run_id == '' &&
-      (github.repository == 'rome-os/rome' && github.ref == 'refs/heads/main' ||
-      (github.event_name == 'workflow_dispatch' && github.repository != 'rome-os/rome'))
+      needs.harness-validation.outputs.upstream-repository != '' &&
+      (github.repository == needs.harness-validation.outputs.upstream-repository && github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && github.repository != needs.harness-validation.outputs.upstream-repository))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -462,14 +469,15 @@ jobs:
 
   prepare-pages:
     name: Prepare optional Midscene Pages publication
-    needs: report-summary
+    needs: [harness-validation, report-summary]
     # Publication never runs on contributor-controlled pull request code.
     # Upstream is enabled in code; each fork must opt in by its exact full name.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
       (github.event_name != 'workflow_dispatch' || inputs.publish_pages) &&
-      (github.repository == 'rome-os/rome' && github.ref == 'refs/heads/main' ||
-      github.repository != 'rome-os/rome' && github.repository == vars.MIDSCENE_PUBLISH_REPO && github.event_name == 'workflow_dispatch') &&
+      needs.harness-validation.outputs.upstream-repository != '' &&
+      (github.repository == needs.harness-validation.outputs.upstream-repository && github.ref == 'refs/heads/main' ||
+      github.repository != needs.harness-validation.outputs.upstream-repository && github.repository == vars.MIDSCENE_PUBLISH_REPO && github.event_name == 'workflow_dispatch') &&
       needs.report-summary.outputs.report-artifact-name != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10

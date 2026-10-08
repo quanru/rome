@@ -1,6 +1,8 @@
 import { appendFile } from "node:fs/promises";
 
 export async function isTrustedReportRun(run, repository, compareToMain) {
+  const upstreamRepository = process.env.MIDSCENE_UPSTREAM_REPOSITORY;
+  if (!upstreamRepository) throw new Error("MIDSCENE_UPSTREAM_REPOSITORY is required");
   if (
     run.repository?.full_name !== repository ||
     run.head_repository?.full_name !== repository ||
@@ -8,7 +10,7 @@ export async function isTrustedReportRun(run, repository, compareToMain) {
     run.status !== "completed"
   )
     return false;
-  if (repository !== "rome-os/rome") return run.event === "workflow_dispatch";
+  if (repository !== upstreamRepository) return run.event === "workflow_dispatch";
   if (
     run.head_branch !== "main" ||
     !["schedule", "push", "workflow_dispatch"].includes(run.event) ||
@@ -20,47 +22,39 @@ export async function isTrustedReportRun(run, repository, compareToMain) {
   return ["ahead", "identical"].includes(comparison.status);
 }
 
-export async function findPreviousReport(
-  artifacts,
-  repository,
-  getRun,
-  currentRunId,
-  compareToMain,
-) {
-  for (const artifact of artifacts) {
-    if (artifact.expired || !/^midscene-e2e-report-pages-\d+$/.test(artifact.name)) continue;
-    const runId = artifact.workflow_run?.id;
-    if (!runId || String(runId) === String(currentRunId)) continue;
-    try {
-      if (await isTrustedReportRun(await getRun(runId), repository, compareToMain)) return artifact;
-    } catch (error) {
-      process.stderr.write(`Skipping report history run ${runId}: ${error.message}\n`);
-    }
-  }
-  return null;
-}
-
 export async function findReportHistory(
-  getArtifacts,
+  getRuns,
   repository,
-  getRun,
+  getArtifacts,
   currentRunId,
   compareToMain,
 ) {
   for (let page = 1; ; page += 1) {
-    const artifacts = await getArtifacts(page);
-    const artifact = await findPreviousReport(
-      artifacts,
-      repository,
-      getRun,
-      currentRunId,
-      compareToMain,
-    );
-    if (artifact || artifacts.length < 100) return artifact;
+    const runs = await getRuns(page);
+    for (const run of runs) {
+      if (String(run.id) === String(currentRunId)) continue;
+      try {
+        if (!(await isTrustedReportRun(run, repository, compareToMain))) continue;
+        for (let artifactPage = 1; ; artifactPage += 1) {
+          const artifacts = await getArtifacts(run.id, artifactPage);
+          const artifact = artifacts.find(
+            (item) => !item.expired && /^midscene-e2e-report-pages-\d+$/.test(item.name),
+          );
+          if (artifact) return { ...artifact, workflow_run: { id: run.id } };
+          if (artifacts.length < 100) break;
+        }
+      } catch (error) {
+        process.stderr.write(`Skipping report history run ${run.id}: ${error.message}\n`);
+      }
+    }
+    if (runs.length < 100) return null;
   }
 }
 
 async function main(mode) {
+  if (!process.env.MIDSCENE_UPSTREAM_REPOSITORY) {
+    throw new Error("MIDSCENE_UPSTREAM_REPOSITORY is required");
+  }
   const repository = process.env.GITHUB_REPOSITORY;
   const get = async (resource) => {
     const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${repository}/${resource}`, {
@@ -87,10 +81,20 @@ async function main(mode) {
       );
     }
   } else if (mode === "find-previous") {
+    const filter =
+      repository === process.env.MIDSCENE_UPSTREAM_REPOSITORY
+        ? "branch=main"
+        : "event=workflow_dispatch";
     const artifact = await findReportHistory(
-      async (page) => (await get(`actions/artifacts?per_page=100&page=${page}`)).artifacts,
+      async (page) =>
+        (
+          await get(
+            `actions/workflows/midscene.yml/runs?status=completed&${filter}&per_page=100&page=${page}`,
+          )
+        ).workflow_runs,
       repository,
-      getRun,
+      async (id, page) =>
+        (await get(`actions/runs/${id}/artifacts?per_page=100&page=${page}`)).artifacts,
       process.env.GITHUB_RUN_ID,
       compareToMain,
     );

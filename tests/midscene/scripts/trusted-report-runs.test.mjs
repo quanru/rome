@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  findPreviousReport,
-  findReportHistory,
-  isTrustedReportRun,
-} from "./trusted-report-runs.mjs";
+import { findReportHistory, isTrustedReportRun } from "./trusted-report-runs.mjs";
+
+process.env.MIDSCENE_UPSTREAM_REPOSITORY = "rome-os/rome";
 
 const upstream = {
   repository: { full_name: "rome-os/rome" },
@@ -18,6 +16,23 @@ const upstream = {
 
 const compareToMain = async () => ({ status: "ahead" });
 const trusted = (run, repository) => isTrustedReportRun(run, repository, compareToMain);
+
+test("repository policy follows the configured upstream and rejects missing configuration", async () => {
+  try {
+    process.env.MIDSCENE_UPSTREAM_REPOSITORY = "new-owner/rome";
+    const renamed = {
+      ...upstream,
+      repository: { full_name: "new-owner/rome" },
+      head_repository: { full_name: "new-owner/rome" },
+    };
+    assert.equal(await trusted(renamed, "new-owner/rome"), true);
+    assert.equal(await trusted(upstream, "rome-os/rome"), false);
+    delete process.env.MIDSCENE_UPSTREAM_REPOSITORY;
+    await assert.rejects(trusted(renamed, "new-owner/rome"), /is required/);
+  } finally {
+    process.env.MIDSCENE_UPSTREAM_REPOSITORY = "rome-os/rome";
+  }
+});
 
 test("report sources reject PR artifacts, other workflows, and untrusted refs", async () => {
   assert.equal(await trusted(upstream, "rome-os/rome"), true);
@@ -49,31 +64,6 @@ test("fork reports require a same-repository manual dispatch", async () => {
   assert.equal(await trusted({ ...fork, event: "push" }, "example/rome"), false);
 });
 
-test("history skips attacker-named artifacts and uses the latest trusted run", async () => {
-  const artifacts = [
-    { name: "midscene-e2e-report-pages-1", workflow_run: { id: 1 } },
-    { name: "midscene-e2e-report-pages-2", workflow_run: { id: 2 } },
-  ];
-  const selected = await findPreviousReport(
-    artifacts,
-    "rome-os/rome",
-    async (id) => (id === 1 ? { ...upstream, event: "pull_request" } : upstream),
-    "3",
-    compareToMain,
-  );
-  assert.equal(selected, artifacts[1]);
-  assert.equal(
-    await findPreviousReport(
-      artifacts,
-      "rome-os/rome",
-      async () => ({ ...upstream, event: "pull_request" }),
-      "3",
-      compareToMain,
-    ),
-    null,
-  );
-});
-
 test("an upstream tag named main must still point to a protected-main commit", async () => {
   for (const status of ["behind", "diverged"]) {
     assert.equal(
@@ -91,54 +81,59 @@ test("an upstream tag named main must still point to a protected-main commit", a
   );
 });
 
-test("history searches beyond the first page of unrelated repository artifacts", async () => {
+test("history paginates workflow runs and artifacts without trusting PRs", async () => {
   const pages = [];
-  const trustedArtifact = { name: "midscene-e2e-report-pages-1", workflow_run: { id: 1 } };
-  const selected = await findReportHistory(
+  const downloads = [];
+  const result = await findReportHistory(
     async (page) => {
       pages.push(page);
       return page === 1
-        ? Array.from({ length: 100 }, () => ({ name: "unrelated" }))
-        : [trustedArtifact];
+        ? Array.from({ length: 100 }, (_, i) => ({ ...upstream, id: i + 1, event: "pull_request" }))
+        : [{ ...upstream, id: 101 }];
     },
     "rome-os/rome",
-    async () => upstream,
-    "3",
+    async (id, page) => {
+      downloads.push([id, page]);
+      return page === 1
+        ? Array.from({ length: 100 }, () => ({ name: "unrelated" }))
+        : [{ name: "midscene-e2e-report-pages-2" }];
+    },
+    "102",
     compareToMain,
   );
-  assert.equal(selected, trustedArtifact);
+  assert.equal(result.workflow_run.id, 101);
   assert.deepEqual(pages, [1, 2]);
+  assert.deepEqual(downloads, [
+    [101, 1],
+    [101, 2],
+  ]);
+});
+
+test("history skips current runs, expired artifacts, and unavailable candidates", async () => {
+  const downloads = [];
+  const result = await findReportHistory(
+    async () => [1, 2, 3, 4].map((id) => ({ ...upstream, id })),
+    "rome-os/rome",
+    async (id) => {
+      downloads.push(id);
+      if (id === 2) throw new Error("HTTP 404");
+      return [{ name: "midscene-e2e-report-pages-1", expired: id === 3 }];
+    },
+    "1",
+    compareToMain,
+  );
+  assert.deepEqual(downloads, [2, 3, 4]);
+  assert.equal(result.workflow_run.id, 4);
   assert.equal(
     await findReportHistory(
       async () => [],
       "rome-os/rome",
-      async () => upstream,
-      "3",
+      async () => [],
+      "1",
       compareToMain,
     ),
     null,
   );
-});
-
-test("history rejects unavailable candidates without losing later trusted history", async () => {
-  const artifacts = [1, 2, 3].map((id) => ({
-    name: `midscene-e2e-report-pages-${id}`,
-    workflow_run: { id },
-  }));
-  const selected = await findPreviousReport(
-    artifacts,
-    "rome-os/rome",
-    async (id) => {
-      if (id === 1) throw new Error("HTTP 500");
-      return { ...upstream, head_sha: String(id).repeat(40) };
-    },
-    "4",
-    async (sha) => {
-      if (sha === "2".repeat(40)) throw new Error("HTTP 404");
-      return { status: "ahead" };
-    },
-  );
-  assert.equal(selected, artifacts[2]);
 });
 
 test("explicit source validation propagates a failed trust lookup", async () => {
