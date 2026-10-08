@@ -21,7 +21,12 @@ const runs = (name, overrides = {}) => {
     vars: { MIDSCENE_PUBLISH_REPO: "" },
     needs: {
       midscene: { result: "success" },
-      "report-summary": { outputs: { "report-artifact-name": "midscene-e2e-report" } },
+      "report-summary": {
+        result: "success",
+        outputs: { "report-artifact-name": "midscene-e2e-report" },
+      },
+      "prepare-pages": { result: "success" },
+      "deploy-report": { result: "success", outputs: { "page-url": "https://example.test/rome/" } },
     },
     ...overrides,
   };
@@ -43,7 +48,7 @@ const runs = (name, overrides = {}) => {
     context.vars,
     context.needs,
     () => true,
-    () => false,
+    () => context.cancelled ?? false,
   );
 };
 
@@ -72,14 +77,8 @@ test("report aggregation does not depend on the publisher repository", () => {
     /configure-pages|pages: write|--pages-url|MIDSCENE_PUBLISH_REPO/,
   );
   assert.match(job("report-summary"), /include-hidden-files: true/);
-  assert.match(
-    job("report-summary"),
-    /cat "\$RUNNER_TEMP\/midscene-summary.md" >> "\$GITHUB_STEP_SUMMARY"/,
-  );
-  assert.match(
-    job("midscene"),
-    /name: Add shard results to the job Summary\n        if: always\(\)/,
-  );
+  assert.doesNotMatch(job("report-summary"), /GITHUB_STEP_SUMMARY/);
+  assert.doesNotMatch(job("midscene"), /GITHUB_STEP_SUMMARY/);
 });
 
 test("Pages defaults to upstream main and requires explicit fork opt-in", () => {
@@ -127,10 +126,9 @@ test("publication validates artifact sources and isolates the deployment token",
   assert.match(job("report-summary"), /trusted-report-runs.mjs validate-source/);
   assert.match(job("prepare-pages"), /trusted-report-runs.mjs find-previous/);
   assert.doesNotMatch(job("deploy-report"), /checkout|render-ci-summary|run:/);
-  assert.doesNotMatch(job("published-summary"), /pages: write|id-token: write/);
-  assert.match(job("published-summary"), /needs.deploy-report.result == 'success'/);
-  assert.match(job("published-summary"), /--published-links-only true/);
-  assert.doesNotMatch(job("published-summary"), /echo "<details>/);
+  assert.doesNotMatch(job("report-results"), /pages: write|id-token: write|secrets\./);
+  assert.match(job("report-results"), /needs.deploy-report.result == 'success'/);
+  assert.doesNotMatch(workflow, /published-links-only|published-summary:/);
 });
 
 test("report-only dispatch can generate the Summary without models or Pages", () => {
@@ -146,4 +144,78 @@ test("report-only dispatch can generate the Summary without models or Pages", ()
   assert.equal(runs("midscene", context), false);
   assert.equal(runs("report-summary", context), true);
   assert.equal(runs("prepare-pages", context), false);
+  assert.equal(runs("report-results", context), true);
+});
+
+test("only the final read-only job writes a visible run Summary", () => {
+  const writers = [...workflow.matchAll(/^  ([\w-]+):\n([\s\S]*?)(?=^  [\w-]+:|$(?![\s\S]))/gm)]
+    .filter((match) => match[2].includes("GITHUB_STEP_SUMMARY"))
+    .map((match) => match[1]);
+  assert.deepEqual(writers, ["report-results"]);
+  assert.match(
+    job("report-results"),
+    /needs: \[midscene, report-summary, prepare-pages, deploy-report\]/,
+  );
+  assert.match(
+    job("report-results"),
+    /name: Write the consolidated run Summary\n        if: always\(\)/,
+  );
+  assert.match(job("report-results"), /--case-manifest/);
+  assert.match(job("midscene"), /max-parallel: 1/);
+  assert.match(workflow, /cron: "0 6 \* \* \*"/);
+});
+
+test("the final Summary survives aggregation and publication failures or skips", () => {
+  for (const reportResult of ["success", "failure", "skipped"]) {
+    for (const publicationResult of ["success", "failure", "skipped", "cancelled"]) {
+      assert.equal(
+        runs("report-results", {
+          needs: {
+            midscene: { result: "failure" },
+            "report-summary": { result: reportResult },
+            "deploy-report": { result: publicationResult },
+          },
+        }),
+        true,
+      );
+    }
+  }
+  assert.equal(runs("report-results", { needs: { midscene: { result: "skipped" } } }), false);
+  assert.equal(runs("report-results", { cancelled: true }), false);
+  assert.equal(
+    runs("report-results", {
+      github: { event_name: "pull_request" },
+      inputs: { report_source_run_id: "123" },
+    }),
+    false,
+  );
+});
+
+test("artifact recovery cannot bypass source validation", () => {
+  const results = job("report-results");
+  assert.match(results, /trusted-report-runs.mjs validate-source/);
+  const downloads = results.match(
+    /      - name: (?:Download combined Midscene report|Recover available shard reports)[\s\S]*?(?=      - name:)/g,
+  );
+  assert.equal(downloads.length, 2);
+  for (const download of downloads) {
+    assert.match(
+      download,
+      /inputs.report_source_run_id == '' \|\| steps.source-run.outcome == 'success'/,
+    );
+    assert.match(download, /continue-on-error: true/);
+  }
+  assert.match(
+    results,
+    /needs.prepare-pages.result == 'failure' && 'failure' \|\| needs.deploy-report.result/,
+  );
+  assert.match(
+    results,
+    /steps.combined-report.outcome == 'success' && 'midscene-combined-report' \|\| 'midscene-report-shards'/,
+  );
+  assert.match(
+    results,
+    /name: Recover available shard reports[\s\S]*?steps.combined-report.outcome != 'success'/,
+  );
+  assert.doesNotMatch(results, /run:.*\$\{\{ inputs.report_source_run_id/);
 });

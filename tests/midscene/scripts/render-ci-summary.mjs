@@ -372,6 +372,9 @@ export function renderMarkdown({
   producerResult = "success",
   caseInventoryIssues = [],
   publishedReportPath,
+  sourceRunId,
+  reportResult,
+  publicationResult,
 }) {
   const totals = totalsFor(projects);
   const incompleteProjects = projects.filter((project) => project.status !== "success");
@@ -414,6 +417,37 @@ export function renderMarkdown({
       : `[Download the artifact](${runUrl}#artifacts) · ${reportAvailable ? "Native Midscene Test report included" : "Native Midscene Test report unavailable"}`,
     "",
   ];
+
+  if (sourceRunId) {
+    const sourceUrl = new URL(sourceRunId, runUrl.replace(/\/$/, "")).href;
+    sections.push(
+      `Report source: [run ${sourceRunId}](${sourceUrl}). This run makes no new model calls. [Source-run artifacts](${sourceUrl}#artifacts).`,
+      "",
+    );
+  }
+  if (reportResult && reportResult !== "success") {
+    sections.push(
+      `Report aggregation: **${markdownCell(reportResult)}**. Results below use the available shard data. [Inspect the workflow run](${runUrl}).`,
+      "",
+    );
+  }
+  if (publicationResult && !pagesUrl) {
+    sections.push(
+      `Pages publication: **${markdownCell(publicationResult)}**. Web report links are unavailable. Download the available artifacts to inspect reports and screenshots.`,
+      "",
+    );
+  }
+  sections.push(
+    "### Shard results",
+    "",
+    "| Shard | Result | Total | Passed | Failed | Not run | Duration |",
+    "|:--|:--|--:|--:|--:|--:|--:|",
+    ...projects.map((project) => {
+      const counts = totalsFor([project]);
+      return `| ${markdownCell(project.name)} | ${markdownCell(project.status)} | ${counts.total} | ${counts.passed} | ${counts.failed} | ${counts.notRun} | ${formatDuration(project.durationMs)} |`;
+    }),
+    "",
+  );
 
   if (needsAttention) {
     sections.push(
@@ -481,43 +515,9 @@ export function renderMarkdown({
   return sections.join("\n");
 }
 
-export function renderPublishedMarkdown({ projects, pagesUrl, runUrl, publishedReportPath }) {
-  if (!pagesUrl) throw new Error("Published report links require the deployed Pages URL");
-  const reportPath = publishedReportPath ?? (projects.length === 1 ? projects[0].reportPath : null);
-  const cases = totalsFor(projects).cases;
-  return [
-    "## Published Midscene reports",
-    "",
-    ...(reportPath
-      ? [`**[Open the Midscene Test report](${reportUrl(pagesUrl, reportPath)})**`]
-      : ["The combined report is incomplete. Open an available case report below."]),
-    "",
-    `[Download the artifact](${runUrl}#artifacts)`,
-    "",
-    "<details>",
-    "<summary>Case report links and screenshots</summary>",
-    "",
-    "| Shard | Case | Screenshot | Status | Duration |",
-    "|:--|:--|:--|:--|--:|",
-    ...cases.map((testCase) =>
-      caseRow(
-        pagesUrl,
-        testCase,
-        testCase.status === "success"
-          ? "✅ Passed"
-          : testCase.status === "not-run"
-            ? "⏭️ Not run"
-            : "❌ Failed",
-        Boolean(testCase.reportPath),
-      ),
-    ),
-    "",
-    "</details>",
-    "",
-  ].join("\n");
-}
-
 export async function buildSummary(options) {
+  const sourceRunId = options["source-run-id"];
+  if (sourceRunId && !/^\d+$/.test(sourceRunId)) throw new Error("Source run ID must be numeric");
   const reportsDirectory = path.resolve(options["reports-dir"]);
   const expectedProjects = (options["expected-projects"] ?? "")
     .split(",")
@@ -533,6 +533,9 @@ export async function buildSummary(options) {
     pagesUrl: options["pages-url"],
     runUrl: options["run-url"],
     producerResult: options["producer-result"],
+    sourceRunId,
+    reportResult: options["report-result"],
+    publicationResult: options["publication-result"],
     publishedReportPath: await access(
       path.join(reportsDirectory, "native-report", "index.html"),
     ).then(
@@ -540,9 +543,7 @@ export async function buildSummary(options) {
       () => (data.projects.length === 1 ? data.projects[0].reportPath : null),
     ),
   };
-  const render =
-    options["published-links-only"] === "true" ? renderPublishedMarkdown : renderMarkdown;
-  if (options.output) await appendFile(options.output, `${render(values)}\n`);
+  if (options.output) await appendFile(options.output, `${renderMarkdown(values)}\n`);
   return values;
 }
 

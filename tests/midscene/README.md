@@ -111,11 +111,12 @@ HEADLESS=false npm test
   details)
 - Both are covered by `.gitignore`.
 - Every model-backed run uploads each shard report and a combined
-  `midscene-e2e-report` artifact, including failed runs. Each shard writes its
-  own Markdown job Summary. Aggregation and Summary rendering work without Pages.
-  The report job Summary shows total, passed, failed, and not-run case counts.
-  It shows failed, not-run, and incomplete-shard results first.
-  Passed cases appear in a collapsed appendix.
+  `midscene-e2e-report` artifact, including failed runs. One final read-only job
+  writes the run Summary after aggregation and optional Pages publication finish.
+  The Summary shows total, passed, failed, and not-run counts, a shard results
+  table, and every case. Failed, not-run, and incomplete-shard results appear
+  first. Passed cases appear in a collapsed appendix. Shards and publication
+  jobs do not write separate Summaries.
 - Midscene merges the six native Test reports into one report that lists every
   case. The combined artifact includes that report, available shard reports,
   screenshots, and machine-readable results. An incomplete merge still saves
@@ -128,12 +129,14 @@ HEADLESS=false npm test
   or change the repository's Pages settings. If Pages configuration is
   unavailable, publication is skipped with a warning and reports remain
   available through Actions.
-- After a successful Pages deployment, the publication job adds a Summary with
-  a visible Markdown link to the combined native Midscene Test report.
-  Case links and screenshot thumbnails sit in a collapsed section and open
-  their exact steps in the native shard reports. Without a deployment,
-  Summaries link to the downloadable artifact instead. Partial reports publish available shard
-  reports without a broken combined-report link.
+- After a successful Pages deployment, the same Summary includes a visible
+  Markdown link to the combined native Midscene Test report. Case names and
+  screenshot thumbnails open their exact steps in the native shard reports.
+  If Pages fails or is skipped, the Summary still shows results and artifact
+  links. If aggregation fails, the final job recovers available shard data and
+  reports missing results. Report-only recovery validates the source run before
+  downloading its artifacts. Partial reports keep available shard links without
+  a broken combined-report link.
 - To rebuild a report without new model calls, manually dispatch the workflow
   with `report_source_run_id` set to a completed Midscene run whose shard
   artifacts have not expired. Sources and retained Pages history must come
