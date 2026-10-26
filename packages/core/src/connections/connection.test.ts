@@ -11,10 +11,11 @@ const descriptor = {
 const now = new Date("2026-10-26T00:00:00Z");
 const credential = { material: { token: "t" }, expiresAt: "never" as const };
 const account = { platform: "telegram", accountId: "100" };
+const grantEpoch = "grant-1";
 
 describe("connection rules", () => {
   it("refuses a fix that reaches another account", () => {
-    const held = givenGrant(now, credential, { id: 100 }, account);
+    const held = givenGrant(now, credential, grantEpoch, { id: 100 }, account);
 
     expect(() =>
       refuseDifferentAccount(descriptor, "c1", held, { platform: "telegram", accountId: "200" }),
@@ -23,7 +24,7 @@ describe("connection rules", () => {
   });
 
   it("refuses by the profile's account when the held grant stored none", () => {
-    const held = givenGrant(now, credential, { id: 100 });
+    const held = givenGrant(now, credential, grantEpoch, { id: 100 });
 
     expect(() =>
       refuseDifferentAccount(descriptor, "c1", held, { platform: "telegram", accountId: "200" }),
@@ -35,7 +36,7 @@ describe("connection rules", () => {
   });
 
   it("breaks a grant in place, keeping its credential and account", () => {
-    const held = givenGrant(now, credential, { id: 100 }, account);
+    const held = givenGrant(now, credential, grantEpoch, { id: 100 }, account);
     const broken = brokenGrant(held, "rejected", now);
 
     expect(broken).toMatchObject({
@@ -47,7 +48,7 @@ describe("connection rules", () => {
   });
 
   it("clears a break when the grant is renewed", () => {
-    const broken = brokenGrant(givenGrant(now, credential), "rejected", now);
+    const broken = brokenGrant(givenGrant(now, credential, grantEpoch), "rejected", now);
     const renewed = renewedGrant(broken, { material: { token: "u" }, expiresAt: "never" }, now);
 
     expect(renewed.state).toBe("authorized");

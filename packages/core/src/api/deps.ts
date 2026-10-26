@@ -5,6 +5,7 @@ import type { ActionEngine } from "../actions/engine.js";
 import type { ConciergeService } from "../concierge/service.js";
 import type { ActionLoader } from "../actions/loader.js";
 import type { DrizzleDb } from "../db/index.js";
+import type { AppConnectionAccessRepository } from "../db/repositories/app-connection-access.js";
 import type { OutboxRepository } from "../db/repositories/outbox.js";
 import type { PersonMappingRepository } from "../db/repositories/person-mapping.js";
 import type { Channels } from "../channels/channel.js";
@@ -59,6 +60,7 @@ import type { AgentRunnerInterface } from "../core/types.js";
 import type { ConversationTitleGenerator } from "../core/conversation-title.js";
 import type { ComputerUseService } from "../computer-use/service.js";
 import type { WechatApp } from "../desktop-apps/wechat-app.js";
+import type { AppConnectionsContextFactory } from "../connections/app-connections.js";
 
 export interface ApiConfig {
   port: number;
@@ -86,6 +88,8 @@ export interface ApiDeps {
   actionEngine: ActionEngine;
   actionLoader: Pick<ActionLoader, "get" | "getRegistryLoadFailures">;
   db: DrizzleDb;
+  /** Shared with App lifecycle handling so access writes serialize with disable and removal. */
+  appConnectionAccessRepo: AppConnectionAccessRepository;
   personMappingRepo: PersonMappingRepository;
   /** The guardian's link code, shown in People (channels/guardian-link-code.ts). */
   guardianLinkCodes: GuardianLinkCodes;
@@ -166,6 +170,7 @@ export interface ApiDeps {
    * the hook chains. See `refreshAppRuntimeEnv` in `src/index.ts`. */
   refreshAppRuntime: () => Promise<void>;
   appRuntimeRepositories: AppRuntimeRepositories;
+  appConnections?: AppConnectionsContextFactory;
   sentinelLogRepo: SentinelLogRepository;
   actionExecutionsRepo: ActionExecutionsRepository;
   sessionManager: SessionManager;

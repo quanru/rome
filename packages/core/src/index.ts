@@ -114,6 +114,7 @@ import { PoliciesRepository } from "./db/repositories/policies.js";
 import { WebChatRepository } from "./db/repositories/webchat.js";
 import { ActionExecutionsRepository } from "./db/repositories/action-executions.js";
 import { ExecutionJournalRepository } from "./db/repositories/execution-journal.js";
+import { AppConnectionAccessRepository } from "./db/repositories/app-connection-access.js";
 import { WebhookInvocationsRepository } from "./db/repositories/webhook-invocations.js";
 import { ensureSentinelPersons } from "./db/ensure-sentinel-persons.js";
 import { AgentLoader } from "./core/agent-loader.js";
@@ -239,6 +240,13 @@ import { autoConnectEmail } from "./connections/integrations/email.js";
 import { registerBuiltinConnections } from "./connections/integrations/index.js";
 import { ChatSettingsRepository, ChatSettingsService } from "./chat-settings/index.js";
 import { recordGrantAccounts } from "./connections/grant-accounts.js";
+import {
+  APP_CONNECTION_WRITE_ACTION,
+  APP_CONNECTION_RETENTION_MS,
+  AppConnectionBroker,
+  createAppConnectionAccessLifecycle,
+  reconcileAppConnectionAccess,
+} from "./connections/app-connections.js";
 import { removeUnconnectedAccounts } from "./connections/unconnected-accounts.js";
 import { createAppDbMigrationSubscriber } from "./apps/db-migration-subscriber.js";
 import { createAppOgImageSubscriber } from "./apps/og/subscriber.js";
@@ -378,6 +386,7 @@ async function main() {
   const actionExecutionsRepo = new ActionExecutionsRepository(db);
   const usageOutboxRepo = new UsageOutboxRepository(db);
   const executionJournalRepo = new ExecutionJournalRepository(db);
+  const appConnectionAccessRepo = new AppConnectionAccessRepository(db);
   const webhookInvocationsRepo = new WebhookInvocationsRepository(db);
   const routinesRepo = new RoutinesRepository(db);
   const routineRunsRepo = new RoutineRunsRepository(db);
@@ -589,6 +598,7 @@ async function main() {
       onError: (err) => appsLog.warn("runtime-status write failed", { error: err.message }),
     }),
   );
+  appCatalog.subscribe(createAppConnectionAccessLifecycle(appConnectionAccessRepo));
   // Social card image per installed web app. Registered before boot() so the
   // replay covers apps installed while the daemon was down.
   const ogImageStore = createOgImageStore();
@@ -598,8 +608,11 @@ async function main() {
       host: getConfiguredInstanceOrigin()?.replace(/^https?:\/\//, "") ?? null,
     }),
   );
+  let appBootConverged = false;
+  let appConnectionAccessReady = false;
   try {
     const bootResult = await appManager.boot();
+    appBootConverged = true;
     appsLog.info("AppManager.boot completed", {
       appCount: bootResult.appCount,
       sweptStaging: bootResult.sweptStaging,
@@ -609,6 +622,14 @@ async function main() {
     appsLog.error("AppManager.boot failed", {
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+  if (appBootConverged) {
+    await reconcileAppConnectionAccess(appCatalog, appConnectionAccessRepo);
+    appConnectionAccessReady = true;
+  } else {
+    appsLog.warn(
+      "App connection access remains unavailable after failed App boot; restart after fixing App boot",
+    );
   }
 
   // Install / refresh ALL first-party apps from the packed artifacts in
@@ -697,6 +718,40 @@ async function main() {
       onApprovalCreated: (approval) => sendApprovalCard(channelsService, approval),
     },
   );
+  const appConnections = new AppConnectionBroker(
+    connectionRegistry,
+    appConnectionAccessRepo,
+    actionEngine,
+    { isReady: () => appConnectionAccessReady },
+  );
+  appConnections.registerActions(actionRegistry);
+  const appConnectionCleanupLog = createLogger("app-connection-cleanup");
+  const activeAppConnectionApprovalInvocationIds = (
+    await approvalsRepo.findActiveActionArgs(APP_CONNECTION_WRITE_ACTION)
+  ).flatMap((args) => (typeof args.invocationId === "string" ? [args.invocationId] : []));
+  const recoveredAppConnectionInvocations =
+    await appConnectionAccessRepo.recoverInterruptedInvocations(
+      activeAppConnectionApprovalInvocationIds,
+    );
+  if (recoveredAppConnectionInvocations > 0) {
+    appConnectionCleanupLog.warn("interrupted App connection invocations recovered", {
+      invocations: recoveredAppConnectionInvocations,
+    });
+  }
+  const runAppConnectionCleanup = async () => {
+    try {
+      const result = await appConnectionAccessRepo.pruneExpiredData(
+        new Date(Date.now() - APP_CONNECTION_RETENTION_MS),
+      );
+      appConnectionCleanupLog.info("App connection cleanup completed", result);
+    } catch (err) {
+      appConnectionCleanupLog.error("App connection cleanup failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+  await runAppConnectionCleanup();
+  const appConnectionCleanupInterval = setInterval(runAppConnectionCleanup, 6 * 60 * 60 * 1000);
   // The "openai" provider runs over the codex app-server JSON-RPC surface
   // (agentMessage `phase` → turnPhase + streaming deltas).
   const codexAppServerManager = new CodexAppServerManager();
@@ -761,6 +816,7 @@ async function main() {
     routinesRepo,
     repositories: appRuntimeRepositories,
     favorService,
+    appConnections,
   };
   const lifecycleDispatcher = createAgentLifecycleDispatcher({
     appRuntimeServices: lifecycleAppRuntimeServices,
@@ -1027,6 +1083,7 @@ async function main() {
     agentRunner,
     backendTurnRunner,
     resolveContinuationWorkingDir,
+    appConnections,
   );
 
   // Real push sender in the main process (holds the durable instance token);
@@ -1126,6 +1183,7 @@ async function main() {
       routinesRepo,
       repositories: appRuntimeRepositories,
       favorService,
+      appConnections,
       hostExecution,
       feedback: feedbackClient,
       cloudProfile: cloudProfileClient,
@@ -1140,6 +1198,7 @@ async function main() {
       routinesRepo,
       repositories: appRuntimeRepositories,
       favorService,
+      appConnections,
       hostExecution,
       feedback: feedbackClient,
       cloudProfile: cloudProfileClient,
@@ -1173,6 +1232,7 @@ async function main() {
     routinesRepo,
     repositories: appRuntimeRepositories,
     favorService,
+    appConnections,
   });
   const relayDrainer = new RelayDrainer(relayDrains, async (drain, event) => {
     const res = await relayDispatcher.dispatch(
@@ -1577,6 +1637,11 @@ async function main() {
     feedback: feedbackClient,
     cloudProfile: cloudProfileClient,
     agentNames: agentNameResolver,
+    appConnections,
+    appIdForAction: (actionName) => {
+      const metadata = actionRegistry.getMetadata(actionName);
+      return metadata?.ownerType === "app" ? metadata.ownerId : null;
+    },
   });
   actionEngine.setWorkerRpcServer(workerRpcServer);
   actionEngine.startWorkerWarmPool();
@@ -1690,6 +1755,7 @@ async function main() {
   let internalApi: ApiHandle | undefined;
   try {
     const apiDeps: ApiDeps = {
+      appConnectionAccessRepo,
       concierge,
       feedback: feedbackClient,
       provisionNodeCaller,
@@ -1749,6 +1815,7 @@ async function main() {
       relayDrainer,
       bootVersionReport,
       favorService,
+      appConnections,
       systemUpgradeService,
       isCloudAuthEnabled,
       loginUsage: usageRecorder,
@@ -1998,6 +2065,9 @@ async function main() {
 
     clearInterval(journalCleanupInterval);
     shutdownLog.info("journal cleanup timer stopped");
+
+    clearInterval(appConnectionCleanupInterval);
+    shutdownLog.info("App connection cleanup timer stopped");
 
     favorDispatchRunner.stop();
     shutdownLog.info("favor dispatch runner stopped");

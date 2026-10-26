@@ -36,6 +36,7 @@ import {
   RoutineEngineProxy,
   SystemUpgradeServiceProxy,
   ChannelsServiceProxy,
+  AppConnectionsProxy,
 } from "./service-proxies.js";
 import { AppCatalog, AppInstaller, hydrateCatalogFromLockfile } from "../apps/index.js";
 import { readLockfileWithEntryIsolation } from "../apps/lockfile.js";
@@ -197,6 +198,7 @@ export async function createWorkerActionEngine(): Promise<ActionEngine> {
       actionEngine,
       routinesRepo,
       repositories: appRuntimeRepositories,
+      appConnections: new AppConnectionsProxy(),
       hostExecution: new HostExecutionService({
         socketPath: config.hostExecutionSocket,
         enabled: config.hostExecutionEnabled,

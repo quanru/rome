@@ -459,7 +459,7 @@ export class ConnectionRegistry {
       await this.refuseAccountHeldElsewhere(registered.descriptor, id, account);
     }
     const createdAt = this.clock();
-    const grantValue = givenGrant(this.now(), credential, profile, account);
+    const grantValue = givenGrant(this.now(), credential, crypto.randomUUID(), profile, account);
     const record: ConnectionRecord = conn?.record ?? {
       id,
       connectionKind,

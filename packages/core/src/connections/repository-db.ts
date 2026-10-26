@@ -44,6 +44,7 @@ function rowToGrant(row: GrantRow): GrantRecord {
     rec.account = { platform: row.platform, accountId: row.accountId };
   }
   if (row.grantedAt !== null) rec.grantedAt = row.grantedAt;
+  if (row.grantEpoch !== null) rec.grantEpoch = row.grantEpoch;
   if (row.lastRenewedAt !== null) rec.lastRenewedAt = row.lastRenewedAt;
   if (row.degradedAt !== null) {
     rec.degraded = { at: row.degradedAt, reason: row.degradedReason ?? "" };
@@ -72,6 +73,7 @@ function grantColumns(value: GrantValue) {
     platform: value.account?.platform ?? null,
     accountId: value.account?.accountId ?? null,
     grantedAt: value.grantedAt ?? null,
+    grantEpoch: value.grantEpoch ?? null,
     lastRenewedAt: value.lastRenewedAt ?? null,
     degradedAt: value.degraded?.at ?? null,
     degradedReason: value.degraded?.reason ?? null,

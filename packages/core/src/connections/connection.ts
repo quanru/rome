@@ -46,10 +46,18 @@ export function reachedAccount(
 export function givenGrant(
   now: Date,
   cred: Credential,
+  grantEpoch: string,
   profile?: ProfileRecord,
   account?: GrantAccount,
 ): GrantValue {
-  return { state: "authorized", credential: toPersisted(cred), profile, account, grantedAt: now };
+  return {
+    state: "authorized",
+    credential: toPersisted(cred),
+    profile,
+    account,
+    grantedAt: now,
+    grantEpoch,
+  };
 }
 
 /** The grant a renewal leaves: the same grant on a renewed credential. */

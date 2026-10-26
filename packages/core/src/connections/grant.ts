@@ -6,8 +6,8 @@
 //     its descriptor give a live capability at boot.
 //  3. A grant records outcomes only: no step or flow state, no scheme-specific
 //     fields.
-//  4. A grant has no identity of its own. Grant, renewal and kit.persist
-//     each replace it whole.
+//  4. A grant has no guardian-facing identity of its own. Giving a grant mints
+//     a new epoch; renewal and kit.persist retain that epoch.
 
 import type { GrantState, ProfileRecord, SecretRecord } from "./types.js";
 
@@ -42,6 +42,9 @@ export interface GrantRecord {
   account?: GrantAccount;
   /** When the last grant filled this grant. Retained through `revoke()`. */
   grantedAt?: Date;
+  /** Opaque identity of the authority that filled this grant. App access
+   *  policies bind to it so giving the grant again cannot inherit an older policy. */
+  grantEpoch?: string;
   lastRenewedAt?: Date;
   degraded?: { at: Date; reason: string };
 }

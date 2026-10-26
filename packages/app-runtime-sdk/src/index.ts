@@ -2052,7 +2052,8 @@ export interface CurrentActionContext {
 const CURRENT_ACTION_CONTEXT_RESOLVER = Symbol.for("rome.appRuntime.currentActionContextResolver");
 const CURRENT_ACTION_CONTEXT_RUNNER = Symbol.for("rome.appRuntime.currentActionContextRunner");
 
-export type CurrentActionContextPatch = Partial<CurrentActionContext>;
+/** Context an App may add around a nested call. Execution identity stays host-owned. */
+export type CurrentActionContextPatch = Pick<CurrentActionContext, "sharedContext">;
 
 type CurrentActionContextRunner = <T>(
   patch: CurrentActionContextPatch,
@@ -2306,6 +2307,130 @@ export interface WebChatRecapRepository {
   addTurnRecapMessage(input: AddTurnRecapMessageInput): Promise<WebChatRecapMessage>;
 }
 
+export type AppConnectionHealth = "working" | "broken" | "not_connected";
+export type AppConnectionCapabilityState =
+  | "available"
+  | "needs_authorization"
+  | "unhealthy"
+  | "unsupported";
+
+export interface AppConnectionSummary {
+  connectionId: string;
+  connectionKind: string;
+  label: string;
+  /** Provider identity to pass to describe, operations, and invoke. */
+  identity: string;
+  health: AppConnectionHealth;
+}
+
+export interface AppConnectionPage {
+  connections: AppConnectionSummary[];
+  nextCursor?: string;
+}
+
+export interface AppConnectionIdentity {
+  name: string;
+  state: "authorized" | "needs_authorization" | "unhealthy";
+  profile?: {
+    displayName?: string;
+    handle?: string;
+    email?: string;
+    avatarUrl?: string;
+  };
+}
+
+export interface AppConnectionDescription {
+  connection: AppConnectionSummary;
+  identity: AppConnectionIdentity;
+  act: {
+    state: AppConnectionCapabilityState;
+    reason?: string;
+  };
+}
+
+export interface AppConnectionResourceConstraint {
+  /** RFC 6901 JSON Pointer into the operation input. */
+  inputPointer: string;
+  allowedValues: Array<string | number | boolean>;
+}
+
+export interface AppConnectionOperation {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  sideEffects: "read-only" | "write";
+  access: "granted" | "not_granted";
+  approval: "required" | "not_required";
+  constraints: AppConnectionResourceConstraint[];
+}
+
+export interface AppConnectionOperationsPage {
+  operations: AppConnectionOperation[];
+  nextCursor?: string;
+}
+
+export interface AppConnectionErrorBody {
+  code:
+    | "access_denied"
+    | "connection_not_found"
+    | "identity_not_found"
+    | "operation_not_found"
+    | "capability_unavailable"
+    | "authorization_required"
+    | "connection_unhealthy"
+    | "invalid_input"
+    | "resource_denied"
+    | "resource_unresolved"
+    | "request_id_required"
+    | "request_id_conflict"
+    | "request_in_progress"
+    | "rate_limited"
+    | "approval_rejected"
+    | "outcome_unknown"
+    | "provider_error";
+  message: string;
+  retryable: boolean;
+}
+
+export class AppConnectionError extends Error {
+  constructor(readonly detail: AppConnectionErrorBody) {
+    super(detail.message);
+    this.name = "AppConnectionError";
+  }
+}
+
+export type AppConnectionInvokeResult<T = unknown> =
+  | { status: "ok"; executionId: string; data?: T }
+  | { status: "pending_approval"; executionId: string; approval: PendingApproval }
+  | {
+      status: "duplicate";
+      executionId: string;
+      outcome: "succeeded" | "failed";
+      /** Present for a failed original request so callers retain its structured cause. */
+      errorCode?: AppConnectionErrorBody["code"];
+    }
+  | { status: "outcome_unknown"; executionId: string };
+
+export interface AppConnectionsCapability {
+  list(input?: { cursor?: string; limit?: number }): Promise<AppConnectionPage>;
+  describe(input: { connectionId: string; identity: string }): Promise<AppConnectionDescription>;
+  operations(input: {
+    connectionId: string;
+    identity: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<AppConnectionOperationsPage>;
+  invoke<T = unknown>(input: {
+    connectionId: string;
+    identity: string;
+    operation: string;
+    input?: unknown;
+    /** Required for writes; must contain 8–200 characters. Reusing it never repeats the effect. */
+    requestId?: string;
+  }): Promise<AppConnectionInvokeResult<T>>;
+}
+
 export interface RomeAppContext {
   app: RomeAppDefinition;
   controller: unknown;
@@ -2313,6 +2438,7 @@ export interface RomeAppContext {
   log: Logger;
   repositories: AppRuntimeRepositories;
   favors: AppFavorCapability;
+  connections: AppConnectionsCapability;
   runAction(
     name: string,
     args: Record<string, unknown>,
