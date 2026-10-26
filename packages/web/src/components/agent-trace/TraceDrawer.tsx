@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Cross2Icon, DownloadIcon } from "@radix-ui/react-icons";
 import type {
@@ -102,6 +103,7 @@ export function TraceDrawer({
   allowSubagentUsage = true,
   readOnly = false,
   hasApps = false,
+  outlet,
 }: {
   target: TraceDrawerTarget | null;
   onClose: () => void;
@@ -122,6 +124,13 @@ export function TraceDrawer({
   // App/widget presence is independent from chat width. When true, the trace
   // always covers the chat column so it never competes with the app surface.
   hasApps?: boolean;
+  /**
+   * Where the trace renders. `undefined` is the standalone overlay (public
+   * share, sessions page). An element hosts the trace in the tool pane's Trace
+   * tab, which draws the title, the Live indicator and the close button. `null`
+   * is that mode before the tab has mounted, and renders nothing.
+   */
+  outlet?: HTMLElement | null;
 }) {
   const { t } = useTranslation("activity");
   const [remoteTrace, setRemoteTrace] = useState<TraceSnapshot | null>(null);
@@ -131,7 +140,7 @@ export function TraceDrawer({
   const [retryNonce, setRetryNonce] = useState(0);
   const loadedKeyRef = useRef<string | null>(null);
   const loadedTargetKeyRef = useRef<string | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const shouldFollowLiveTraceRef = useRef(true);
 
   const storedId = target?.kind === "stored" ? target.messageId : null;
@@ -211,27 +220,22 @@ export function TraceDrawer({
   const streaming = target?.kind === "live" && target.streaming;
   useLayoutEffect(() => {
     shouldFollowLiveTraceRef.current = true;
-    if (target?.kind !== "live") return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-  }, [liveTargetKey, target?.kind]);
+    if (target?.kind !== "live" || !scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }, [liveTargetKey, target?.kind, scrollEl]);
 
   const updateLiveTraceFollowState = useCallback(() => {
-    if (target?.kind !== "live") return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (target?.kind !== "live" || !scrollEl) return;
     shouldFollowLiveTraceRef.current =
-      container.scrollHeight - container.scrollTop - container.clientHeight <=
+      scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <=
       TRACE_SCROLL_BOTTOM_THRESHOLD_PX;
-  }, [target?.kind]);
+  }, [target?.kind, scrollEl]);
 
   useLayoutEffect(() => {
-    if (target?.kind !== "live" || !streaming || !shouldFollowLiveTraceRef.current) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-  }, [target, streaming]);
+    if (target?.kind !== "live" || !streaming || !shouldFollowLiveTraceRef.current || !scrollEl)
+      return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }, [target, streaming, scrollEl]);
 
   const dumpHref =
     !readOnly && !archived
@@ -242,10 +246,14 @@ export function TraceDrawer({
           : null
       : null;
 
+  const overlay = outlet === undefined;
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
 
+  // Focus moves into the overlay and back to its trigger on close. The Trace
+  // tab leaves focus to the pane, which may already show another chat's trace.
   useEffect(() => {
+    if (!overlay) return;
     if (open) {
       triggerRef.current = document.activeElement as HTMLElement | null;
       const id = requestAnimationFrame(() => closeBtnRef.current?.focus());
@@ -256,10 +264,13 @@ export function TraceDrawer({
     if (trigger && document.contains(trigger) && typeof trigger.focus === "function") {
       trigger.focus();
     }
-  }, [open]);
+  }, [open, overlay]);
 
+  // Escape closes the overlay, which covers the chat. In the Trace tab it would
+  // also fire from the composer's menus or a hidden tab, so the tab's own close
+  // button and Delete key are the way out there.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !overlay) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
@@ -268,7 +279,7 @@ export function TraceDrawer({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, overlay, onClose]);
 
   const canIncludeSubagentUsage =
     allowSubagentUsage && !!remoteTargetKey && !!target?.summary.subagents?.length;
@@ -279,6 +290,59 @@ export function TraceDrawer({
     onIncludeSubagentUsageChange: (include: boolean) =>
       setUsageOption({ targetKey: remoteTargetKey, include }),
   };
+
+  const body = (
+    <div
+      ref={setScrollEl}
+      onScroll={updateLiveTraceFollowState}
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(0.75rem+var(--rome-safe-area-bottom))] pt-3"
+    >
+      {archived ? (
+        <p className="text-aux text-muted-foreground">{t("trace.archived")}</p>
+      ) : target ? (
+        <TraceBody
+          segments={segments}
+          loading={loading}
+          error={error}
+          onRetry={onRetry}
+          renderInlineBlock={renderInlineBlock}
+          renderRunBlocks={renderRunBlocks}
+          live={streaming}
+        />
+      ) : null}
+    </div>
+  );
+  const summary =
+    displaySummary && !archived ? <CollapsedTraceSummary summary={displaySummary} /> : null;
+  const dumpLink = dumpHref ? (
+    <a
+      href={dumpHref}
+      download
+      className="inline-flex items-center justify-center rounded-8 px-2 py-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+      aria-label={t("trace.drawer.dumpAriaLabel")}
+      title={t("trace.drawer.dumpTitle")}
+    >
+      <DownloadIcon className="h-4 w-4" />
+    </a>
+  ) : null;
+
+  if (outlet !== undefined) {
+    // The Trace tab names the trace, shows Live and closes it, so only the
+    // summary and the dump link remain for the content header.
+    if (!outlet || !target) return null;
+    return createPortal(
+      <TraceUsageOptionsContext.Provider value={usageOptions}>
+        {(summary || dumpLink) && (
+          <div className="flex min-w-0 shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+            <div className="min-w-0 flex-1">{summary}</div>
+            {dumpLink}
+          </div>
+        )}
+        {body}
+      </TraceUsageOptionsContext.Provider>,
+      outlet,
+    );
+  }
 
   return (
     <TraceUsageOptionsContext.Provider value={usageOptions}>
@@ -317,22 +381,8 @@ export function TraceDrawer({
               {t("trace.drawer.live")}
             </span>
           )}
-          <div className="ml-2 min-w-0 flex-1">
-            {displaySummary && !archived ? (
-              <CollapsedTraceSummary summary={displaySummary} />
-            ) : null}
-          </div>
-          {dumpHref && (
-            <a
-              href={dumpHref}
-              download
-              className="inline-flex items-center justify-center rounded-8 px-2 py-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-              aria-label={t("trace.drawer.dumpAriaLabel")}
-              title={t("trace.drawer.dumpTitle")}
-            >
-              <DownloadIcon className="h-4 w-4" />
-            </a>
-          )}
+          <div className="ml-2 min-w-0 flex-1">{summary}</div>
+          {dumpLink}
           <Button
             ref={closeBtnRef}
             type="button"
@@ -345,25 +395,7 @@ export function TraceDrawer({
             <Cross2Icon className="h-4 w-4" />
           </Button>
         </div>
-        <div
-          ref={scrollContainerRef}
-          onScroll={updateLiveTraceFollowState}
-          className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(0.75rem+var(--rome-safe-area-bottom))] pt-3"
-        >
-          {archived ? (
-            <p className="text-aux text-muted-foreground">{t("trace.archived")}</p>
-          ) : target ? (
-            <TraceBody
-              segments={segments}
-              loading={loading}
-              error={error}
-              onRetry={onRetry}
-              renderInlineBlock={renderInlineBlock}
-              renderRunBlocks={renderRunBlocks}
-              live={streaming}
-            />
-          ) : null}
-        </div>
+        {body}
       </aside>
     </TraceUsageOptionsContext.Provider>
   );
