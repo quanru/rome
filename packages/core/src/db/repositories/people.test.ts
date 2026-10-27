@@ -8,8 +8,7 @@ import {
 } from "../../test/helpers.js";
 import { AccountHeldError, PeopleRepository } from "./people.js";
 import { eq } from "drizzle-orm";
-import { persons, channelMappings } from "../schema.js";
-import { STRANGER_PERSON_ID } from "../../constants.js";
+import { persons, channelMappings, dismissedAccounts } from "../schema.js";
 import { ChannelRecordsRepository } from "./channel-records.js";
 
 describe("PeopleRepository", () => {
@@ -25,16 +24,13 @@ describe("PeopleRepository", () => {
     testDb.close();
   });
 
-  /** What marking a sender as a stranger does: file the account under the
-   *  sentinel rather than deleting it. */
+  /** A dismissal as an older one was stored: with the channel's name for the
+   *  account carried on it. */
   async function dismiss(channel: string, channelUserId: string, displayName?: string) {
-    if (!(await repo.byId(STRANGER_PERSON_ID))) {
-      await repo.createWithId(STRANGER_PERSON_ID, {
-        displayName: "Stranger",
-        bondLevel: "other",
-      });
-    }
-    await repo.linkStated({ channel, channelUserId }, STRANGER_PERSON_ID, displayName);
+    testDb.db
+      .insert(dismissedAccounts)
+      .values({ channel, channelUserId, displayName: displayName ?? null })
+      .run();
   }
 
   it("all() reads every person and their accounts at once", async () => {
@@ -606,18 +602,19 @@ describe("PeopleRepository", () => {
   });
 
   describe("dismiss() and restore()", () => {
-    beforeEach(async () => {
-      await repo.createWithId(STRANGER_PERSON_ID, { displayName: "Stranger", bondLevel: "other" });
-    });
-
     it("dismisses an account nobody holds and restores it to a stranger", async () => {
       const account = { channel: "telegram", channelUserId: "tg-bob" };
 
       expect(await repo.dismiss(account)).toEqual({ linked: true });
-      expect((await repo.byAccount(account))?.id).toBe(STRANGER_PERSON_ID);
+      // Who is this answers nobody for a dismissed account, as for a stranger.
+      expect(await repo.byAccount(account)).toBeNull();
+      expect(await repo.isDismissed(account)).toBe(true);
+      expect((await repo.dismissals()).map((d) => d.channelUserId)).toEqual(["tg-bob"]);
+      // Again is the same request twice.
+      expect(await repo.dismiss(account)).toEqual({ linked: true });
 
       expect(await repo.restore("telegram", ["tg-bob"])).toBe(1);
-      expect(await repo.byAccount(account)).toBeNull();
+      expect(await repo.isDismissed(account)).toBe(false);
     });
 
     it("refuses to dismiss an account a person holds, and names them", async () => {
@@ -637,6 +634,26 @@ describe("PeopleRepository", () => {
       expect((await repo.byAccount(account))?.id).toBe(alice);
     });
 
+    it("keeps the dismissal when a stated link fails, and its name when one lands", async () => {
+      const account = { channel: "telegram", channelUserId: "tg-bob" };
+      await dismiss("telegram", "tg-bob", "Bob from work");
+
+      // No such person: the link fails, and the dismissal must not go with it.
+      expect(() => repo.linkStated(account, "nobody")).toThrow();
+      expect(await repo.isDismissed(account)).toBe(true);
+
+      const bob = await repo.create({ displayName: "Bob", bondLevel: "other" });
+      repo.linkStated(account, bob);
+
+      expect(await repo.isDismissed(account)).toBe(false);
+      const row = testDb.db
+        .select({ displayName: channelMappings.displayName })
+        .from(channelMappings)
+        .where(eq(channelMappings.channelUserId, "tg-bob"))
+        .get();
+      expect(row?.displayName).toBe("Bob from work");
+    });
+
     it("restores only dismissals, never an address a person holds", async () => {
       const alice = await repo.create({
         displayName: "Alice",
@@ -653,7 +670,7 @@ describe("PeopleRepository", () => {
   });
 
   describe("create() claiming accounts", () => {
-    it("reclaims an account that was only dismissed onto the stranger sentinel", async () => {
+    it("takes an account that was only dismissed", async () => {
       await dismiss("whatsapp", "+15551234", "Bob");
 
       const bob = await repo.create({
@@ -665,11 +682,12 @@ describe("PeopleRepository", () => {
       expect((await repo.byAccount({ channel: "whatsapp", channelUserId: "+15551234" }))?.id).toBe(
         bob,
       );
-      const stranger = await repo.byId(STRANGER_PERSON_ID);
-      expect(stranger!.links).toHaveLength(0);
+      expect(await repo.isDismissed({ channel: "whatsapp", channelUserId: "+15551234" })).toBe(
+        false,
+      );
     });
 
-    it("carries the dismissed row's channel-side name onto the reclaimed account", async () => {
+    it("carries the dismissal's channel-side name onto the reclaimed account", async () => {
       await dismiss("whatsapp", "+15559999", "Bob from work");
 
       const bob = await repo.create({
