@@ -98,6 +98,7 @@ function personResource(person: PersonFixture): PersonResource {
       // names a channel and not an address, so it cannot say which of two
       // accounts on one channel was the recent one.
       latestAt: accountTimeline(a)[0]?.timestamp ?? null,
+      ...(a.delegate ? { delegate: true as const } : {}),
     })),
     // Timeline entries, not records: the contract pins a person's count to the
     // history GET /api/people/:id/messages pages.
@@ -211,14 +212,16 @@ function link(
       },
     };
   }
+  // A transfer moves the link itself, so its delegate mark goes with it.
+  const moved = owner?.channelMappings.find(
+    (m) => m.channel === ref.channel && m.channelUserId === ref.channelUserId,
+  );
   if (owner) {
-    owner.channelMappings = owner.channelMappings.filter(
-      (m) => !(m.channel === ref.channel && m.channelUserId === ref.channelUserId),
-    );
+    owner.channelMappings = owner.channelMappings.filter((m) => m !== moved);
   }
   const dismissal = dismissalOf(ref.channel, ref.channelUserId);
   if (dismissal >= 0) dismissedAccounts.splice(dismissal, 1);
-  person.channelMappings.push({ channel: ref.channel, channelUserId: ref.channelUserId });
+  person.channelMappings.push(moved ?? { channel: ref.channel, channelUserId: ref.channelUserId });
   return { ok: true };
 }
 
