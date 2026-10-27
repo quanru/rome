@@ -49,6 +49,7 @@ import type {
   EventPublisher,
   Routine,
   RoutineEngine,
+  Account,
   ChannelMessage,
   ChannelMessageQuery,
   ChannelSummary,
@@ -295,7 +296,11 @@ export class ChannelsServiceProxy implements ChannelsService {
     return summaries.map((summary) => withRemovedMembers(summary, REMOVED_SUMMARY_MEMBERS));
   }
 
-  send(channel: string, chatId: ChatId, message: OutgoingMessage): Promise<MessageReceipt> {
+  send(
+    channel: Account | string,
+    chatId: ChatId,
+    message: OutgoingMessage,
+  ): Promise<MessageReceipt> {
     return callMain<MessageReceipt>("channels.send", {
       channel,
       chatId,
@@ -303,7 +308,10 @@ export class ChannelsServiceProxy implements ChannelsService {
     });
   }
 
-  async query(channel: string, query: ChannelMessageQuery = {}): Promise<ChannelMessage[]> {
+  async query(
+    channel: Account | string,
+    query: ChannelMessageQuery = {},
+  ): Promise<ChannelMessage[]> {
     return fromWire(
       await callMain<WireChannelMessage[]>("channels.query", {
         channel,
