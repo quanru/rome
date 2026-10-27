@@ -98,7 +98,7 @@ export interface ApiDeps {
    *  reads either store directly. */
   channels: Channels;
   /** The platform a channel's accounts live on, for a row that still names a
-   *  channel: a sentinel log row, an outbox row. */
+   *  channel, such as a message store's. */
   platformOfChannel: PlatformOfChannel;
   /** Every channel recorded on a platform, released ones included: where a
    *  history told to a disconnected account is still stored. */
