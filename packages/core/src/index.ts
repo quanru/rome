@@ -158,7 +158,7 @@ import { createAgentLifecycleDispatcher } from "./core/agent-lifecycle.js";
 import { createAppStartedDispatcher } from "./core/app-started.js";
 import { createTurnMiddlewareChain } from "./core/turn-middleware.js";
 import { AgentSessionBridge } from "./core/agent-session-bridge.js";
-import { stopActiveConversationTurn } from "./core/chat-stop.js";
+import { stopActiveConversationTurn, stopSenderPlatform } from "./core/chat-stop.js";
 import { CapabilityDiscovery } from "./core/capability-discovery.js";
 import { EventBus } from "./events/event-bus.js";
 import { EventService } from "./events/event-service.js";
@@ -345,7 +345,7 @@ async function main() {
   const sentinelLogRepo = new SentinelLogRepository(db, platformOfChannel);
   // What each platform says about the accounts Rome meets. The two address
   // books fill it after each sync and once now, so a dropped cache is rebuilt.
-  const accountProfiles = new AccountProfiles(new AccountProfilesRepository(db), platformOfChannel);
+  const accountProfiles = new AccountProfiles(new AccountProfilesRepository(db));
   const refreshWhatsAppProfiles = () =>
     accountProfiles.refresh(platformOf("whatsapp"), whatsAppAccounts);
   const refreshLinkedInProfiles = () =>
@@ -944,9 +944,13 @@ async function main() {
   const chatStop: ChatStopHandler = (input) =>
     stopActiveConversationTurn(input, {
       turns: agentTurnStreamRegistry,
-      isGuardian: async (channel, senderId) =>
-        (await peopleRepo.byAccount({ platform: platformOfChannel(channel), id: senderId }))
-          ?.bondLevel === "guardian",
+      isGuardian: async (service, senderId) => {
+        const platform = stopSenderPlatform(input.ref, service, {
+          accountOf: (connectionId) => accounts.accountOf(connectionId),
+          platformOfChannel,
+        });
+        return (await peopleRepo.byAccount({ platform, id: senderId }))?.bondLevel === "guardian";
+      },
     });
   const subagentExecutionService = createSubagentExecutionService({
     webchatRepo,
