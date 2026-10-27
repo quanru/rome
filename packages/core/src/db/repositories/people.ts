@@ -2,11 +2,13 @@
 // links, and the account verbs that move a link between persons.
 // Vocabulary: docs/domains/people.md.
 
-import { eq, and, sql, ne, like, inArray, exists, notExists } from "drizzle-orm";
+import { readdir } from "node:fs/promises";
+import { eq, and, or, sql, ne, like, inArray, exists, notExists } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { persons, channelMappings, dismissedAccounts } from "../schema.js";
 import type { ConnectionKindOfChannel } from "./channel-records.js";
 import { type DrizzleDb, inTransaction, type SqliteExec } from "../index.js";
+import { getRelationshipDir } from "../../profile-memory.js";
 import {
   generatePersonSlug,
   nextAvailablePersonId,
@@ -107,6 +109,13 @@ export type MergeResult = { merged: true; links: number } | { merged: false; rea
 /** Why a merge did not happen. "unknown-*" describes an id that names nobody,
  *  and "guardian-source" a person who exists and stays. */
 export type MergeRefusal = "same-person" | "unknown-target" | "unknown-source" | "guardian-source";
+
+/** What a {@link PeopleRepository.delete} attempt did: removed the person and
+ *  returned this many accounts to strangers, or refused because the id names
+ *  nobody or names the guardian. */
+export type DeleteResult =
+  | { deleted: true; links: number }
+  | { deleted: false; reason: "unknown" | "guardian" };
 
 type PersonRow = typeof persons.$inferSelect;
 
@@ -354,11 +363,39 @@ export class PeopleRepository {
   }
 
   /**
+   * Delete a person and every link they hold, so their accounts are strangers
+   * again (docs/domains/people.md#person). Nothing is dismissed on the way: the
+   * guardian deleted a person, not a decision about each account.
+   *
+   * The links and the person go in one transaction, so no reader sees links
+   * onto a person who is gone. The guardian anchors the ladder and is refused.
+   */
+  async delete(personId: string): Promise<DeleteResult> {
+    return this.db.transaction((tx): DeleteResult => {
+      const row = tx
+        .select({ bondLevel: persons.bondLevel })
+        .from(persons)
+        .where(eq(persons.id, personId))
+        .get();
+      if (!row) return { deleted: false, reason: "unknown" };
+      if (protectedPersonReason(row) === "guardian") return { deleted: false, reason: "guardian" };
+
+      const released = tx
+        .delete(channelMappings)
+        .where(eq(channelMappings.personId, personId))
+        .run();
+      tx.delete(persons).where(eq(persons.id, personId)).run();
+      return { deleted: true, links: released.changes };
+    });
+  }
+
+  /**
    * Link an account nobody holds to `personId`.
    *
-   * Claims a stranger, a dismissed account, or one this person already holds, which is the same request arriving twice. An
-   * account another person holds is refused and its holder named: taking it is
-   * {@link move}, the guardian's explicit act.
+   * Claims a stranger, a dismissed account, or one this person already holds,
+   * which is the same request arriving twice. An account another person holds
+   * is refused and its holder named: taking it is {@link move}, the guardian's
+   * explicit act.
    */
   async link(account: Link, personId: string): Promise<LinkResult> {
     return this.swap(account, null, personId);
@@ -644,18 +681,16 @@ export class PeopleRepository {
     const base = generatePersonSlug(displayName);
     if (!base) return uuid();
 
-    const existing = await this.db
+    const rows = await this.db
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.id, base));
-    if (existing.length === 0) return base;
+      .where(or(eq(persons.id, base), like(persons.id, `${base}-%`)));
+    // A deleted or merged-away person's profile stays in Memory under their
+    // id, and a profile is found by id. So that id stays retired: a new person
+    // minted onto it would open with prose about somebody else.
+    const profiled = await profiledIds(base);
 
-    const conflicts = await this.db
-      .select({ id: persons.id })
-      .from(persons)
-      .where(like(persons.id, `${base}-%`));
-
-    return nextAvailablePersonId(base, [base, ...conflicts.map((row) => row.id)]);
+    return nextAvailablePersonId(base, [...rows.map((row) => row.id), ...profiled]);
   }
 
   /**
@@ -765,4 +800,14 @@ export class PeopleRepository {
       })
       .run();
   }
+}
+
+/** The ids `base` or `base-N` that have a profile in the relationship
+ *  directory, whether or not anyone holds them now. */
+async function profiledIds(base: string): Promise<string[]> {
+  const files = await readdir(getRelationshipDir()).catch(() => [] as string[]);
+  return files
+    .filter((file) => file.endsWith(".md"))
+    .map((file) => file.slice(0, -".md".length))
+    .filter((id) => id === base || id.startsWith(`${base}-`));
 }
