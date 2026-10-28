@@ -780,3 +780,7 @@ html.is-electron [data-app-titlebar] {
 [data-concierge-transcript] [data-timeline-landed] {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
 }
+[data-chat-pending-card]:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--ring) 50%, transparent);
+  outline-offset: -1px;
+}

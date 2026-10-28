@@ -49,6 +49,7 @@ import {
   buildChatView,
   buildRows,
   canPickChatModel,
+  currentReplyMessages,
   isAwaitingGuardian,
   isLockedByCard,
   isLastTurnFailed,
@@ -67,6 +68,7 @@ import type {
 } from "@rome/api-types/trace-segments";
 import { useSmoothText } from "@/hooks/use-smooth-text";
 import { useStickToBottom } from "@/hooks/use-stick-to-bottom";
+import { ChatPendingCardJump } from "@/components/chat/ChatPendingCardJump";
 import {
   CHAT_PAGE_TURNS,
   CONCIERGE_PAGE_TURNS,
@@ -499,6 +501,8 @@ export function Chat({
     scrollToBottom,
   } = useStickToBottom({ initialStuck: Boolean(sessionId) });
 
+  const [floorEl, setFloorEl] = useState<HTMLDivElement | null>(null);
+
   // The timeline rail measures against these two nodes, so they are held as
   // state rather than refs: its effect has to re-run once they mount. Both
   // callbacks forward to the stick-to-bottom hook, which owns them first. Its
@@ -702,6 +706,10 @@ export function Chat({
     [view, runningTurnId],
   );
   const lockedByCard = useMemo(() => isLockedByCard(view, runningTurnId), [view, runningTurnId]);
+  const currentReplyMessageIds = useMemo(
+    () => new Set(currentReplyMessages(view, runningTurnId).map((message) => message.id)),
+    [view, runningTurnId],
+  );
   const lastTurnFailed = useMemo(() => isLastTurnFailed(view), [view]);
   // Typewriter-paced reveal of the latest assistant text block — the SSE
   // stream updates in provider-sized deltas; this smooths them into typing.
@@ -2263,6 +2271,7 @@ export function Chat({
                 land on a link it hides. It stays inside the scroller, so the
                 scroll and keyboard geometry match the desktop layout. */}
               <div
+                ref={setFloorEl}
                 data-chat-floor
                 className={cn(
                   "pointer-events-none sticky bottom-0 z-10 px-3 max-md:pointer-events-auto max-md:bg-chat-canvas md:px-6",
@@ -2309,7 +2318,19 @@ export function Chat({
                     !mainSessionId || isAtBottom ? "invisible opacity-0" : "visible opacity-100",
                   )}
                 />
-                <div className="pointer-events-auto mx-auto max-w-5xl">
+                <div className="pointer-events-auto relative mx-auto max-w-5xl">
+                  {/* Sits on the composer's top-right corner, clear of the
+                      centered jump to latest. */}
+                  {mainSessionId && (
+                    <div className="pointer-events-none absolute right-0 bottom-full mb-2">
+                      <ChatPendingCardJump
+                        scroller={scrollerEl}
+                        content={contentEl}
+                        floor={floorEl}
+                        currentReplyMessageIds={currentReplyMessageIds}
+                      />
+                    </div>
+                  )}
                   {shareMode && mainSessionId ? (
                     <ShareBar
                       sessionId={mainSessionId}

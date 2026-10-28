@@ -168,7 +168,12 @@ export function AppComponentView({
 
   if (error) {
     return (
-      <Alert variant="destructive" className="mb-4 rounded-12">
+      <Alert
+        variant="destructive"
+        tabIndex={-1}
+        data-chat-pending-card={!resolved ? "" : undefined}
+        className="mb-4 rounded-12"
+      >
         <AlertDescription>
           Couldn’t load <span className="font-mono">{componentId}</span> from{" "}
           <span className="font-mono">{appId}</span>: {error}
@@ -191,5 +196,13 @@ export function AppComponentView({
     );
   }
 
-  return <div data-ui-scale={scale} ref={rootRef} className="mb-4" />;
+  return (
+    <div
+      tabIndex={-1}
+      data-chat-pending-card={!resolved ? "" : undefined}
+      data-ui-scale={scale}
+      ref={rootRef}
+      className="mb-4"
+    />
+  );
 }
