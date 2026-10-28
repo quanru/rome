@@ -310,8 +310,9 @@ real external services.
 See `tests/midscene/README.md`. In short:
 
 ```bash
+pnpm install --frozen-lockfile   # from the repo root
 cd tests/midscene                # setup starts the mock server on localhost:3200
-npm install && npx playwright install chromium
+pnpm exec playwright install chromium
 cp .env.example .env             # fill in model credentials; .env is gitignored
 pnpm test
 MIDSCENE_INCLUDE_TAGS=poc pnpm test   # PoC stories only
